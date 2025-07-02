@@ -12,7 +12,12 @@ contract PaymentVaultScript is Script {
     function run() public {
         vm.startBroadcast();
 
-        paymentVault = new PaymentVault();
+        // For testing purposes, using a mock USDC address
+        // In production, use the actual USDC contract address
+        address mockUSDC = address(0x1234567890123456789012345678901234567890);
+        address initialOwner = msg.sender;
+
+        paymentVault = new PaymentVault(mockUSDC, initialOwner);
 
         vm.stopBroadcast();
     }
