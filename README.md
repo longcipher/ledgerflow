@@ -9,6 +9,7 @@ A simple vault for receiving USDC payments for orders. It emits an event for eac
 - **Owner Withdrawals**: Contract owner can withdraw all funds
 - **Token Recovery**: Emergency function to recover accidentally sent tokens
 - **Event Logging**: All deposits and withdrawals emit events for off-chain tracking
+- **Cross-Chain Deployment**: Deploy with the same address across multiple EVM-compatible chains
 
 ## Smart Contract Functions
 
@@ -35,6 +36,34 @@ Emergency function to recover any ERC20 tokens accidentally sent to the vault.
 | Traditional (approve + deposit) | ~101,000 gas | 2 |
 | **Permit deposit** | ~77,000 gas | 1 |
 | **Gas Savings** | **~24,000 gas (24%)** | **1 less transaction** |
+
+## Cross-Chain Deployment
+
+This project supports deploying the same contract address across multiple EVM-compatible chains using CREATE2.
+
+### Quick Cross-Chain Demo
+
+```bash
+# Run address prediction demo
+./demo_prediction.sh
+```
+
+### Multi-Chain Deployment
+
+```bash
+# Set your private key
+export PRIVATE_KEY=0x...
+
+# Deploy to multiple chains with same addresses
+./deploy_multichain.sh
+```
+
+### Supported Networks
+
+**Mainnets**: Ethereum, Polygon, Arbitrum, Optimism, Base, Avalanche, BSC
+**Testnets**: Sepolia, Polygon Mumbai, Arbitrum Sepolia, Optimism Sepolia, Base Sepolia, Avalanche Fuji, BSC Testnet, Unichain Sepolia
+
+For detailed instructions, see [CROSS_CHAIN_DEPLOYMENT.md](CROSS_CHAIN_DEPLOYMENT.md).
 
 ## Usage
 

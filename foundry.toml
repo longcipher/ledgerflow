@@ -3,11 +3,39 @@ src = "src"
 out = "out"
 libs = ["lib"]
 
-# Unichain Sepolia Configuration
+# Multi-chain RPC endpoints
 [rpc_endpoints]
+# Mainnets
+ethereum = "https://eth.llamarpc.com"
+polygon = "https://polygon.llamarpc.com"
+arbitrum = "https://arb1.arbitrum.io/rpc"
+optimism = "https://mainnet.optimism.io"
+base = "https://mainnet.base.org"
+avalanche = "https://api.avax.network/ext/bc/C/rpc"
+bsc = "https://bsc-dataseed.binance.org"
+
+# Testnets
+sepolia = "https://ethereum-sepolia.publicnode.com"
+polygon_mumbai = "https://rpc-mumbai.maticvigil.com"
+arbitrum_sepolia = "https://sepolia-rollup.arbitrum.io/rpc"
+optimism_sepolia = "https://sepolia.optimism.io"
+base_sepolia = "https://sepolia.base.org"
+avalanche_fuji = "https://api.avax-test.network/ext/bc/C/rpc"
+bsc_testnet = "https://data-seed-prebsc-1-s1.binance.org:8545"
+
+# Unichain
 unichain_sepolia = "https://sepolia.unichain.org"
 
+# Etherscan API configuration for contract verification
 [etherscan]
+ethereum = { key = "${ETHERSCAN_API_KEY}" }
+polygon = { key = "${POLYGONSCAN_API_KEY}" }
+arbitrum = { key = "${ARBISCAN_API_KEY}" }
+optimism = { key = "${OPTIMISTIC_ETHERSCAN_API_KEY}" }
+base = { key = "${BASESCAN_API_KEY}" }
+avalanche = { key = "${SNOWTRACE_API_KEY}" }
+bsc = { key = "${BSCSCAN_API_KEY}" }
+sepolia = { key = "${ETHERSCAN_API_KEY}" }
 unichain_sepolia = { key = "${ETHERSCAN_API_KEY}", url = "https://sepolia.uniscan.xyz/api" }
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
