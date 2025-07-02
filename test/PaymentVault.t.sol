@@ -92,7 +92,8 @@ contract PaymentVaultTest is Test {
         mockToken = new MockERC20();
 
         // Deploy PaymentVault
-        paymentVault = new PaymentVault(address(mockToken), owner);
+        paymentVault = new PaymentVault();
+        paymentVault.initialize(address(mockToken), owner);
 
         // Mint some tokens for testing
         mockToken.mint(user, 1000e6); // 1000 USDC

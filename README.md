@@ -76,6 +76,88 @@ Deploy to any network:
 forge script script/PaymentVault.s.sol --rpc-url <RPC_URL> --private-key <PRIVATE_KEY> --broadcast
 ```
 
+### Deployment Examples
+
+#### Standard Deployment
+
+```bash
+# Deploy to Unichain Sepolia
+export PRIVATE_KEY=your_private_key
+export RPC_URL=https://sepolia.unichain.org
+
+forge script script/PaymentVault.s.sol --rpc-url $RPC_URL --private-key $PRIVATE_KEY --broadcast --verify
+```
+
+#### UUPS Upgradeable Deployment
+
+```bash
+# Deploy upgradeable version with proxy
+forge script script/DeployUpgradeable.s.sol --rpc-url $RPC_URL --private-key $PRIVATE_KEY --broadcast --verify
+
+# The script will output:
+# - Implementation address (PaymentVault logic contract)
+# - Proxy address (The address users interact with)
+# - Owner address
+# - USDC token address configured
+```
+
+#### Upgrading to V2
+
+```bash
+# Edit script/UpgradePaymentVault.s.sol and set the correct PROXY_ADDRESS
+# Then run the upgrade
+forge script script/UpgradePaymentVault.s.sol --rpc-url $RPC_URL --private-key $PRIVATE_KEY --broadcast
+```
+
+### Upgrade Commands
+
+Once deployed, you can upgrade the contract to a new implementation:
+
+```bash
+# Create a new version of the contract (PaymentVaultV2)
+# Then deploy the new implementation
+forge script script/UpgradePaymentVault.s.sol --rpc-url <RPC_URL> --private-key <PRIVATE_KEY> --broadcast
+```
+
+### Testing Upgrades
+
+Run upgrade-specific tests:
+
+```bash
+# Test upgrade functionality
+forge test --match-contract PaymentVaultUpgradeTest
+
+# Test with gas reporting
+forge test --match-contract PaymentVaultUpgradeTest --gas-report
+
+# Run all tests including upgrades
+forge test
+```
+
+### Important Notes for UUPS Upgrades
+
+#### Contract Addresses
+- **Implementation Address**: The logic contract (changes with each upgrade)
+- **Proxy Address**: The permanent address users interact with (never changes)
+- **Always use the Proxy Address** for user interactions
+
+#### Upgrade Safety Checklist
+1. Ensure only the contract owner can authorize upgrades
+2. Test upgrades thoroughly on testnets first
+3. Verify that storage layout remains compatible
+4. Check that all state variables are preserved
+5. Consider upgrade timelock for additional security
+
+#### Storage Layout Compatibility
+When creating new versions (V2, V3, etc.):
+- ✅ Add new state variables at the end
+- ✅ Add new functions
+- ❌ Remove existing state variables
+- ❌ Change the order of existing state variables
+- ❌ Change the type of existing state variables
+
+For detailed upgrade information, see [UUPS_UPGRADE.md](UUPS_UPGRADE.md).
+
 ### Available Commands
 
 ```bash
@@ -85,8 +167,14 @@ make build
 # Run tests
 make test
 
-# Deploy to Unichain Sepolia
+# Deploy standard version to Unichain Sepolia
 make deploy-unichain-sepolia
+
+# Deploy upgradeable version with proxy
+forge script script/DeployUpgradeable.s.sol --rpc-url https://sepolia.unichain.org --private-key $PRIVATE_KEY --broadcast
+
+# Test upgrade functionality
+forge test --match-contract PaymentVaultUpgradeTest
 
 # Verify contract
 make verify-unichain-sepolia

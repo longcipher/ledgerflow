@@ -17,7 +17,8 @@ contract PaymentVaultScript is Script {
         address mockUSDC = address(0x1234567890123456789012345678901234567890);
         address initialOwner = msg.sender;
 
-        paymentVault = new PaymentVault(mockUSDC, initialOwner);
+        paymentVault = new PaymentVault();
+        paymentVault.initialize(mockUSDC, initialOwner);
 
         vm.stopBroadcast();
     }

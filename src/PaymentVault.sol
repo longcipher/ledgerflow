@@ -4,24 +4,27 @@ pragma solidity ^0.8.30;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 /**
  * @title PaymentVault
- * @notice A secure vault contract for handling USDC token deposits and withdrawals
+ * @notice A secure upgradeable vault contract for handling USDC token deposits and withdrawals
  * @dev This contract implements a payment vault that accepts USDC deposits with order IDs
  *      and allows the owner to withdraw accumulated funds. It supports both standard
  *      ERC20 transfers and ERC-2612 permit-based transfers for improved UX.
+ *      This contract is upgradeable using the UUPS (Universal Upgradeable Proxy Standard) pattern.
  * @author longcipher
  */
-contract PaymentVault is Ownable {
+contract PaymentVault is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     using SafeERC20 for IERC20;
 
     /// @notice The ERC20 token contract that this vault accepts (e.g., USDC)
-    IERC20 public immutable usdcToken;
+    IERC20 public usdcToken;
 
     /// @notice The ERC20Permit interface for the USDC token to support permit functionality
-    IERC20Permit public immutable usdcPermitToken;
+    IERC20Permit public usdcPermitToken;
 
     /**
      * @notice Event emitted when a new deposit is successfully made.
@@ -47,15 +50,22 @@ contract PaymentVault is Ownable {
     event TokenRecovered(address indexed token, address indexed recipient, uint256 amount);
 
     /**
-     * @notice Sets up the vault with the specified USDC token address and initial owner.
-     * @dev The constructor validates both token and owner addresses to prevent zero address assignments.
+     * @notice Initializes the vault with the specified USDC token address and initial owner.
+     * @dev Replaces the constructor for upgradeable contracts. This function can only be called once.
+     *      The initializer validates both token and owner addresses to prevent zero address assignments.
      *      Both usdcToken and usdcPermitToken point to the same contract address for gas efficiency.
      * @param _usdcTokenAddress The address of the USDC contract.
      * @param _initialOwner The initial owner of the contract (ideally a multi-sig wallet).
      */
-    constructor(address _usdcTokenAddress, address _initialOwner) Ownable(_initialOwner) {
+    function initialize(address _usdcTokenAddress, address _initialOwner) public initializer {
         require(_usdcTokenAddress != address(0), "USDC token address cannot be the zero address");
         require(_initialOwner != address(0), "Initial owner cannot be the zero address");
+
+        // Initialize parent contracts
+        __Ownable_init(_initialOwner);
+        __UUPSUpgradeable_init();
+
+        // Set storage variables
         usdcToken = IERC20(_usdcTokenAddress);
         usdcPermitToken = IERC20Permit(_usdcTokenAddress);
     }
@@ -190,5 +200,17 @@ contract PaymentVault is Ownable {
      */
     fallback() external payable {
         revert("Function does not exist");
+    }
+
+    // ============ UPGRADE FUNCTIONS ============
+
+    /**
+     * @notice Authorizes an upgrade to a new implementation
+     * @dev This function is required by UUPSUpgradeable. Only the owner can authorize upgrades.
+     * @param newImplementation The address of the new implementation contract
+     */
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
+        // Only the owner can upgrade the contract
+        // Additional upgrade validation logic can be added here if needed
     }
 }
