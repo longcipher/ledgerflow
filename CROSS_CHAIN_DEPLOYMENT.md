@@ -1,6 +1,6 @@
 # 跨链部署指南 (Cross-Chain Deployment Guide)
 
-本指南介绍如何使用 CREATE2 技术在多条 EVM 兼容链上部署相同地址的 PaymentVault 合约。
+本指南介绍如何使用 CREATE2 技术在多条 EVM 兼容链上部署相同地址的 LedgerFlow Vault 合约。
 
 ## 概述
 

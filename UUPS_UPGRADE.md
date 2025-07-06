@@ -1,6 +1,6 @@
-# PaymentVault UUPS Upgrade Implementation
+# LedgerFlow Vault UUPS Upgrade Implementation
 
-This document explains the modifications made to the PaymentVault contract to support UUPS (Universal Upgradeable Proxy Standard) upgrades.
+This document explains the modifications made to the LedgerFlow Vault contract to support UUPS (Universal Upgradeable Proxy Standard) upgrades.
 
 ## Key Changes Made
 

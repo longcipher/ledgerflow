@@ -11,7 +11,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 /**
  * @title PaymentVault
  * @notice A secure upgradeable vault contract for handling USDC token deposits and withdrawals
- * @dev This contract implements a payment vault that accepts USDC deposits with order IDs
+ * @dev This contract implements the LedgerFlow Vault that accepts USDC deposits with order IDs
  *      and allows the owner to withdraw accumulated funds. It supports both standard
  *      ERC20 transfers and ERC-2612 permit-based transfers for improved UX.
  *      This contract is upgradeable using the UUPS (Universal Upgradeable Proxy Standard) pattern.

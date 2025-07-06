@@ -1,6 +1,6 @@
 # Unichain Sepolia Deployment Guide
 
-This guide explains how to deploy the PaymentVault contract to Unichain Sepolia testnet.
+This guide explains how to deploy the LedgerFlow Vault contract to Unichain Sepolia testnet.
 
 ## Network Configuration
 
