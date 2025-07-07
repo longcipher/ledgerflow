@@ -1,0 +1,9 @@
+unstable_features = true
+newline_style = "Unix"
+imports_granularity = "Crate"
+group_imports = "StdExternalCrate"
+reorder_imports = true
+normalize_comments = true
+normalize_doc_attributes = true
+format_code_in_doc_comments = true
+use_field_init_shorthand = true
