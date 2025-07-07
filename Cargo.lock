@@ -1936,12 +1936,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aac81fa3e28d21450aa4d2ac065992ba96a1d7303efbce51a95f4fd175b67562"
 
 [[package]]
-name = "dotenv"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77c90badedccf4105eca100756a0b1289e191f6fcbdadd3cee1d2f614f97da8f"
-
-[[package]]
 name = "dotenvy"
 version = "0.15.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3078,14 +3072,12 @@ checksum = "03087c2bad5e1034e8cace5926dec053fb3790248370865f5117a7d0213354c8"
 name = "ledgerflow-balancer"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "axum",
  "chrono",
  "clap",
  "config",
  "eyre",
  "hex",
- "reqwest",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -3093,7 +3085,6 @@ dependencies = [
  "sqlx",
  "thiserror 2.0.12",
  "tokio",
- "tower",
  "tower-http",
  "tracing",
  "tracing-subscriber",
@@ -3110,7 +3101,6 @@ dependencies = [
  "clap",
  "color-eyre",
  "config",
- "dotenv",
  "eyre",
  "hex",
  "image",
@@ -3136,8 +3126,6 @@ dependencies = [
  "alloy",
  "clap",
  "eyre",
- "hex",
- "reqwest",
  "tokio",
 ]
 
@@ -3151,7 +3139,6 @@ dependencies = [
  "eyre",
  "hex",
  "serde",
- "serde_json",
  "serde_yaml",
  "sqlx",
  "tokio",

@@ -30,7 +30,7 @@ pub async fn execute_deposit(
 
     // 获取钱包地址
     let wallet_address = provider.get_accounts().await?[0];
-    println!("钱包地址: {}", wallet_address);
+    println!("钱包地址: {wallet_address}");
 
     // 创建合约实例
     let vault_contract = PaymentVault::new(contract_addr, &provider);
@@ -39,9 +39,9 @@ pub async fn execute_deposit(
     let usdc_address = vault_contract.usdcToken().call().await?;
     let usdc_contract = USDC::new(usdc_address, &provider);
 
-    println!("PaymentVault 合约地址: {}", contract_addr);
-    println!("USDC 代币地址: {}", usdc_address);
-    println!("订单ID: {}", order_id);
+    println!("PaymentVault 合约地址: {contract_addr}");
+    println!("USDC 代币地址: {usdc_address}");
+    println!("订单ID: {order_id}");
     println!("存款金额: {} USDC", format_usdc_amount(amount_u256));
 
     // 检查USDC余额
@@ -151,7 +151,7 @@ pub async fn execute_deposit_with_permit(
 
     // 获取钱包地址
     let wallet_address = provider.get_accounts().await?[0];
-    println!("钱包地址: {}", wallet_address);
+    println!("钱包地址: {wallet_address}");
 
     // 创建合约实例
     let vault_contract = PaymentVault::new(contract_addr, &provider);
@@ -160,11 +160,11 @@ pub async fn execute_deposit_with_permit(
     let usdc_address = vault_contract.usdcToken().call().await?;
     let usdc_contract = USDC::new(usdc_address, &provider);
 
-    println!("PaymentVault 合约地址: {}", contract_addr);
-    println!("USDC 代币地址: {}", usdc_address);
-    println!("订单ID: {}", order_id);
+    println!("PaymentVault 合约地址: {contract_addr}");
+    println!("USDC 代币地址: {usdc_address}");
+    println!("订单ID: {order_id}");
     println!("存款金额: {} USDC", format_usdc_amount(amount_u256));
-    println!("Permit 截止时间: {}", deadline);
+    println!("Permit 截止时间: {deadline}");
 
     // 检查USDC余额
     let balance = usdc_contract.balanceOf(wallet_address).call().await?;
@@ -182,8 +182,8 @@ pub async fn execute_deposit_with_permit(
     let nonce = usdc_contract.nonces(wallet_address).call().await?;
     let domain_separator = usdc_contract.DOMAIN_SEPARATOR().call().await?;
 
-    println!("当前 nonce: {}", nonce);
-    println!("Domain separator: {}", domain_separator);
+    println!("当前 nonce: {nonce}");
+    println!("Domain separator: {domain_separator}");
 
     // 创建 permit 签名
     // 这里简化处理，实际应该使用 EIP-712 标准签名
@@ -253,7 +253,7 @@ pub async fn execute_withdraw(
 
     // 获取钱包地址
     let wallet_address = provider.get_accounts().await?[0];
-    println!("钱包地址: {}", wallet_address);
+    println!("钱包地址: {wallet_address}");
 
     // 创建合约实例
     let vault_contract = PaymentVault::new(contract_addr, &provider);
@@ -262,16 +262,14 @@ pub async fn execute_withdraw(
     let usdc_address = vault_contract.usdcToken().call().await?;
     let usdc_contract = USDC::new(usdc_address, &provider);
 
-    println!("PaymentVault 合约地址: {}", contract_addr);
-    println!("USDC 代币地址: {}", usdc_address);
+    println!("PaymentVault 合约地址: {contract_addr}");
+    println!("USDC 代币地址: {usdc_address}");
 
     // 检查是否为所有者
     let owner = vault_contract.owner().call().await?;
     if wallet_address != owner {
         return Err(eyre!(
-            "只有合约所有者可以执行提取操作。当前钱包: {}, 所有者: {}",
-            wallet_address,
-            owner
+            "只有合约所有者可以执行提取操作。当前钱包: {wallet_address}, 所有者: {owner}"
         ));
     }
 

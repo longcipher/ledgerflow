@@ -147,15 +147,13 @@ async fn handle_callback(
 }
 
 async fn handle_start(bot: Bot, msg: Message, _state: BotState) -> BotResult<()> {
-    let welcome_text = format!(
-        "🚀 Welcome to LedgerFlow Bot!\n\n\
+    let welcome_text = "🚀 Welcome to LedgerFlow Bot!\n\n\
         I can help you:\n\
         • 💳 Create payment requests\n\
         • 💰 Check your balance\n\
         • 🔗 Bind your EVM address\n\
         • 👛 Generate a new wallet\n\n\
-        Use /help to see all available commands."
-    );
+        Use /help to see all available commands.";
 
     bot.send_message(msg.chat.id, welcome_text).await?;
     Ok(())
@@ -177,7 +175,11 @@ async fn handle_help(bot: Bot, msg: Message, _state: BotState) -> BotResult<()> 
 }
 
 async fn handle_balance(bot: Bot, msg: Message, state: BotState) -> BotResult<()> {
-    let user_id = msg.from.as_ref().unwrap().id.0 as i64;
+    let user_id = msg
+        .from
+        .as_ref()
+        .map(|u| u.id.0 as i64)
+        .ok_or_else(|| BotError::Config("User not found".to_string()))?;
 
     match state.balancer.get_balance(&user_id.to_string()).await {
         Ok(balance) => {
@@ -204,7 +206,11 @@ async fn handle_balance(bot: Bot, msg: Message, state: BotState) -> BotResult<()
 }
 
 async fn handle_wallet(bot: Bot, msg: Message, state: BotState) -> BotResult<()> {
-    let user_id = msg.from.as_ref().unwrap().id.0 as i64;
+    let user_id = msg
+        .from
+        .as_ref()
+        .map(|u| u.id.0 as i64)
+        .ok_or_else(|| BotError::Config("User not found".to_string()))?;
 
     match state
         .database
@@ -216,9 +222,8 @@ async fn handle_wallet(bot: Bot, msg: Message, state: BotState) -> BotResult<()>
             let wallet_text = if let Some(address) = user.evm_address {
                 format!(
                     "👛 Your Wallet:\n\n\
-                    Address: `{}`\n\n\
-                    Use /bind <address> to change your address",
-                    address
+                    Address: `{address}`\n\n\
+                    Use /bind <address> to change your address"
                 )
             } else {
                 "👛 No wallet address bound\n\n\
@@ -269,7 +274,11 @@ async fn handle_generate_wallet(bot: Bot, msg: Message, _state: BotState) -> Bot
 }
 
 async fn handle_pay(bot: Bot, msg: Message, state: BotState, text: &str) -> BotResult<()> {
-    let user_id = msg.from.as_ref().unwrap().id.0 as i64;
+    let user_id = msg
+        .from
+        .as_ref()
+        .map(|u| u.id.0 as i64)
+        .ok_or_else(|| BotError::Config("User not found".to_string()))?;
 
     // Parse amount from command
     let amount_str = text.strip_prefix("/pay ").unwrap_or("").trim();
@@ -328,7 +337,11 @@ async fn handle_pay(bot: Bot, msg: Message, state: BotState, text: &str) -> BotR
 }
 
 async fn handle_bind_address(bot: Bot, msg: Message, state: BotState, text: &str) -> BotResult<()> {
-    let user_id = msg.from.as_ref().unwrap().id.0 as i64;
+    let user_id = msg
+        .from
+        .as_ref()
+        .map(|u| u.id.0 as i64)
+        .ok_or_else(|| BotError::Config("User not found".to_string()))?;
 
     let address = text.strip_prefix("/bind ").unwrap_or("").trim();
 
@@ -355,8 +368,7 @@ async fn handle_bind_address(bot: Bot, msg: Message, state: BotState, text: &str
         Ok(_) => {
             let success_text = format!(
                 "✅ Address bound successfully!\n\n\
-                Your address: `{}`",
-                formatted_address
+                Your address: `{formatted_address}`"
             );
             bot.send_message(msg.chat.id, success_text)
                 .parse_mode(teloxide::types::ParseMode::MarkdownV2)

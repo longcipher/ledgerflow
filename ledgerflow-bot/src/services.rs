@@ -20,7 +20,7 @@ impl BalancerService {
                 config.balancer.timeout_seconds,
             ))
             .build()
-            .unwrap();
+            .expect("Failed to build HTTP client");
 
         Self {
             client,
@@ -45,8 +45,7 @@ impl BalancerService {
                 .unwrap_or_else(|_| "Unknown error".to_string());
             error!("Failed to create order: {}", error_text);
             return Err(BotError::BalancerApi(format!(
-                "Failed to create order: {}",
-                error_text
+                "Failed to create order: {error_text}"
             )));
         }
 
@@ -67,8 +66,7 @@ impl BalancerService {
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
             return Err(BotError::BalancerApi(format!(
-                "Failed to get order: {}",
-                error_text
+                "Failed to get order: {error_text}"
             )));
         }
 
@@ -87,8 +85,7 @@ impl BalancerService {
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
             return Err(BotError::BalancerApi(format!(
-                "Failed to get balance: {}",
-                error_text
+                "Failed to get balance: {error_text}"
             )));
         }
 

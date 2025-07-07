@@ -9,6 +9,4 @@ authors = ["longcipher"]
 alloy = { version = "1.0.17", features = ["full"] }
 clap = { version = "4.5.40", features = ["derive"] }
 eyre = "0.6.12"
-hex = "0.4.3"
-reqwest = "0.12.22"
 tokio = { version = "1.46.1", features = ["full"] }

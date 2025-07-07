@@ -53,7 +53,7 @@ pub fn generate_qr_code(data: &str) -> BotResult<String> {
     )?;
 
     let base64_image = general_purpose::STANDARD.encode(&buffer);
-    Ok(format!("data:image/png;base64,{}", base64_image))
+    Ok(format!("data:image/png;base64,{base64_image}"))
 }
 
 pub fn format_payment_details(details: &PaymentDetails) -> String {
@@ -81,11 +81,10 @@ pub fn format_payment_details(details: &PaymentDetails) -> String {
 pub fn format_balance_text(balance: &str, account_id: &str) -> String {
     format!(
         "💰 **Your Balance**\n\n\
-        Total: {} USDC\n\
-        Account: {}\n\n\
+        Total: {balance} USDC\n\
+        Account: {account_id}\n\n\
         Use /pay <amount> to create a payment request\n\
-        Example: /pay 10.5",
-        balance, account_id
+        Example: /pay 10.5"
     )
 }
 
@@ -93,10 +92,9 @@ pub fn format_wallet_info(address: Option<&str>) -> String {
     match address {
         Some(addr) => format!(
             "👛 **Your Wallet**\n\n\
-            Address: `{}`\n\n\
+            Address: `{addr}`\n\n\
             Use /bind <address> to change your address\n\
-            Use /generate_wallet to create a new one",
-            addr
+            Use /generate_wallet to create a new one"
         ),
         None => "👛 **No Wallet Address**\n\n\
             Use /bind <address> to bind your address\n\
@@ -153,7 +151,7 @@ pub fn escape_markdown(text: &str) -> String {
         .map(|c| match c {
             '_' | '*' | '[' | ']' | '(' | ')' | '~' | '`' | '>' | '#' | '+' | '-' | '=' | '|'
             | '{' | '}' | '.' | '!' => {
-                format!("\\{}", c)
+                format!("\\{c}")
             }
             _ => c.to_string(),
         })

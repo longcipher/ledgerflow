@@ -10,8 +10,8 @@ use eyre::{Result, eyre};
 
 /// 解析十六进制字符串为地址
 pub fn parse_address(addr_str: &str) -> Result<Address> {
-    let addr_str = if addr_str.starts_with("0x") {
-        &addr_str[2..]
+    let addr_str = if let Some(stripped) = addr_str.strip_prefix("0x") {
+        stripped
     } else {
         addr_str
     };
@@ -21,8 +21,8 @@ pub fn parse_address(addr_str: &str) -> Result<Address> {
 
 /// 解析十六进制字符串为 FixedBytes<32> (用于订单ID)
 pub fn parse_order_id(order_id_str: &str) -> Result<FixedBytes<32>> {
-    let order_id_str = if order_id_str.starts_with("0x") {
-        &order_id_str[2..]
+    let order_id_str = if let Some(stripped) = order_id_str.strip_prefix("0x") {
+        stripped
     } else {
         order_id_str
     };
@@ -36,8 +36,8 @@ pub fn parse_order_id(order_id_str: &str) -> Result<FixedBytes<32>> {
 
 /// 解析私钥并创建签名者
 pub fn parse_private_key(private_key_str: &str) -> Result<PrivateKeySigner> {
-    let private_key_str = if private_key_str.starts_with("0x") {
-        &private_key_str[2..]
+    let private_key_str = if let Some(stripped) = private_key_str.strip_prefix("0x") {
+        stripped
     } else {
         private_key_str
     };
@@ -66,7 +66,7 @@ pub fn format_usdc_amount(amount: U256) -> String {
     let amount_u64 = amount.to::<u64>();
     let whole = amount_u64 / 1_000_000;
     let decimal = amount_u64 % 1_000_000;
-    format!("{}.{:06}", whole, decimal)
+    format!("{whole}.{decimal:06}")
 }
 
 /// 从字符串解析USDC金额 (例如 "1.5" -> 1500000)

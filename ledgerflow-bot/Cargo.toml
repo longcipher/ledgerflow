@@ -55,9 +55,6 @@ chrono = { version = "0.4.41", features = ["serde"] }
 # Configuration
 config = "0.15.11"
 
-# Environment variables
-dotenv = "0.15"
-
 # Cryptography
 hex = "0.4.3"
 rand = "0.9.1"

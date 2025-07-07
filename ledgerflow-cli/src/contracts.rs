@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 use alloy::sol;
 
 // 定义 PaymentVault 合约接口

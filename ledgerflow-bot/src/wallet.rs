@@ -21,8 +21,8 @@ pub async fn generate_wallet() -> Result<Wallet> {
     let private_key_hex = hex::encode(private_key_bytes);
 
     Ok(Wallet {
-        address: format!("0x{:x}", address),
-        private_key: format!("0x{}", private_key_hex),
+        address: format!("0x{address:x}"),
+        private_key: format!("0x{private_key_hex}"),
     })
 }
 
@@ -43,7 +43,7 @@ pub fn validate_address(address: &str) -> Result<bool> {
 
 pub fn format_address(address: &str) -> String {
     if !address.starts_with("0x") {
-        format!("0x{}", address)
+        format!("0x{address}")
     } else {
         address.to_string()
     }
@@ -51,7 +51,7 @@ pub fn format_address(address: &str) -> String {
 
 pub fn generate_order_id(broker_id: &str, account_id: &str, order_num: u64) -> String {
     // Create the input data for keccak256
-    let input = format!("{}{}{}", broker_id, account_id, order_num);
+    let input = format!("{broker_id}{account_id}{order_num}");
     let input_bytes = input.as_bytes();
 
     // Calculate keccak256 hash

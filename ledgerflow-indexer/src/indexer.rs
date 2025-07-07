@@ -6,7 +6,7 @@ use alloy::{
     providers::{Provider, ProviderBuilder},
     rpc::types::{Filter, Log},
 };
-use eyre::Result;
+use eyre::{Result, eyre};
 use tokio::time::{Duration, sleep};
 use tracing::{error, info};
 
@@ -45,7 +45,11 @@ impl Indexer {
         for chain in &self.config.chains {
             let chain_config = chain.clone();
             let database = Arc::clone(&self.database);
-            let rpc_url = self.chain_providers.get(&chain.name).unwrap().clone();
+            let rpc_url = self
+                .chain_providers
+                .get(&chain.name)
+                .ok_or_else(|| eyre!("RPC URL not found for chain: {}", chain.name))?
+                .clone();
 
             let handle = tokio::spawn(async move {
                 if let Err(e) = Self::index_chain(chain_config, database, rpc_url).await {

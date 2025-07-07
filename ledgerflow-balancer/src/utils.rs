@@ -29,7 +29,7 @@ pub fn get_next_order_id_num(account_id: &str) -> u64 {
     // Add current timestamp to ensure uniqueness
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
+        .expect("Time went backwards")
         .as_secs();
 
     base.wrapping_add(timestamp)

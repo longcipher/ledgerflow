@@ -7,7 +7,6 @@ edition = "2024"
 # Web framework
 axum = "0.8.4"
 tokio = { version = "1.46.1", features = ["full"] }
-tower = "0.5.2"
 tower-http = { version = "0.6.6", features = ["cors", "trace"] }
 
 # Database
@@ -43,9 +42,3 @@ uuid = { version = "1.17.0", features = ["v4", "serde"] }
 # Crypto
 hex = "0.4.3"
 sha3 = "0.10.8"
-
-# HTTP client
-reqwest = { version = "0.12.22", features = ["json"] }
-
-# Async runtime
-async-trait = "0.1.88"
