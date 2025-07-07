@@ -1,213 +1,124 @@
-# LedgerFlow Vault
+# LedgerFlow
 
-A secure and efficient vault for receiving USDC payments for orders. It emits an event for each deposit, which an off-chain indexer can use to associate payments with order IDs. The owner can withdraw all funds.
+**Making value flow as freely, efficiently, and borderlessly as information flow.**
 
-## Features
+LedgerFlow is a modern payment gateway built on blockchain technology, centered around stablecoins (such as USDC). We aim to solve the pain points of current mainstream payment systems (such as Stripe), including high registration barriers, opaque fees, account freezing risks, and difficult appeals.
 
-- **Standard Deposits**: Users can deposit USDC after approving the contract
-- **Permit Deposits**: Users can deposit USDC using ERC-2612 permit signatures for gas efficiency
-- **Owner Withdrawals**: Contract owner can withdraw all funds
-- **Token Recovery**: Emergency function to recover accidentally sent tokens
-- **Event Logging**: All deposits and withdrawals emit events for off-chain tracking
-- **Cross-Chain Deployment**: Deploy with the same address across multiple EVM-compatible chains
+By leveraging blockchain's transparency, security, and composability, LedgerFlow provides SaaS service providers, developers, and independent creators worldwide with a **low-barrier, low-cost, high-efficiency, censorship-resistant** payment solution.
 
-## Smart Contract Functions
+## 🎯 Problems We Solve
 
-### deposit(bytes32 orderId, uint256 amount)
+Current centralized payment gateways, while powerful, have inherent flaws that create barriers for emerging digital economies and global collaboration:
 
-Standard deposit function requiring prior approval of USDC tokens.
+- **High Entry Barriers**: Must register a company entity to open an account, excluding many independent developers and small teams
+- **Account Freezing Risk**: Platforms have unilateral power to freeze accounts, lack of fund security guarantees, lengthy and low-success appeal processes
+- **Complexity & Learning Costs**: Integrating traditional payment systems requires significant learning costs and development resources
+- **Geographic & Banking Restrictions**: Business scope limited to supported countries and banking systems, cannot achieve true global coverage
+- **Opaque Fees**: Hidden currency conversion fees, cross-border transaction fees make final costs unpredictable
 
-### depositWithPermit(bytes32 orderId, uint256 amount, uint256 deadline, uint8 v, bytes32 r, bytes32 s)
+## 🚀 Our Solution
 
-**NEW**: Gas-efficient deposit using ERC-2612 permit signatures. Combines approval and deposit in a single transaction, saving approximately 24% in gas costs.
+LedgerFlow fundamentally solves these problems through the Web3 technology stack:
 
-### withdraw()
+### Core Advantages
 
-Owner-only function to withdraw all USDC from the vault.
+- **Permissionless**: Anyone with an EVM address can start receiving payments immediately, no company registration required
+- **Self-Custody**: Funds go directly into on-chain Vault contracts you control, platform cannot freeze or misappropriate funds
+- **Truly Global**: Can receive payments anywhere in the world with internet connection, no geographic restrictions
+- **Transparent Fees**: Fees only include predictable blockchain network Gas fees, no hidden charges
+- **Simple & Decoupled**: Easy integration through simple APIs, business systems completely decoupled from on-chain funds
 
-### recoverToken(address token, address recipient)
+## 🏗️ System Architecture
 
-Emergency function to recover any ERC20 tokens accidentally sent to the vault.
+LedgerFlow uses a lightweight decoupled architecture consisting of the following core components:
 
-## Gas Efficiency Comparison
-
-| Method | Gas Cost | Transactions |
-|--------|----------|-------------|
-| Traditional (approve + deposit) | ~101,000 gas | 2 |
-| **Permit deposit** | ~77,000 gas | 1 |
-| **Gas Savings** | **~24,000 gas (24%)** | **1 less transaction** |
-
-## Cross-Chain Deployment
-
-This project supports deploying the same contract address across multiple EVM-compatible chains using CREATE2.
-
-### Quick Cross-Chain Demo
-
-```bash
-# Run address prediction demo
-./demo_prediction.sh
+```text
+ledgerflow-vault/                    # Project root directory
+├── ledgerflow-vault/               # Smart contract module (PaymentVault)
+│   ├── src/                        # Contract source code
+│   ├── test/                       # Contract tests
+│   ├── script/                     # Deployment scripts
+│   └── ...                         # Contract-related files
+├── ledgerflow-balancer/            # Backend service (business logic core)
+├── ledgerflow-bot/                 # Telegram Bot (user frontend)
+├── ledgerflow-cli/                 # Command-line tool
+├── ledgerflow-indexer/             # Event indexer (on-chain monitoring)
+└── ...                             # Workspace configuration
 ```
 
-### Multi-Chain Deployment
+### Component Description
 
-```bash
-# Set your private key
-export PRIVATE_KEY=0x...
+1. **PaymentVault Contract (Smart Contract)**
+   - Serves as the sole entry point and vault for funds, receiving and storing all USDC payments
+   - Supports both standard `approve/deposit` and `permit/deposit` modes
+   - Triggers events for Indexer monitoring, enabling on-chain and off-chain data synchronization
 
-# Deploy to multiple chains with same addresses
-./deploy_multichain.sh
-```
+2. **Indexer (Event Indexer)**
+   - Real-time monitoring of DepositReceived events from PaymentVault contracts across multiple chains
+   - Parses event data and updates order status to "completed"
 
-### Supported Networks
+3. **Balancer (Backend Service)**
+   - Business logic core of the system, providing REST APIs
+   - Handles account management, order creation, status queries, balance calculations, and other business functions
+   - Connects user frontend with off-chain data
 
-**Mainnets**: Ethereum, Polygon, Arbitrum, Optimism, Base, Avalanche, BSC
-**Testnets**: Sepolia, Polygon Mumbai, Arbitrum Sepolia, Optimism Sepolia, Base Sepolia, Avalanche Fuji, BSC Testnet, Unichain Sepolia
+4. **Telegram Bot (User Frontend)**
+   - Primary interface for users to interact with the LedgerFlow system
+   - Handles user onboarding, payment initiation, status notifications, balance queries, and other functions
 
-For detailed instructions, see [CROSS_CHAIN_DEPLOYMENT.md](CROSS_CHAIN_DEPLOYMENT.md).
+## 🔄 Payment Flow
 
-## Usage
+1. **Merchant initiates payment request**: Input "I want to receive 10 USDC" through Telegram Bot
+2. **System generates order**: Bot calls Balancer API to generate unique `orderId`
+3. **Display payment details**: Bot shows payer the payment address, amount, and order information
+4. **On-chain payment**: Payer uses wallet to send USDC to PaymentVault contract
+5. **Event monitoring**: Indexer captures DepositReceived event
+6. **Status update**: Indexer updates order status to "completed" in database
+7. **Confirmation notification**: Merchant receives payment success notification
 
-For detailed usage instructions and code examples, see [PERMIT_USAGE.md](docs/PERMIT_USAGE.md).
+## 🌟 Core Features
 
-## Testing
+### 1. Non-Custodial Vault
 
-Run the test suite:
+- Uses a single PaymentVault smart contract as the fund aggregation entry point
+- Eliminates complexity and security risks of server private key management
+- Supports secure storage of large amounts of funds
 
-```bash
-forge test
-```
+### 2. Seamless Multi-Chain Support
 
-## Deployment
+- Can be deployed on any EVM-compatible chain
+- Supports Ethereum, Polygon, Arbitrum, Optimism, Base, BNB Chain, etc.
+- Merchants can freely choose to enable payment collection on one or multiple chains based on needs
 
-### Quick Start with Unichain Sepolia
+### 3. Programmable & Composable
 
-Deploy to Unichain Sepolia testnet using the provided scripts:
+- **Subscription payments**: Support time-locked automatic deduction subscription models
+- **DeFi integration**: Idle funds can be combined with Staking, Lending and other protocols to generate additional yield
+- **Multi-currency support**: Can be combined with DEX aggregators to support payments in any token
 
-```bash
-# Set up environment variables
-export PRIVATE_KEY=your_private_key_here
-export ETHERSCAN_API_KEY=your_etherscan_api_key_here
+### 4. User-Friendly Payment Experience
 
-# Deploy using the convenience script
-./deploy_unichain_sepolia.sh deploy
+- Supports EIP-2612 permit signatures for "user-side gasless" experience
+- One off-chain signature completes authorization and payment
+- Greatly improves conversion rates and user experience
 
-# Or deploy using Make
-make deploy-unichain-sepolia
-```
+## 🎯 Quick Start
 
-For detailed deployment instructions, see [UNICHAIN_DEPLOYMENT.md](UNICHAIN_DEPLOYMENT.md).
+For detailed usage instructions, please refer to the README.md files in each module:
 
-### Manual Deployment
+- [Smart Contract Deployment and Usage](./ledgerflow-vault/README.md)
+- [Backend Service Configuration](./ledgerflow-balancer/README.md)
+- [Telegram Bot Setup](./ledgerflow-bot/README.md)
+- [Event Indexer Configuration](./ledgerflow-indexer/README.md)
+- [Command Line Tool Usage](./ledgerflow-cli/README.md)
 
-Deploy to any network:
+## 🔮 Future Vision
 
-```bash
-forge script script/PaymentVault.s.sol --rpc-url <RPC_URL> --private-key <PRIVATE_KEY> --broadcast
-```
+- **SaaS Merchant Dashboard**: Develop Web frontend for merchants to manage orders and data more intuitively
+- **One-Click Plugin Integration**: Develop payment plugins for mainstream e-commerce platforms
+- **Subscription & Recurring Payments**: Implement authorization and time-lock logic at the contract level
+- **Business Model**: Free usage initially, future minimal service fees (0.1% - 0.25%) on withdrawals
 
-### Deployment Examples
+---
 
-#### Standard Deployment
-
-```bash
-# Deploy to Unichain Sepolia
-export PRIVATE_KEY=your_private_key
-export RPC_URL=https://sepolia.unichain.org
-
-forge script script/PaymentVault.s.sol --rpc-url $RPC_URL --private-key $PRIVATE_KEY --broadcast --verify
-```
-
-#### UUPS Upgradeable Deployment
-
-```bash
-# Deploy upgradeable version with proxy
-forge script script/DeployUpgradeable.s.sol --rpc-url $RPC_URL --private-key $PRIVATE_KEY --broadcast --verify
-
-# The script will output:
-# - Implementation address (PaymentVault logic contract)
-# - Proxy address (The address users interact with)
-# - Owner address
-# - USDC token address configured
-```
-
-#### Upgrading to V2
-
-```bash
-# Edit script/UpgradePaymentVault.s.sol and set the correct PROXY_ADDRESS
-# Then run the upgrade
-forge script script/UpgradePaymentVault.s.sol --rpc-url $RPC_URL --private-key $PRIVATE_KEY --broadcast
-```
-
-### Upgrade Commands
-
-Once deployed, you can upgrade the contract to a new implementation:
-
-```bash
-# Create a new version of the contract (PaymentVaultV2)
-# Then deploy the new implementation
-forge script script/UpgradePaymentVault.s.sol --rpc-url <RPC_URL> --private-key <PRIVATE_KEY> --broadcast
-```
-
-### Testing Upgrades
-
-Run upgrade-specific tests:
-
-```bash
-# Test upgrade functionality
-forge test --match-contract PaymentVaultUpgradeTest
-
-# Test with gas reporting
-forge test --match-contract PaymentVaultUpgradeTest --gas-report
-
-# Run all tests including upgrades
-forge test
-```
-
-### Important Notes for UUPS Upgrades
-
-#### Contract Addresses
-- **Implementation Address**: The logic contract (changes with each upgrade)
-- **Proxy Address**: The permanent address users interact with (never changes)
-- **Always use the Proxy Address** for user interactions
-
-#### Upgrade Safety Checklist
-1. Ensure only the contract owner can authorize upgrades
-2. Test upgrades thoroughly on testnets first
-3. Verify that storage layout remains compatible
-4. Check that all state variables are preserved
-5. Consider upgrade timelock for additional security
-
-#### Storage Layout Compatibility
-When creating new versions (V2, V3, etc.):
-- ✅ Add new state variables at the end
-- ✅ Add new functions
-- ❌ Remove existing state variables
-- ❌ Change the order of existing state variables
-- ❌ Change the type of existing state variables
-
-For detailed upgrade information, see [UUPS_UPGRADE.md](UUPS_UPGRADE.md).
-
-### Available Commands
-
-```bash
-# Build contracts
-make build
-
-# Run tests
-make test
-
-# Deploy standard version to Unichain Sepolia
-make deploy-unichain-sepolia
-
-# Deploy upgradeable version with proxy
-forge script script/DeployUpgradeable.s.sol --rpc-url https://sepolia.unichain.org --private-key $PRIVATE_KEY --broadcast
-
-# Test upgrade functionality
-forge test --match-contract PaymentVaultUpgradeTest
-
-# Verify contract
-make verify-unichain-sepolia
-
-# See all available commands
-make help
-```
+**Let's build a more open, transparent, and efficient global payment network together!**

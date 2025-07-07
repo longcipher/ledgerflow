@@ -1,0 +1,16 @@
+# Rust build artifacts
+target/
+
+# Configuration files
+config.yaml
+
+# Environment files
+.env
+
+# IDE files
+.vscode/
+.idea/
+
+# OS generated files
+.DS_Store
+Thumbs.db
