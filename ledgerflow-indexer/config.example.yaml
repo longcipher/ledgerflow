@@ -1,0 +1,19 @@
+# Example configuration for LedgerFlow Indexer
+
+chains:
+  - name: "sepolia"
+    rpc_http: "https://sepolia.unichain.org"
+    rpc_ws: "wss://sepolia.unichain.org/ws"
+    payment_vault_contract: "0x742d35Cc6634C0532925a3b8D11C5d2B7e5B3F6E"
+    start_block: 0
+  - name: "mainnet"
+    rpc_http: "https://mainnet.infura.io/v3/YOUR_PROJECT_ID"
+    rpc_ws: "wss://mainnet.infura.io/ws/v3/YOUR_PROJECT_ID"
+    payment_vault_contract: "0x..."
+    start_block: 18000000
+  # Add more chains as needed
+
+database:
+  url: "postgres://user:password@localhost:5432/ledgerflow"
+
+# You can add more configuration options as needed

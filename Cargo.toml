@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "ledgerflow-cli",
+    "ledgerflow-indexer",
+]
+resolver = "2"

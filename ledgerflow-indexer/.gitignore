@@ -1,0 +1,35 @@
+# Rust
+/target/
+Cargo.lock
+*.log
+
+# Config files with secrets
+config.yaml
+*.env
+.env*
+
+# Database
+*.db
+*.sqlite
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.deb
+*.rpm
+*.tar.gz
+*.zip
+
+# Temporary files
+*.tmp
+*.temp
+*.bak

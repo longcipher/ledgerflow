@@ -1,0 +1,2 @@
+alloy::transports::alloy_transport_http::Http<alloy::transports::alloy_transport_http::Client>
+alloy::transports::alloy_transport_http::Http<alloy::transports::alloy_transport_http::Client>: alloy::providers::Network
