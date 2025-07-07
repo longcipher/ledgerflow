@@ -26,11 +26,11 @@ pub fn get_next_order_id_num(account_id: &str) -> u64 {
     account_id.hash(&mut hasher);
     let base = hasher.finish();
 
-    // Add current timestamp to ensure uniqueness
+    // Add current timestamp with nanosecond precision to ensure uniqueness
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .expect("Time went backwards")
-        .as_secs();
+        .as_nanos() as u64;
 
     base.wrapping_add(timestamp)
 }
@@ -64,7 +64,7 @@ mod tests {
         let num1 = get_next_order_id_num(account_id);
         let num2 = get_next_order_id_num(account_id);
 
-        // Should be different due to timestamp
+        // Should be different due to timestamp with nanosecond precision
         assert_ne!(num1, num2);
     }
 }
