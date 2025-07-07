@@ -1,0 +1,15 @@
+# Example configuration for LedgerFlow Balancer
+# Copy this file to config.yaml and modify as needed
+
+database_url: "postgresql://username:password@localhost:5432/ledgerflow"
+
+server:
+  host: "127.0.0.1"
+  port: 3000
+
+business:
+  # Maximum number of pending orders per account
+  max_pending_orders_per_account: 2
+  
+  # Broker ID used for order ID generation
+  broker_id: "ledgerflow-vault"

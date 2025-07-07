@@ -1,0 +1,51 @@
+[package]
+name = "ledgerflow-balancer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# Web framework
+axum = "0.8.4"
+tokio = { version = "1.46.1", features = ["full"] }
+tower = "0.5.2"
+tower-http = { version = "0.6.6", features = ["cors", "trace"] }
+
+# Database
+sqlx = { version = "0.8.6", features = [
+    "runtime-tokio-rustls",
+    "postgres",
+    "uuid",
+    "chrono",
+    "json",
+] }
+
+# CLI
+clap = { version = "4.5.40", features = ["derive"] }
+
+# Configuration
+config = "0.15.11"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+serde_yaml = "0.9.33"
+
+# Logging and tracing
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+
+# Error handling
+eyre = "0.6.12"
+thiserror = "2.0.12"
+
+# Utilities
+chrono = { version = "0.4.41", features = ["serde"] }
+uuid = { version = "1.17.0", features = ["v4", "serde"] }
+
+# Crypto
+hex = "0.4.3"
+sha3 = "0.10.8"
+
+# HTTP client
+reqwest = { version = "0.12.22", features = ["json"] }
+
+# Async runtime
+async-trait = "0.1.88"

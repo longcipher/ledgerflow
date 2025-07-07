@@ -13,3 +13,7 @@ docs/
 # Dotenv file
 .env
 target/
+
+# LedgerFlow Balancer
+ledgerflow-balancer/target/
+ledgerflow-balancer/config.yaml
