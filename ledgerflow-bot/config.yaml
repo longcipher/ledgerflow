@@ -1,0 +1,16 @@
+# LedgerFlow Telegram Bot Configuration
+
+database_url: postgresql://localhost:5432/ledgerflow
+
+telegram:
+  bot_token: "YOUR_BOT_TOKEN_HERE"
+  webhook_url: null
+
+balancer:
+  base_url: "http://localhost:3000"
+  timeout_seconds: 30
+
+blockchain:
+  rpc_url: "https://sepolia.unichain.org"
+  payment_vault_address: "0x742d35Cc6634C0532925a3b8D4fd6c4d4d61ddD6"
+  chain_id: 1301

@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "ledgerflow-balancer",
+    "ledgerflow-bot",
     "ledgerflow-cli",
     "ledgerflow-indexer",
 ]
