@@ -1,17 +1,26 @@
-name: CI
+name: Foundry Lint
 
 on:
   push:
+    paths:
+      - 'ledgerflow-vault/**'
+      - '.github/workflows/foundry_lint.yml'
   pull_request:
+    paths:
+      - 'ledgerflow-vault/**'
+      - '.github/workflows/foundry_lint.yml'
   workflow_dispatch:
 
 env:
   FOUNDRY_PROFILE: ci
 
 jobs:
-  check:
-    name: Foundry project
+  foundry-lint:
+    name: Foundry Lint Check
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ledgerflow-vault
     steps:
       - uses: actions/checkout@v4
         with:
@@ -24,17 +33,14 @@ jobs:
         run: |
           forge --version
 
-      - name: Run Forge fmt
+      - name: Run Forge fmt check
         run: |
           forge fmt --check
-        id: fmt
 
       - name: Run Forge build
         run: |
           forge build --sizes
-        id: build
 
       - name: Run Forge tests
         run: |
           forge test -vvv
-        id: test

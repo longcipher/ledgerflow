@@ -33,7 +33,7 @@ LedgerFlow fundamentally solves these problems through the Web3 technology stack
 LedgerFlow uses a lightweight decoupled architecture consisting of the following core components:
 
 ```text
-ledgerflow-vault/                    # Project root directory
+ledgerflow/                    # Project root directory
 ├── ledgerflow-vault/               # Smart contract module (PaymentVault)
 │   ├── src/                        # Contract source code
 │   ├── test/                       # Contract tests
