@@ -91,10 +91,27 @@ pub async fn execute_deposit(
 
     // Execute deposit
     println!("Executing deposit...");
-    let deposit_tx = vault_contract
+
+    let deposit_tx = match vault_contract
         .deposit(order_id_bytes, amount_u256)
         .send()
-        .await?;
+        .await
+    {
+        Ok(tx) => tx,
+        Err(e) => {
+            let error_msg = e.to_string();
+            if error_msg.contains("already known") {
+                println!(
+                    "⚠️  Transaction already in mempool, this usually means it was already submitted successfully."
+                );
+                println!("Please check the blockchain explorer for the transaction status.");
+                return Ok(());
+            } else {
+                return Err(e.into());
+            }
+        }
+    };
+
     let deposit_receipt = deposit_tx.get_receipt().await?;
 
     println!(
@@ -218,10 +235,27 @@ pub async fn execute_deposit_with_permit(
 
     // Execute deposit with permit
     println!("Executing permit deposit...");
-    let deposit_tx = vault_contract
+
+    let deposit_tx = match vault_contract
         .depositWithPermit(order_id_bytes, amount_u256, U256::from(deadline), v, r, s)
         .send()
-        .await?;
+        .await
+    {
+        Ok(tx) => tx,
+        Err(e) => {
+            let error_msg = e.to_string();
+            if error_msg.contains("already known") {
+                println!(
+                    "⚠️  Transaction already in mempool, this usually means it was already submitted successfully."
+                );
+                println!("Please check the blockchain explorer for the transaction status.");
+                return Ok(());
+            } else {
+                return Err(e.into());
+            }
+        }
+    };
+
     let deposit_receipt = deposit_tx.get_receipt().await?;
 
     println!(
@@ -311,7 +345,23 @@ pub async fn execute_withdraw(
 
     // Execute withdraw
     println!("Executing withdraw...");
-    let withdraw_tx = vault_contract.withdraw().send().await?;
+
+    let withdraw_tx = match vault_contract.withdraw().send().await {
+        Ok(tx) => tx,
+        Err(e) => {
+            let error_msg = e.to_string();
+            if error_msg.contains("already known") {
+                println!(
+                    "⚠️  Transaction already in mempool, this usually means it was already submitted successfully."
+                );
+                println!("Please check the blockchain explorer for the transaction status.");
+                return Ok(());
+            } else {
+                return Err(e.into());
+            }
+        }
+    };
+
     let withdraw_receipt = withdraw_tx.get_receipt().await?;
 
     println!(
