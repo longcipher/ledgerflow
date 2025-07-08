@@ -6,7 +6,7 @@ description = "CLI tool for interacting with LedgerFlow PaymentVault contract"
 authors = ["longcipher"]
 
 [dependencies]
-alloy = { version = "1.0.17", features = ["full"] }
-clap = { version = "4.5.40", features = ["derive"] }
-eyre = "0.6.12"
-tokio = { version = "1.46.1", features = ["full"] }
+alloy = { workspace = true, features = ["full"] }
+clap = { workspace = true, features = ["derive"] }
+eyre = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
