@@ -12,7 +12,6 @@ arbitrum = "https://arb1.arbitrum.io/rpc"
 optimism = "https://mainnet.optimism.io"
 base = "https://mainnet.base.org"
 avalanche = "https://api.avax.network/ext/bc/C/rpc"
-bsc = "https://bsc-dataseed.binance.org"
 
 # Testnets
 sepolia = "https://ethereum-sepolia.publicnode.com"
@@ -21,9 +20,6 @@ arbitrum_sepolia = "https://sepolia-rollup.arbitrum.io/rpc"
 optimism_sepolia = "https://sepolia.optimism.io"
 base_sepolia = "https://sepolia.base.org"
 avalanche_fuji = "https://api.avax-test.network/ext/bc/C/rpc"
-bsc_testnet = "https://data-seed-prebsc-1-s1.binance.org:8545"
-
-# Unichain
 unichain_sepolia = "https://sepolia.unichain.org"
 
 # Etherscan API configuration for contract verification

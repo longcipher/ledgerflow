@@ -117,12 +117,12 @@ main() {
     # Note: Update USDC addresses for each chain as needed
     
     # Testnets (recommended for testing first)
-    deploy_to_chain "Sepolia" "sepolia" "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238" "true"
-    deploy_to_chain "Polygon Mumbai" "polygon_mumbai" "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174" "false"
-    deploy_to_chain "Arbitrum Sepolia" "arbitrum_sepolia" "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d" "false"
-    deploy_to_chain "Optimism Sepolia" "optimism_sepolia" "0x5fd84259d66Cd46123540766Be93DFE6D43130D7" "false"
-    deploy_to_chain "Base Sepolia" "base_sepolia" "0x036CbD53842c5426634e7929541eC2318f3dCF7e" "false"
-    deploy_to_chain "Unichain Sepolia" "unichain_sepolia" "0x1234567890123456789012345678901234567890" "true"
+    # deploy_to_chain "Sepolia" "sepolia" "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238" "true"
+    # deploy_to_chain "Polygon Mumbai" "polygon_mumbai" "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174" "false"
+    # deploy_to_chain "Arbitrum Sepolia" "arbitrum_sepolia" "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d" "false"
+    # deploy_to_chain "Optimism Sepolia" "optimism_sepolia" "0x5fd84259d66Cd46123540766Be93DFE6D43130D7" "false"
+    # deploy_to_chain "Base Sepolia" "base_sepolia" "0x036CbD53842c5426634e7929541eC2318f3dCF7e" "false"
+    deploy_to_chain "Unichain Sepolia" "unichain_sepolia" "0x31d0220469e10c4E71834a79b1f276d740d3768F" "true"
 
     # Uncomment the following for mainnet deployments
     # deploy_to_chain "Ethereum" "ethereum" "0xA0b86a33E6417c5DeF6Ca95E2B6b81b9c8C06b6" "true"
