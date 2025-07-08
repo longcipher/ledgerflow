@@ -2,15 +2,15 @@
 
 use alloy::sol;
 
-// 定义 PaymentVault 合约接口
+// Define PaymentVault contract interface
 sol! {
     #[sol(rpc)]
     interface PaymentVault {
-        // 事件
+        // Events
         event DepositReceived(address indexed payer, bytes32 indexed orderId, uint256 amount);
         event WithdrawCompleted(address indexed owner, uint256 amount);
 
-        // 函数
+        // Functions
         function deposit(bytes32 orderId, uint256 amount) external;
         function depositWithPermit(
             bytes32 orderId,
@@ -27,7 +27,7 @@ sol! {
     }
 }
 
-// 定义 USDC 代币接口
+// Define USDC token interface
 sol! {
     #[sol(rpc)]
     interface USDC {

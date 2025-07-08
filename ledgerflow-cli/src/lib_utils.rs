@@ -8,7 +8,7 @@ use alloy::{
 };
 use eyre::{Result, eyre};
 
-/// 解析十六进制字符串为地址
+/// Parse hex string to address
 pub fn parse_address(addr_str: &str) -> Result<Address> {
     let addr_str = if let Some(stripped) = addr_str.strip_prefix("0x") {
         stripped
@@ -16,10 +16,10 @@ pub fn parse_address(addr_str: &str) -> Result<Address> {
         addr_str
     };
 
-    Address::from_str(addr_str).map_err(|e| eyre!("无效的地址格式: {}", e))
+    Address::from_str(addr_str).map_err(|e| eyre!("Invalid address format: {}", e))
 }
 
-/// 解析十六进制字符串为 FixedBytes<32> (用于订单ID)
+/// Parse hex string to FixedBytes<32> (for order ID)
 pub fn parse_order_id(order_id_str: &str) -> Result<FixedBytes<32>> {
     let order_id_str = if let Some(stripped) = order_id_str.strip_prefix("0x") {
         stripped
@@ -28,13 +28,13 @@ pub fn parse_order_id(order_id_str: &str) -> Result<FixedBytes<32>> {
     };
 
     if order_id_str.len() != 64 {
-        return Err(eyre!("订单ID必须是32字节(64个十六进制字符)"));
+        return Err(eyre!("Order ID must be 32 bytes (64 hex characters)"));
     }
 
-    FixedBytes::from_str(order_id_str).map_err(|e| eyre!("无效的订单ID格式: {}", e))
+    FixedBytes::from_str(order_id_str).map_err(|e| eyre!("Invalid order ID format: {}", e))
 }
 
-/// 解析私钥并创建签名者
+/// Parse private key and create signer
 pub fn parse_private_key(private_key_str: &str) -> Result<PrivateKeySigner> {
     let private_key_str = if let Some(stripped) = private_key_str.strip_prefix("0x") {
         stripped
@@ -42,10 +42,11 @@ pub fn parse_private_key(private_key_str: &str) -> Result<PrivateKeySigner> {
         private_key_str
     };
 
-    PrivateKeySigner::from_str(private_key_str).map_err(|e| eyre!("无效的私钥格式: {}", e))
+    PrivateKeySigner::from_str(private_key_str)
+        .map_err(|e| eyre!("Invalid private key format: {}", e))
 }
 
-/// 创建带钱包的提供者
+/// Create provider with wallet
 pub async fn create_provider_with_wallet(
     rpc_url: &str,
     private_key: &str,
@@ -61,7 +62,7 @@ pub async fn create_provider_with_wallet(
     Ok(provider)
 }
 
-/// 格式化金额显示 (假设USDC有6位小数)
+/// Format amount for display (assuming USDC has 6 decimals)
 pub fn format_usdc_amount(amount: U256) -> String {
     let amount_u64 = amount.to::<u64>();
     let whole = amount_u64 / 1_000_000;
@@ -69,7 +70,7 @@ pub fn format_usdc_amount(amount: U256) -> String {
     format!("{whole}.{decimal:06}")
 }
 
-/// 从字符串解析USDC金额 (例如 "1.5" -> 1500000)
+/// Parse USDC amount from string (e.g. "1.5" -> 1500000)
 #[allow(dead_code)]
 pub fn parse_usdc_amount(amount_str: &str) -> Result<U256> {
     let amount: f64 = amount_str.parse()?;
