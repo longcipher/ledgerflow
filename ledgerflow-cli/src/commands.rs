@@ -1,15 +1,11 @@
-use alloy::{
-    primitives::{FixedBytes, U256},
-    providers::Provider,
-    sol_types::SolEvent,
-};
+use alloy::{primitives::U256, providers::Provider, sol_types::SolEvent};
 use eyre::{Result, eyre};
 
 use crate::{
     contracts::{PaymentVault, USDC},
     lib_utils::{
-        create_provider_with_wallet, format_usdc_amount, parse_address, parse_order_id,
-        parse_private_key,
+        DomainConfig, create_permit_signature, create_provider_with_wallet, format_usdc_amount,
+        parse_address, parse_order_id, parse_private_key,
     },
 };
 
@@ -189,21 +185,36 @@ pub async fn execute_deposit_with_permit(
     // Get information required for permit
     let nonce = usdc_contract.nonces(wallet_address).call().await?;
     let domain_separator = usdc_contract.DOMAIN_SEPARATOR().call().await?;
+    let chain_id = provider.get_chain_id().await?;
+
+    // Get contract name and version for EIP-712 domain
+    let name = usdc_contract.name().call().await?;
+    let version = usdc_contract.version().call().await?;
 
     println!("Current nonce: {nonce}");
     println!("Domain separator: {domain_separator}");
+    println!("Chain ID: {chain_id}");
 
-    // Create permit signature
-    // This is simplified, in production use EIP-712 standard signature
-    // For demonstration, we use fixed v, r, s values
-    // In production, implement EIP-712 signature properly
-    let v = 27u8;
-    let r = FixedBytes::from([0u8; 32]);
-    let s = FixedBytes::from([0u8; 32]);
+    // Create permit signature using EIP-712 standard
+    println!("Creating EIP-712 permit signature...");
+    let domain_config = DomainConfig {
+        chain_id,
+        name,
+        version,
+        verifying_contract: usdc_address,
+    };
+    let (v, r, s) = create_permit_signature(
+        &signer,
+        wallet_address,
+        contract_addr,
+        amount_u256,
+        nonce,
+        U256::from(deadline),
+        domain_config,
+    )
+    .await?;
 
-    println!(
-        "⚠️  Note: This is a simplified example. In production, implement EIP-712 signature correctly."
-    );
+    println!("Generated permit signature - v: {v}, r: {r}, s: {s}");
 
     // Execute deposit with permit
     println!("Executing permit deposit...");
@@ -265,7 +276,8 @@ pub async fn execute_withdraw(
     let provider = create_provider_with_wallet(&rpc_url, &private_key).await?;
 
     // Get wallet address
-    let wallet_address = provider.get_accounts().await?[0];
+    let signer = parse_private_key(&private_key)?;
+    let wallet_address = signer.address();
     println!("Wallet address: {wallet_address}");
 
     // Create contract instance

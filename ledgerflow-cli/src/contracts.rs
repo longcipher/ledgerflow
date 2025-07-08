@@ -49,5 +49,7 @@ sol! {
         ) external;
         function nonces(address owner) external view returns (uint256);
         function DOMAIN_SEPARATOR() external view returns (bytes32);
+        function name() external view returns (string);
+        function version() external view returns (string);
     }
 }
