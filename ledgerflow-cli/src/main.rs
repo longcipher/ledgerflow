@@ -21,13 +21,13 @@ enum Commands {
     /// Standard deposit requiring prior USDC approval
     Deposit {
         /// RPC URL for the blockchain network
-        #[arg(long)]
+        #[arg(long, env = "RPC_URL")]
         rpc_url: String,
         /// Private key for the wallet (hex format)
-        #[arg(long)]
+        #[arg(long, env = "PRIVATE_KEY")]
         private_key: String,
         /// PaymentVault contract address
-        #[arg(long)]
+        #[arg(long, env = "VAULT_ADDRESS")]
         contract_address: String,
         /// Order ID (32 bytes hex string)
         #[arg(long)]
@@ -39,13 +39,13 @@ enum Commands {
     /// Deposit using ERC-2612 permit signature (gas efficient)
     DepositWithPermit {
         /// RPC URL for the blockchain network
-        #[arg(long)]
+        #[arg(long, env = "RPC_URL")]
         rpc_url: String,
         /// Private key for the wallet (hex format)
-        #[arg(long)]
+        #[arg(long, env = "PRIVATE_KEY")]
         private_key: String,
         /// PaymentVault contract address
-        #[arg(long)]
+        #[arg(long, env = "VAULT_ADDRESS")]
         contract_address: String,
         /// Order ID (32 bytes hex string)
         #[arg(long)]
@@ -60,13 +60,13 @@ enum Commands {
     /// Withdraw all USDC from the vault (owner only)
     Withdraw {
         /// RPC URL for the blockchain network
-        #[arg(long)]
+        #[arg(long, env = "RPC_URL")]
         rpc_url: String,
         /// Private key for the wallet (hex format)
-        #[arg(long)]
+        #[arg(long, env = "PRIVATE_KEY")]
         private_key: String,
         /// PaymentVault contract address
-        #[arg(long)]
+        #[arg(long, env = "VAULT_ADDRESS")]
         contract_address: String,
     },
 }

@@ -5,6 +5,7 @@ use alloy::sol;
 // Define PaymentVault contract interface
 sol! {
     #[sol(rpc)]
+    #[derive(Debug)]
     interface PaymentVault {
         // Events
         event DepositReceived(address indexed payer, bytes32 indexed orderId, uint256 amount);
@@ -30,6 +31,7 @@ sol! {
 // Define USDC token interface
 sol! {
     #[sol(rpc)]
+    #[derive(Debug)]
     interface USDC {
         function balanceOf(address account) external view returns (uint256);
         function allowance(address owner, address spender) external view returns (uint256);

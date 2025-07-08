@@ -7,7 +7,10 @@ use eyre::{Result, eyre};
 
 use crate::{
     contracts::{PaymentVault, USDC},
-    lib_utils::{create_provider_with_wallet, format_usdc_amount, parse_address, parse_order_id},
+    lib_utils::{
+        create_provider_with_wallet, format_usdc_amount, parse_address, parse_order_id,
+        parse_private_key,
+    },
 };
 
 /// Execute standard deposit operation
@@ -28,9 +31,8 @@ pub async fn execute_deposit(
     // Create provider
     let provider = create_provider_with_wallet(&rpc_url, &private_key).await?;
 
-    // Get wallet address
-    let wallet_address = provider.get_accounts().await?[0];
-    println!("Wallet address: {wallet_address}");
+    let signer = parse_private_key(&private_key)?;
+    let wallet_address = signer.address();
 
     // Create contract instance
     let vault_contract = PaymentVault::new(contract_addr, &provider);
@@ -156,8 +158,8 @@ pub async fn execute_deposit_with_permit(
     let provider = create_provider_with_wallet(&rpc_url, &private_key).await?;
 
     // Get wallet address
-    let wallet_address = provider.get_accounts().await?[0];
-    println!("Wallet address: {wallet_address}");
+    let signer = parse_private_key(&private_key)?;
+    let wallet_address = signer.address();
 
     // Create contract instance
     let vault_contract = PaymentVault::new(contract_addr, &provider);
