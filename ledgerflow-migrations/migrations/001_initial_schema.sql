@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     id BIGSERIAL PRIMARY KEY,
     username VARCHAR(255) NOT NULL UNIQUE,
     telegram_id BIGINT NOT NULL UNIQUE,
-    email VARCHAR(255),
+    email VARCHAR(320),
     evm_address VARCHAR(42),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -33,11 +33,10 @@ CREATE TABLE IF NOT EXISTS orders (
 -- Create balances table (for tracking user balance aggregations)
 CREATE TABLE IF NOT EXISTS balances (
     id BIGSERIAL PRIMARY KEY,
-    account_id BIGINT NOT NULL,
+    account_id BIGINT NOT NULL UNIQUE,
     balance VARCHAR(255) NOT NULL DEFAULT '0',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE (account_id)
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Create chain_states table (from ledgerflow-indexer)
@@ -65,48 +64,20 @@ CREATE TABLE IF NOT EXISTS deposit_events (
     UNIQUE (chain_id, transaction_hash, log_index)
 );
 
--- Create indexes for accounts table
-CREATE INDEX IF NOT EXISTS idx_accounts_username ON accounts(username);
-CREATE INDEX IF NOT EXISTS idx_accounts_telegram_id ON accounts(telegram_id);
-CREATE INDEX IF NOT EXISTS idx_accounts_evm_address ON accounts(evm_address);
+-- orders table indexes
+CREATE INDEX IF NOT EXISTS idx_orders_account_id ON orders (account_id) ;
+CREATE INDEX IF NOT EXISTS idx_orders_chain_id ON orders (chain_id) ;
+CREATE INDEX IF NOT EXISTS idx_orders_status ON orders (status) ;
+CREATE INDEX IF NOT EXISTS idx_orders_account_status ON orders (account_id, status);
 
--- Create indexes for orders table
-CREATE INDEX IF NOT EXISTS idx_orders_order_id ON orders(order_id);
-CREATE INDEX IF NOT EXISTS idx_orders_account_id ON orders(account_id);
-CREATE INDEX IF NOT EXISTS idx_orders_chain_id ON orders(chain_id);
-CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
-CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
-
--- Create indexes for balances table
-CREATE INDEX IF NOT EXISTS idx_balances_account_id ON balances(account_id);
-
--- Create indexes for chain_states table
-CREATE INDEX IF NOT EXISTS idx_chain_states_chain_contract ON chain_states(chain_id, contract_address);
-
--- Create indexes for deposit_events table
-CREATE INDEX IF NOT EXISTS idx_deposit_events_chain_id ON deposit_events(chain_id);
-CREATE INDEX IF NOT EXISTS idx_deposit_events_order_id ON deposit_events(order_id);
-CREATE INDEX IF NOT EXISTS idx_deposit_events_processed ON deposit_events(processed);
-CREATE INDEX IF NOT EXISTS idx_deposit_events_block_number ON deposit_events(block_number);
-
--- Create updated_at trigger function
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ LANGUAGE 'plpgsql';
-
--- Create triggers for updated_at
-CREATE TRIGGER update_accounts_updated_at BEFORE UPDATE ON accounts 
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_orders_updated_at BEFORE UPDATE ON orders 
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_balances_updated_at BEFORE UPDATE ON balances 
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_chain_states_updated_at BEFORE UPDATE ON chain_states 
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- deposit_events table indexes
+CREATE INDEX IF NOT EXISTS idx_deposit_events_chain_id
+ON deposit_events (chain_id) ;
+CREATE INDEX IF NOT EXISTS idx_deposit_events_order_id
+ON deposit_events (order_id) ;
+CREATE INDEX IF NOT EXISTS idx_deposit_events_processed
+ON deposit_events (processed) ;
+CREATE INDEX IF NOT EXISTS idx_deposit_events_block_number
+ON deposit_events (block_number) ;
+CREATE INDEX IF NOT EXISTS idx_deposit_events_chain_processed ON deposit_events (chain_id, processed);
+CREATE INDEX IF NOT EXISTS idx_deposit_events_order_processed ON deposit_events (order_id, processed);
