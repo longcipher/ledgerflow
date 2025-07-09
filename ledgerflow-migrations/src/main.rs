@@ -2,7 +2,7 @@ use std::{env, time::Duration};
 
 use config::{Config, ConfigError};
 use serde::{Deserialize, Serialize};
-use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
+use sqlx::{Pool, Postgres, postgres::PgPoolOptions};
 use tracing::{error, info};
 
 #[derive(Debug, Serialize, Deserialize)]
