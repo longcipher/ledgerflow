@@ -12,6 +12,7 @@ pub struct Config {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChainConfig {
     pub name: String,
+    pub chain_id: i32,
     pub rpc_http: String,
     pub rpc_ws: String,
     pub payment_vault_contract: String,

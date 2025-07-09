@@ -2,11 +2,13 @@
 
 chains:
   - name: "sepolia"
+    chain_id: 1301
     rpc_http: "https://sepolia.unichain.org"
     rpc_ws: "wss://sepolia.unichain.org/ws"
     payment_vault_contract: "0x742d35Cc6634C0532925a3b8D11C5d2B7e5B3F6E"
     start_block: 0
   - name: "mainnet"
+    chain_id: 1
     rpc_http: "https://mainnet.infura.io/v3/YOUR_PROJECT_ID"
     rpc_ws: "wss://mainnet.infura.io/ws/v3/YOUR_PROJECT_ID"
     payment_vault_contract: "0x..."

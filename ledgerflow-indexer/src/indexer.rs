@@ -64,7 +64,7 @@ impl Indexer {
 
         // Get the last scanned block from database
         let mut last_block = match database
-            .get_chain_state(&chain_config.name, &chain_config.payment_vault_contract)
+            .get_chain_state(chain_config.chain_id, &chain_config.payment_vault_contract)
             .await?
         {
             Some(state) => state.last_scanned_block as u64,
@@ -122,7 +122,7 @@ impl Indexer {
                             last_block = batch_end;
                             database
                                 .update_chain_state(
-                                    &chain_config.name,
+                                    chain_config.chain_id,
                                     &chain_config.payment_vault_contract,
                                     last_block as i64,
                                 )
@@ -192,7 +192,7 @@ impl Indexer {
         // Convert to database format
         let deposit_event = DepositEvent {
             id: None,
-            chain_name: chain_config.name.clone(),
+            chain_id: chain_config.chain_id,
             contract_address: chain_config.payment_vault_contract.clone(),
             order_id: hex::encode(parsed_event.order_id),
             sender: parsed_event.sender.to_string(),
