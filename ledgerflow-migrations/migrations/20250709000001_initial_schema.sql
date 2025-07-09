@@ -2,7 +2,7 @@
 -- This migration combines all the necessary tables for the entire system
 
 -- Create enum for order status
-CREATE TYPE order_status AS ENUM ('pending', 'completed', 'failed', 'cancelled');
+CREATE TYPE order_status AS ENUM ('pending', 'deposited', 'completed', 'failed', 'cancelled');
 
 -- Create accounts table (from ledgerflow-balancer)
 CREATE TABLE IF NOT EXISTS accounts (
@@ -28,6 +28,16 @@ CREATE TABLE IF NOT EXISTS orders (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     transaction_hash VARCHAR(66)
+);
+
+-- Create balances table (for tracking user balance aggregations)
+CREATE TABLE IF NOT EXISTS balances (
+    id BIGSERIAL PRIMARY KEY,
+    account_id BIGINT NOT NULL,
+    balance VARCHAR(255) NOT NULL DEFAULT '0',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE (account_id)
 );
 
 -- Create chain_states table (from ledgerflow-indexer)
@@ -67,6 +77,9 @@ CREATE INDEX IF NOT EXISTS idx_orders_chain_id ON orders(chain_id);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
 
+-- Create indexes for balances table
+CREATE INDEX IF NOT EXISTS idx_balances_account_id ON balances(account_id);
+
 -- Create indexes for chain_states table
 CREATE INDEX IF NOT EXISTS idx_chain_states_chain_contract ON chain_states(chain_id, contract_address);
 
@@ -90,6 +103,9 @@ CREATE TRIGGER update_accounts_updated_at BEFORE UPDATE ON accounts
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_orders_updated_at BEFORE UPDATE ON orders 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_balances_updated_at BEFORE UPDATE ON balances 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_chain_states_updated_at BEFORE UPDATE ON chain_states 

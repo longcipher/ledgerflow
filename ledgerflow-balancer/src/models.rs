@@ -21,6 +21,7 @@ pub struct Order {
 #[sqlx(type_name = "order_status", rename_all = "lowercase")]
 pub enum OrderStatus {
     Pending,
+    Deposited,
     Completed,
     Failed,
     Cancelled,
@@ -33,6 +34,15 @@ pub struct Account {
     pub email: Option<String>,
     pub telegram_id: Option<i64>,
     pub evm_address: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct Balance {
+    pub id: i64,
+    pub account_id: i64,
+    pub balance: String, // Using String to handle arbitrary precision
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

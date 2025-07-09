@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use axum::{
     Router,
@@ -9,7 +9,7 @@ use clap::Parser;
 use eyre::Result;
 use tokio::net::TcpListener;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
-use tracing::info;
+use tracing::{error, info};
 
 mod config;
 mod database;
@@ -22,6 +22,7 @@ mod utils;
 use config::Config;
 use database::Database;
 use error::AppError;
+use services::BalanceService;
 
 #[derive(Parser)]
 #[command(name = "ledgerflow-balancer")]
@@ -55,9 +56,15 @@ async fn main() -> Result<()> {
     info!("Database connected");
 
     let app_state = AppState {
-        db,
+        db: db.clone(),
         config: config.clone(),
     };
+
+    // Spawn background task for processing deposited orders
+    let db_clone = db.clone();
+    tokio::spawn(async move {
+        process_deposited_orders_task(db_clone).await;
+    });
 
     // Build application
     let app = Router::new()
@@ -85,4 +92,25 @@ async fn health_check() -> Result<Json<serde_json::Value>, AppError> {
         "timestamp": chrono::Utc::now(),
         "service": "ledgerflow-balancer"
     })))
+}
+
+/// Background task to process deposited orders
+async fn process_deposited_orders_task(db: Arc<Database>) {
+    let balance_service = BalanceService::new((*db).clone());
+    let mut interval = tokio::time::interval(Duration::from_secs(10)); // Check every 10 seconds
+
+    loop {
+        interval.tick().await;
+
+        match balance_service.process_deposited_orders().await {
+            Ok(count) => {
+                if count > 0 {
+                    info!("Successfully processed {} deposited orders", count);
+                }
+            }
+            Err(e) => {
+                error!("Error processing deposited orders: {}", e);
+            }
+        }
+    }
 }

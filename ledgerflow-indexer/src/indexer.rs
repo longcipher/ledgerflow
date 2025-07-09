@@ -207,8 +207,13 @@ impl Indexer {
         // Insert into database
         database.insert_deposit_event(&deposit_event).await?;
 
+        // Update order status to 'deposited'
+        database
+            .update_order_status_deposited(&deposit_event.order_id, &deposit_event.transaction_hash)
+            .await?;
+
         info!(
-            "Processed deposit event for order {} on chain {}",
+            "Processed deposit event for order {} on chain {}, updated order status to 'deposited'",
             deposit_event.order_id, chain_config.name
         );
 

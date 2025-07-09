@@ -4,7 +4,7 @@ use chrono::Utc;
 use crate::{
     database::Database,
     error::AppError,
-    models::{Account, CreateOrderRequest, Order, OrderStatus},
+    models::{Account, Balance, CreateOrderRequest, Order, OrderStatus},
     utils::{generate_order_id, get_next_order_id_num},
 };
 
@@ -113,5 +113,77 @@ impl AccountService {
         };
 
         self.db.create_or_update_account(&account).await
+    }
+}
+
+pub struct BalanceService {
+    db: Database,
+}
+
+impl BalanceService {
+    pub fn new(db: Database) -> Self {
+        Self { db }
+    }
+
+    /// Process deposited orders and update balances
+    pub async fn process_deposited_orders(&self) -> Result<u32, AppError> {
+        let deposited_orders = self.db.get_deposited_orders().await?;
+        let mut processed_count = 0;
+
+        for order in deposited_orders {
+            match self.process_single_order(&order).await {
+                Ok(_) => {
+                    processed_count += 1;
+                    tracing::info!(
+                        "Successfully processed deposited order: {}, amount: {}",
+                        order.order_id,
+                        order.amount
+                    );
+                }
+                Err(e) => {
+                    tracing::error!(
+                        "Failed to process deposited order {}: {}",
+                        order.order_id,
+                        e
+                    );
+                }
+            }
+        }
+
+        Ok(processed_count)
+    }
+
+    /// Process a single deposited order
+    async fn process_single_order(&self, order: &Order) -> Result<(), AppError> {
+        // Start a transaction to ensure atomicity
+        let mut tx = self.db.begin_transaction().await?;
+
+        // Add amount to user's balance
+        match self
+            .db
+            .add_to_balance(&mut tx, order.account_id, &order.amount)
+            .await
+        {
+            Ok(_) => {
+                // Update order status to completed
+                self.db
+                    .update_order_status_tx(&mut tx, &order.order_id, OrderStatus::Completed, None)
+                    .await?;
+
+                // Commit transaction
+                tx.commit().await?;
+                Ok(())
+            }
+            Err(e) => {
+                // Rollback transaction on error
+                tx.rollback().await?;
+                Err(e)
+            }
+        }
+    }
+
+    /// Get account balance
+    pub async fn get_account_balance(&self, account_id: i64) -> Result<Balance, AppError> {
+        self.db.get_account_balance_record(account_id).await
     }
 }

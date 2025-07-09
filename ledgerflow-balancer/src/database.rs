@@ -3,7 +3,7 @@ use sqlx::PgPool;
 
 use crate::{
     error::AppError,
-    models::{Account, Order, OrderStatus},
+    models::{Account, Balance, Order, OrderStatus},
 };
 
 #[derive(Clone)]
@@ -165,5 +165,108 @@ impl Database {
         .await?;
 
         Ok(result)
+    }
+
+    /// Get all orders with deposited status
+    pub async fn get_deposited_orders(&self) -> Result<Vec<Order>, AppError> {
+        let result = sqlx::query_as::<_, Order>(
+            r#"
+            SELECT id, order_id, account_id, broker_id, amount, token_address, chain_id, status, created_at, updated_at, transaction_hash
+            FROM orders
+            WHERE status = 'deposited'
+            ORDER BY created_at ASC
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(result)
+    }
+
+    /// Begin a database transaction
+    pub async fn begin_transaction(
+        &self,
+    ) -> Result<sqlx::Transaction<'_, sqlx::Postgres>, AppError> {
+        let tx = self.pool.begin().await?;
+        Ok(tx)
+    }
+
+    /// Add amount to user's balance (with transaction support)
+    pub async fn add_to_balance(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        account_id: i64,
+        amount: &str,
+    ) -> Result<(), AppError> {
+        // Insert or update balance record
+        sqlx::query(
+            r#"
+            INSERT INTO balances (account_id, balance, created_at, updated_at)
+            VALUES ($1, $2, NOW(), NOW())
+            ON CONFLICT (account_id)
+            DO UPDATE SET 
+                balance = (CAST(balances.balance AS NUMERIC) + CAST($2 AS NUMERIC))::text,
+                updated_at = NOW()
+            "#,
+        )
+        .bind(account_id)
+        .bind(amount)
+        .execute(&mut **tx)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Update order status within a transaction
+    pub async fn update_order_status_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        order_id: &str,
+        status: OrderStatus,
+        transaction_hash: Option<&str>,
+    ) -> Result<(), AppError> {
+        sqlx::query(
+            "UPDATE orders SET status = $1, transaction_hash = $2, updated_at = NOW() WHERE order_id = $3",
+        )
+        .bind(status)
+        .bind(transaction_hash)
+        .bind(order_id)
+        .execute(&mut **tx)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Get account balance record
+    pub async fn get_account_balance_record(&self, account_id: i64) -> Result<Balance, AppError> {
+        // Try to get existing balance record
+        let balance = sqlx::query_as::<_, Balance>(
+            r#"
+            SELECT id, account_id, balance, created_at, updated_at
+            FROM balances
+            WHERE account_id = $1
+            "#,
+        )
+        .bind(account_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        // If no balance record exists, create one with 0 balance
+        if let Some(balance) = balance {
+            Ok(balance)
+        } else {
+            let new_balance = sqlx::query_as::<_, Balance>(
+                r#"
+                INSERT INTO balances (account_id, balance, created_at, updated_at)
+                VALUES ($1, '0', NOW(), NOW())
+                RETURNING id, account_id, balance, created_at, updated_at
+                "#,
+            )
+            .bind(account_id)
+            .fetch_one(&self.pool)
+            .await?;
+
+            Ok(new_balance)
+        }
     }
 }

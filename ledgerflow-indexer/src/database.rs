@@ -94,4 +94,21 @@ impl Database {
 
         Ok(events)
     }
+
+    /// Update order status to 'deposited' when deposit event is detected
+    pub async fn update_order_status_deposited(
+        &self,
+        order_id: &str,
+        transaction_hash: &str,
+    ) -> Result<()> {
+        sqlx::query(
+            "UPDATE orders SET status = 'deposited', transaction_hash = $1, updated_at = NOW() WHERE order_id = $2"
+        )
+        .bind(transaction_hash)
+        .bind(order_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
 }
