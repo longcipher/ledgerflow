@@ -4,7 +4,7 @@ use chrono::Utc;
 use crate::{
     database::Database,
     error::AppError,
-    models::{Account, Balance, CreateOrderRequest, Order, OrderStatus},
+    models::{Account, Balance, CreateOrderRequest, Order, OrderStatus, RegisterAccountRequest},
     utils::{generate_order_id, get_next_order_id_num},
 };
 
@@ -95,24 +95,48 @@ impl AccountService {
         Self { db }
     }
 
-    pub async fn create_or_update_account(
+    /// Register a new account
+    pub async fn register_account(
         &self,
-        username: String,
-        email: Option<String>,
-        telegram_id: Option<i64>,
-        evm_address: Option<String>,
+        request: RegisterAccountRequest,
     ) -> Result<Account, AppError> {
         let account = Account {
-            id: 0, // This will be set by the database
-            username,
-            email,
-            telegram_id,
-            evm_address,
+            id: 0, // Will be set by database
+            username: request.username,
+            email: request.email,
+            telegram_id: request.telegram_id,
+            evm_address: request.evm_address,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };
 
-        self.db.create_or_update_account(&account).await
+        self.db.register_account(&account).await
+    }
+
+    /// Get account by username
+    pub async fn get_account_by_username(
+        &self,
+        username: &str,
+    ) -> Result<Option<Account>, AppError> {
+        self.db.get_account_by_username(username).await
+    }
+
+    /// Get account by email
+    pub async fn get_account_by_email(&self, email: &str) -> Result<Option<Account>, AppError> {
+        self.db.get_account_by_email(email).await
+    }
+
+    /// Get account by telegram_id
+    pub async fn get_account_by_telegram_id(
+        &self,
+        telegram_id: i64,
+    ) -> Result<Option<Account>, AppError> {
+        self.db.get_account_by_telegram_id(telegram_id).await
+    }
+
+    /// Get account by id
+    pub async fn get_account_by_id(&self, id: i64) -> Result<Option<Account>, AppError> {
+        self.db.get_account_by_id(id).await
     }
 }
 

@@ -52,6 +52,10 @@ Where:
 
 ### Core Endpoints
 
+- `POST /register` - Register new account
+- `GET /accounts/username/{username}` - Get account by username
+- `GET /accounts/email/{email}` - Get account by email
+- `GET /accounts/telegram/{telegram_id}` - Get account by telegram ID
 - `POST /orders` - Create new order
 - `GET /orders/{order_id}` - Get order details
 - `GET /accounts/{account_id}/balance` - Get account balance
@@ -60,14 +64,42 @@ Where:
 
 ### Request/Response Examples
 
+#### Register Account
+```bash
+curl -X POST http://localhost:3000/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "john_doe",
+    "email": "john@example.com",
+    "telegram_id": 123456789,
+    "evm_address": "0x1234567890abcdef1234567890abcdef12345678"
+  }'
+```
+
+#### Get Account by Username
+```bash
+curl http://localhost:3000/accounts/username/john_doe
+```
+
+#### Get Account by Email
+```bash
+curl http://localhost:3000/accounts/email/john@example.com
+```
+
+#### Get Account by Telegram ID
+```bash
+curl http://localhost:3000/accounts/telegram/123456789
+```
+
 #### Create Order
 ```bash
 curl -X POST http://localhost:3000/orders \
   -H "Content-Type: application/json" \
   -d '{
-    "account_id": "telegram_123456",
+    "account_id": 1,
     "amount": "10.00",
-    "token_address": "0xa0b86a33e6441d00000000000000000000000000"
+    "token_address": "0xa0b86a33e6441d00000000000000000000000000",
+    "chain_id": 1
   }'
 ```
 

@@ -169,6 +169,126 @@ impl Database {
         Ok(result)
     }
 
+    /// Register a new account
+    pub async fn register_account(&self, account: &Account) -> Result<Account, AppError> {
+        // Check for unique constraints before insertion
+        if self
+            .get_account_by_username(&account.username)
+            .await?
+            .is_some()
+        {
+            return Err(AppError::InvalidInput(format!(
+                "Username '{}' already exists",
+                account.username
+            )));
+        }
+
+        if let Some(email) = &account.email
+            && self.get_account_by_email(email).await?.is_some()
+        {
+            return Err(AppError::InvalidInput(format!(
+                "Email '{email}' already exists"
+            )));
+        }
+
+        if let Some(telegram_id) = account.telegram_id
+            && self
+                .get_account_by_telegram_id(telegram_id)
+                .await?
+                .is_some()
+        {
+            return Err(AppError::InvalidInput(format!(
+                "Telegram ID '{telegram_id}' already exists"
+            )));
+        }
+
+        let result = sqlx::query_as::<_, Account>(
+            r#"
+            INSERT INTO accounts (username, email, telegram_id, evm_address, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, NOW(), NOW())
+            RETURNING id, username, email, telegram_id, evm_address, created_at, updated_at
+            "#,
+        )
+        .bind(&account.username)
+        .bind(&account.email)
+        .bind(account.telegram_id)
+        .bind(&account.evm_address)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(result)
+    }
+
+    /// Get account by username
+    pub async fn get_account_by_username(
+        &self,
+        username: &str,
+    ) -> Result<Option<Account>, AppError> {
+        let result = sqlx::query_as::<_, Account>(
+            r#"
+            SELECT id, username, email, telegram_id, evm_address, created_at, updated_at
+            FROM accounts
+            WHERE username = $1
+            "#,
+        )
+        .bind(username)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(result)
+    }
+
+    /// Get account by email
+    pub async fn get_account_by_email(&self, email: &str) -> Result<Option<Account>, AppError> {
+        let result = sqlx::query_as::<_, Account>(
+            r#"
+            SELECT id, username, email, telegram_id, evm_address, created_at, updated_at
+            FROM accounts
+            WHERE email = $1
+            "#,
+        )
+        .bind(email)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(result)
+    }
+
+    /// Get account by telegram_id
+    pub async fn get_account_by_telegram_id(
+        &self,
+        telegram_id: i64,
+    ) -> Result<Option<Account>, AppError> {
+        let result = sqlx::query_as::<_, Account>(
+            r#"
+            SELECT id, username, email, telegram_id, evm_address, created_at, updated_at
+            FROM accounts
+            WHERE telegram_id = $1
+            "#,
+        )
+        .bind(telegram_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(result)
+    }
+
+    /// Get account by id
+    pub async fn get_account_by_id(&self, id: i64) -> Result<Option<Account>, AppError> {
+        let result = sqlx::query_as::<_, Account>(
+            r#"
+            SELECT id, username, email, telegram_id, evm_address, created_at, updated_at
+            FROM accounts
+            WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(result)
+    }
+
     /// Get all orders with deposited status
     pub async fn get_deposited_orders(&self) -> Result<Vec<Order>, AppError> {
         let result = sqlx::query_as::<_, Order>(

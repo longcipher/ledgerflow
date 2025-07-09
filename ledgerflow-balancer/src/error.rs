@@ -23,6 +23,9 @@ pub enum AppError {
     #[error("Account not found: {0}")]
     AccountNotFound(String),
 
+    #[error("Not found: {0}")]
+    NotFound(String),
+
     #[error("Too many pending orders for account: {0}")]
     TooManyPendingOrders(String),
 
@@ -38,6 +41,7 @@ impl IntoResponse for AppError {
             AppError::InvalidInput(_) => (StatusCode::BAD_REQUEST, "Invalid input"),
             AppError::OrderNotFound(_) => (StatusCode::NOT_FOUND, "Order not found"),
             AppError::AccountNotFound(_) => (StatusCode::NOT_FOUND, "Account not found"),
+            AppError::NotFound(_) => (StatusCode::NOT_FOUND, "Not found"),
             AppError::TooManyPendingOrders(_) => {
                 (StatusCode::BAD_REQUEST, "Too many pending orders")
             }

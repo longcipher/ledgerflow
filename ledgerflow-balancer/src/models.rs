@@ -91,3 +91,33 @@ pub struct AdminOrdersResponse {
     pub orders: Vec<OrderResponse>,
     pub total_count: u32,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RegisterAccountRequest {
+    pub username: String,
+    pub email: Option<String>,
+    pub telegram_id: Option<i64>,
+    pub evm_address: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RegisterAccountResponse {
+    pub id: i64,
+    pub username: String,
+    pub email: Option<String>,
+    pub telegram_id: Option<i64>,
+    pub evm_address: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AccountResponse {
+    pub id: i64,
+    pub username: String,
+    pub email: Option<String>,
+    pub telegram_id: Option<i64>,
+    pub evm_address: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}

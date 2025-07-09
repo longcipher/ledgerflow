@@ -69,13 +69,22 @@ async fn main() -> Result<()> {
     // Build application
     let app = Router::new()
         .route("/health", get(health_check))
-        .route("/orders", post(handlers::create_order))
-        .route("/orders/:order_id", get(handlers::get_order))
-        .route("/accounts/:account_id/balance", get(handlers::get_balance))
+        .route("/register", post(handlers::register_account))
         .route(
-            "/accounts/:account_id/balance/v2",
-            get(handlers::get_account_balance_new),
+            "/accounts/username/{username}",
+            get(handlers::get_account_by_username),
         )
+        .route(
+            "/accounts/email/{email}",
+            get(handlers::get_account_by_email),
+        )
+        .route(
+            "/accounts/telegram/{telegram_id}",
+            get(handlers::get_account_by_telegram_id),
+        )
+        .route("/orders", post(handlers::create_order))
+        .route("/orders/{order_id}", get(handlers::get_order))
+        .route("/accounts/{account_id}/balance", get(handlers::get_balance))
         .route("/admin/orders", get(handlers::list_pending_orders))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
