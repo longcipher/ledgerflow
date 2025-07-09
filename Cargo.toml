@@ -38,7 +38,6 @@ thiserror = "2.0.12"
 
 # Utilities
 chrono = "0.4.41"
-uuid = "1.17.0"
 
 # Crypto
 hex = "0.4.3"

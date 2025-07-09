@@ -71,7 +71,7 @@ async fn handle_message(
     // Ensure user exists in database
     if let Some(user) = &msg.from {
         let db_user = User {
-            id: uuid::Uuid::new_v4(),
+            id: 0, // This will be set by the database
             telegram_id: user.id.0 as i64,
             username: user.username.clone(),
             first_name: Some(user.first_name.clone()),

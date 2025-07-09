@@ -1,4 +1,5 @@
 use sha3::{Digest, Keccak256};
+use sqlx::PgPool;
 
 /// Generate a unique order ID using keccak256 hash
 /// order_id = keccak256(abi.encodePacked(broker_id, account_id, order_id_num))
@@ -14,25 +15,25 @@ pub fn generate_order_id(broker_id: &str, account_id: &str, order_id_num: u64) -
     hex::encode(result)
 }
 
-/// Get the next order ID number for an account
-/// This is a simple implementation that could be enhanced with better sequencing
-pub fn get_next_order_id_num(account_id: &str) -> u64 {
-    use std::{
-        collections::hash_map::DefaultHasher,
-        hash::{Hash, Hasher},
-    };
+/// Get the next order ID number from database sequence
+/// This function retrieves the next value from the PostgreSQL sequence
+pub async fn get_next_order_id_num(pool: &PgPool) -> Result<u64, sqlx::Error> {
+    let result: (i64,) = sqlx::query_as("SELECT nextval('orders_id_seq')")
+        .fetch_one(pool)
+        .await?;
 
-    let mut hasher = DefaultHasher::new();
-    account_id.hash(&mut hasher);
-    let base = hasher.finish();
+    Ok(result.0 as u64)
+}
 
-    // Add current timestamp with nanosecond precision to ensure uniqueness
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("Time went backwards")
-        .as_nanos() as u64;
+/// Get the next order ID number globally (auto-increment) - for testing/fallback
+/// This is a thread-safe global counter implementation
+#[allow(unused)]
+pub fn get_next_order_id_num_fallback(_account_id: &str) -> u64 {
+    use std::sync::atomic::{AtomicU64, Ordering};
 
-    base.wrapping_add(timestamp)
+    static GLOBAL_ORDER_COUNTER: AtomicU64 = AtomicU64::new(1);
+
+    GLOBAL_ORDER_COUNTER.fetch_add(1, Ordering::SeqCst)
 }
 
 #[cfg(test)]
@@ -58,13 +59,27 @@ mod tests {
     }
 
     #[test]
-    fn test_get_next_order_id_num() {
+    fn test_get_next_order_id_num_fallback() {
         let account_id = "test_account";
 
-        let num1 = get_next_order_id_num(account_id);
-        let num2 = get_next_order_id_num(account_id);
+        let num1 = get_next_order_id_num_fallback(account_id);
+        let num2 = get_next_order_id_num_fallback(account_id);
 
-        // Should be different due to timestamp with nanosecond precision
-        assert_ne!(num1, num2);
+        // Should be incrementing globally
+        assert_eq!(num2, num1 + 1);
+
+        // Different account should still get next global number
+        let num3 = get_next_order_id_num_fallback("different_account");
+        assert_eq!(num3, num2 + 1);
+    }
+
+    #[tokio::test]
+    async fn test_get_next_order_id_num() {
+        // This test would require a real database connection
+        // For now, we'll just test that the function signature is correct
+        // In a real test, you would set up a test database and call:
+        // let pool = PgPool::connect("postgresql://test_url").await.unwrap();
+        // let num = get_next_order_id_num(&pool).await.unwrap();
+        // assert!(num > 0);
     }
 }

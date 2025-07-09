@@ -37,7 +37,6 @@ thiserror = { workspace = true }
 
 # Utilities
 chrono = { workspace = true, features = ["serde"] }
-uuid = { workspace = true, features = ["v4", "serde"] }
 
 # Crypto
 hex = { workspace = true }

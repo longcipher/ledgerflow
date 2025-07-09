@@ -1,6 +1,5 @@
 #![allow(unused)]
 use chrono::Utc;
-use uuid::Uuid;
 
 use crate::{
     database::Database,
@@ -35,13 +34,13 @@ impl OrderService {
         // Generate unique order ID
         let broker_id = request
             .broker_id
-            .unwrap_or_else(|| "ledgerflow-vault".to_string());
-        let order_id_num = get_next_order_id_num(&request.account_id);
+            .unwrap_or_else(|| "ledgerflow".to_string());
+        let order_id_num = self.db.get_next_order_id_num().await?;
         let order_id = generate_order_id(&broker_id, &request.account_id, order_id_num);
 
         // Create order
         let order = Order {
-            id: Uuid::new_v4(),
+            id: 0, // This will be set by the database
             order_id,
             account_id: request.account_id,
             broker_id,
@@ -105,7 +104,7 @@ impl AccountService {
         evm_address: Option<String>,
     ) -> Result<Account, AppError> {
         let account = Account {
-            id: Uuid::new_v4(),
+            id: 0, // This will be set by the database
             account_id,
             email,
             telegram_id,

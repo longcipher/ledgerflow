@@ -17,15 +17,22 @@ impl Database {
         Ok(Self { pool })
     }
 
+    pub async fn get_next_order_id_num(&self) -> Result<u64, sqlx::Error> {
+        let result: (i64,) = sqlx::query_as("SELECT nextval('orders_id_seq')")
+            .fetch_one(&self.pool)
+            .await?;
+
+        Ok(result.0 as u64)
+    }
+
     pub async fn create_order(&self, order: &Order) -> Result<Order, AppError> {
         let result = sqlx::query_as::<_, Order>(
             r#"
-            INSERT INTO orders (id, order_id, account_id, broker_id, amount, token_address, chain_id, status, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            INSERT INTO orders (order_id, account_id, broker_id, amount, token_address, chain_id, status, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING id, order_id, account_id, broker_id, amount, token_address, chain_id, status, created_at, updated_at, transaction_hash
             "#,
         )
-        .bind(order.id)
         .bind(&order.order_id)
         .bind(&order.account_id)
         .bind(&order.broker_id)
@@ -137,18 +144,17 @@ impl Database {
     pub async fn create_or_update_account(&self, account: &Account) -> Result<Account, AppError> {
         let result = sqlx::query_as::<_, Account>(
             r#"
-            INSERT INTO accounts (id, account_id, email, telegram_id, evm_address, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO accounts (account_id, email, telegram_id, evm_address, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6)
             ON CONFLICT (account_id) 
             DO UPDATE SET 
-                email = COALESCE($3, accounts.email),
-                telegram_id = COALESCE($4, accounts.telegram_id),
-                evm_address = COALESCE($5, accounts.evm_address),
-                updated_at = $7
+                email = COALESCE($2, accounts.email),
+                telegram_id = COALESCE($3, accounts.telegram_id),
+                evm_address = COALESCE($4, accounts.evm_address),
+                updated_at = $6
             RETURNING id, account_id, email, telegram_id, evm_address, created_at, updated_at
             "#,
         )
-        .bind(account.id)
         .bind(&account.account_id)
         .bind(&account.email)
         .bind(&account.telegram_id)

@@ -6,7 +6,7 @@ CREATE TYPE order_status AS ENUM ('pending', 'completed', 'failed', 'cancelled')
 
 -- Create accounts table (from ledgerflow-balancer)
 CREATE TABLE IF NOT EXISTS accounts (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id BIGSERIAL PRIMARY KEY,
     account_id VARCHAR(255) NOT NULL UNIQUE,
     email VARCHAR(255),
     telegram_id VARCHAR(255),
@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS accounts (
 
 -- Create users table (from ledgerflow-bot)
 CREATE TABLE IF NOT EXISTS users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id BIGSERIAL PRIMARY KEY,
     telegram_id BIGINT NOT NULL UNIQUE,
     username VARCHAR(255),
     first_name VARCHAR(255),
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 -- Create orders table (unified from all services)
 CREATE TABLE IF NOT EXISTS orders (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id BIGSERIAL PRIMARY KEY,
     order_id VARCHAR(255) NOT NULL UNIQUE,
     account_id VARCHAR(255) NOT NULL,
     broker_id VARCHAR(255) NOT NULL,

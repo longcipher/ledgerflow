@@ -1,10 +1,9 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
-    pub id: Uuid,
+    pub id: i64,
     pub telegram_id: i64,
     pub username: Option<String>,
     pub first_name: Option<String>,
@@ -16,7 +15,7 @@ pub struct User {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Order {
-    pub id: Uuid,
+    pub id: i64,
     pub order_id: String,
     pub account_id: String,
     pub broker_id: String,

@@ -1,11 +1,10 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
-use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Order {
-    pub id: Uuid,
+    pub id: i64,
     pub order_id: String,
     pub account_id: String,
     pub broker_id: String,
@@ -29,7 +28,7 @@ pub enum OrderStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Account {
-    pub id: Uuid,
+    pub id: i64,
     pub account_id: String,
     pub email: Option<String>,
     pub telegram_id: Option<String>,
