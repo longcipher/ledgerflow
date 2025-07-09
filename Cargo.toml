@@ -57,5 +57,8 @@ reqwest = "0.12.22"
 image = "0.25.6"
 qrcode = "0.14.1"
 
+# UUID generation
+uuid = "1.12.0"
+
 # Base64 encoding
 base64 = "0.22.1"

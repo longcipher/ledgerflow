@@ -1,21 +1,30 @@
-use teloxide::{dispatching::UpdateHandler, prelude::*};
+use std::{collections::HashMap, sync::Arc};
+
+use teloxide::{dispatching::UpdateHandler, prelude::*, types::*};
+use tokio::sync::RwLock;
 use tracing::{error, info};
+use uuid::Uuid;
 
 use crate::{
     config::Config,
     database::Database,
     error::{BotError, BotResult},
-    models::{Account, CreateOrderRequest},
+    models::{Account, Order, UserSession, UserState},
     services::BalancerService,
     wallet,
 };
+
+pub type SessionManager = Arc<RwLock<HashMap<i64, UserSession>>>;
 
 pub type BotState = std::sync::Arc<AppState>;
 
 pub struct AppState {
     pub database: Database,
+    #[allow(dead_code)]
     pub config: Config,
+    #[allow(dead_code)]
     pub balancer: BalancerService,
+    pub sessions: SessionManager,
 }
 
 pub async fn create_handler(
@@ -24,11 +33,13 @@ pub async fn create_handler(
     config: Config,
 ) -> BotResult<UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'static>>> {
     let balancer = BalancerService::new(&config);
+    let sessions = Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new()));
 
     let state = std::sync::Arc::new(AppState {
         database,
         config,
         balancer,
+        sessions,
     });
 
     let handler = dptree::entry()
@@ -68,43 +79,20 @@ async fn handle_message(
         msg.from.as_ref().map(|u| u.id)
     );
 
-    // Ensure user exists in database
-    if let Some(user) = &msg.from {
-        let db_account = Account {
-            id: 0, // This will be set by the database
-            username: user
-                .username
-                .clone()
-                .unwrap_or_else(|| user.id.0.to_string()),
-            telegram_id: user.id.0 as i64,
-            email: None,
-            evm_address: None,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-        };
+    let user = match &msg.from {
+        Some(user) => user,
+        None => return Ok(()),
+    };
 
-        if let Err(e) = state.database.create_account(&db_account).await {
-            error!("Failed to create account: {}", e);
-        }
-    }
+    let _telegram_id = user.id.0 as i64;
+    let chat_id = msg.chat.id;
 
     if let Some(text) = msg.text() {
-        let chat_id = msg.chat.id;
         let result = match text {
             "/start" => handle_start(bot.clone(), msg.clone(), state.clone()).await,
             "/help" => handle_help(bot.clone(), msg.clone(), state.clone()).await,
-            "/balance" => handle_balance(bot.clone(), msg.clone(), state.clone()).await,
-            "/wallet" => handle_wallet(bot.clone(), msg.clone(), state.clone()).await,
-            "/generate_wallet" => {
-                handle_generate_wallet(bot.clone(), msg.clone(), state.clone()).await
-            }
-            text if text.starts_with("/pay ") => {
-                handle_pay(bot.clone(), msg.clone(), state.clone(), text).await
-            }
-            text if text.starts_with("/bind ") => {
-                handle_bind_address(bot.clone(), msg.clone(), state.clone(), text).await
-            }
-            _ => handle_unknown_command(bot.clone(), msg.clone(), state.clone()).await,
+            "/menu" => handle_menu(bot.clone(), msg.clone(), state.clone()).await,
+            _ => handle_text_input(bot.clone(), msg.clone(), state.clone()).await,
         };
 
         if let Err(e) = result {
@@ -118,6 +106,54 @@ async fn handle_message(
     Ok(())
 }
 
+async fn handle_text_input(bot: Bot, msg: Message, state: BotState) -> BotResult<()> {
+    let user = msg
+        .from
+        .as_ref()
+        .ok_or_else(|| BotError::Config("User not found".to_string()))?;
+    let telegram_id = user.id.0 as i64;
+    let text = msg
+        .text()
+        .ok_or_else(|| BotError::Config("No text in message".to_string()))?;
+
+    let session = {
+        let sessions = state.sessions.read().await;
+        sessions.get(&telegram_id).cloned()
+    };
+
+    if let Some(session) = session {
+        match session.state {
+            UserState::AwaitingEmail => {
+                handle_email_input(bot, msg.chat.id, state, text, telegram_id).await
+            }
+            UserState::AwaitingUsername(ref email) => {
+                handle_username_input(bot, msg.chat.id, state, text, email.clone(), telegram_id)
+                    .await
+            }
+            UserState::AwaitingDepositAmount => {
+                handle_deposit_amount_input(bot, msg.chat.id, state, text, telegram_id).await
+            }
+            UserState::None => {
+                // Unknown command
+                bot.send_message(
+                    msg.chat.id,
+                    "Unknown command. Use /help to see available commands.",
+                )
+                .await?;
+                Ok(())
+            }
+        }
+    } else {
+        // Unknown command
+        bot.send_message(
+            msg.chat.id,
+            "Unknown command. Use /help to see available commands.",
+        )
+        .await?;
+        Ok(())
+    }
+}
+
 async fn handle_callback(
     bot: Bot,
     callback: CallbackQuery,
@@ -127,10 +163,12 @@ async fn handle_callback(
 
     if let Some(ref data) = callback.data {
         let result = match data.as_str() {
-            "generate_wallet" => {
-                handle_generate_wallet_callback(bot.clone(), callback, state.clone()).await
-            }
-            "check_balance" => handle_balance_callback(bot.clone(), callback, state.clone()).await,
+            "nav_projects" => handle_nav_projects(bot.clone(), callback, state.clone()).await,
+            "nav_wallet" => handle_nav_wallet(bot.clone(), callback, state.clone()).await,
+            "nav_account" => handle_nav_account(bot.clone(), callback, state.clone()).await,
+            "nav_main" => handle_nav_main(bot.clone(), callback, state.clone()).await,
+            "wallet_deposit" => handle_wallet_deposit(bot.clone(), callback, state.clone()).await,
+            "wallet_withdraw" => handle_wallet_withdraw(bot.clone(), callback, state.clone()).await,
             _ => {
                 bot.answer_callback_query(callback_id.clone()).await?;
                 Ok(())
@@ -148,142 +186,100 @@ async fn handle_callback(
     Ok(())
 }
 
-async fn handle_start(bot: Bot, msg: Message, _state: BotState) -> BotResult<()> {
-    let welcome_text = "🚀 Welcome to LedgerFlow Bot!\n\n\
-        I can help you:\n\
-        • 💳 Create payment requests\n\
-        • 💰 Check your balance\n\
-        • 🔗 Bind your EVM address\n\
-        • 👛 Generate a new wallet\n\n\
-        Use /help to see all available commands.";
+async fn handle_start(bot: Bot, msg: Message, state: BotState) -> BotResult<()> {
+    let user = msg
+        .from
+        .as_ref()
+        .ok_or_else(|| BotError::Config("User not found".to_string()))?;
+    let telegram_id = user.id.0 as i64;
 
-    bot.send_message(msg.chat.id, welcome_text).await?;
+    // Check if user is already registered
+    match state
+        .database
+        .get_account_by_telegram_id(telegram_id)
+        .await?
+    {
+        Some(account) => {
+            // Already registered
+            bot.send_message(
+                msg.chat.id,
+                format!(
+                    "Hello, you are already registered! Your account ID is: {}. Type /menu to start using.",
+                    account.id
+                ),
+            )
+            .await?;
+        }
+        None => {
+            // New user, start registration process
+            bot.send_message(
+                msg.chat.id,
+                "Welcome! Let's start the registration process. Please enter your email address:",
+            )
+            .await?;
+
+            // Set user state
+            {
+                let mut sessions = state.sessions.write().await;
+                sessions.insert(
+                    telegram_id,
+                    UserSession {
+                        state: UserState::AwaitingEmail,
+                        temp_email: None,
+                    },
+                );
+            }
+        }
+    }
+
     Ok(())
 }
 
 async fn handle_help(bot: Bot, msg: Message, _state: BotState) -> BotResult<()> {
-    let help_text = "📋 Available Commands:\n\n\
-        /start - Start the bot\n\
-        /help - Show this help message\n\
-        /balance - Check your balance\n\
-        /wallet - Show your wallet info\n\
-        /generate_wallet - Generate a new wallet\n\
-        /pay <amount> - Create a payment request\n\
-        /bind <address> - Bind your EVM address\n\n\
-        Example: /pay 10.5";
+    let help_text = "Available commands:\n\n\
+        /start - Register or view your account ID.\n\
+        /menu - Open main operation menu (requires registration first).\n\
+        /help - Show this help information.";
 
     bot.send_message(msg.chat.id, help_text).await?;
     Ok(())
 }
 
-async fn handle_balance(bot: Bot, msg: Message, state: BotState) -> BotResult<()> {
-    let user_id = msg
+async fn handle_menu(bot: Bot, msg: Message, state: BotState) -> BotResult<()> {
+    let user = msg
         .from
         .as_ref()
-        .map(|u| u.id.0 as i64)
         .ok_or_else(|| BotError::Config("User not found".to_string()))?;
+    let telegram_id = user.id.0 as i64;
 
-    // Get account from database
-    let account = match state
-        .database
-        .get_account_by_telegram_id(user_id)
-        .await
-        .map_err(BotError::from)?
-    {
-        Some(account) => account,
-        None => {
-            bot.send_message(msg.chat.id, "❌ Account not found. Please use /start first")
-                .await?;
-            return Ok(());
-        }
-    };
-
-    match state.balancer.get_balance(account.id).await {
-        Ok(balance) => {
-            let balance_text = format!(
-                "💰 Your Balance:\n\n\
-                Total: {} USDC\n\
-                Completed Orders: {}\n\
-                Account: {}\n\n\
-                Use /pay <amount> to create a payment request",
-                balance.total_balance, balance.completed_orders_count, balance.account_id
-            );
-            bot.send_message(msg.chat.id, balance_text).await?;
-        }
-        Err(e) => {
-            error!("Failed to get balance: {}", e);
-            bot.send_message(
-                msg.chat.id,
-                "❌ Failed to retrieve balance. Please try again later.",
-            )
-            .await?;
-        }
-    }
-
-    Ok(())
-}
-
-async fn handle_wallet(bot: Bot, msg: Message, state: BotState) -> BotResult<()> {
-    let user_id = msg
-        .from
-        .as_ref()
-        .map(|u| u.id.0 as i64)
-        .ok_or_else(|| BotError::Config("User not found".to_string()))?;
-
+    // Check if user is already registered
     match state
         .database
-        .get_account_by_telegram_id(user_id)
-        .await
-        .map_err(BotError::from)?
+        .get_account_by_telegram_id(telegram_id)
+        .await?
     {
-        Some(account) => {
-            let wallet_text = if let Some(address) = account.evm_address {
-                format!(
-                    "👛 Your Wallet:\n\n\
-                    Address: `{address}`\n\n\
-                    Use /bind <address> to change your address"
-                )
-            } else {
-                "👛 No wallet address bound\n\n\
-                Use /bind <address> to bind your address\n\
-                Or use /generate_wallet to create a new one"
-                    .to_string()
-            };
+        Some(_account) => {
+            // Already registered, show main menu
+            let keyboard = InlineKeyboardMarkup::new(vec![
+                vec![
+                    InlineKeyboardButton::callback("Projects", "nav_projects"),
+                    InlineKeyboardButton::callback("Wallet", "nav_wallet"),
+                ],
+                vec![InlineKeyboardButton::callback("Account", "nav_account")],
+            ]);
 
-            bot.send_message(msg.chat.id, wallet_text)
-                .parse_mode(teloxide::types::ParseMode::MarkdownV2)
-                .await?;
-        }
-        None => {
-            bot.send_message(msg.chat.id, "❌ Account not found")
-                .await?;
-        }
-    }
-
-    Ok(())
-}
-
-async fn handle_generate_wallet(bot: Bot, msg: Message, _state: BotState) -> BotResult<()> {
-    match wallet::generate_wallet().await {
-        Ok(wallet) => {
-            let wallet_text = format!(
-                "🆕 Generated New Wallet:\n\n\
-                Address: `{}`\n\
-                Private Key: `{}`\n\n\
-                ⚠️ **IMPORTANT**: Keep your private key secure!\n\
-                Use /bind {} to bind this address to your account",
-                wallet.address, wallet.private_key, wallet.address
-            );
-
-            bot.send_message(msg.chat.id, wallet_text)
-                .parse_mode(teloxide::types::ParseMode::MarkdownV2)
-                .await?;
-        }
-        Err(e) => {
-            error!("Failed to generate wallet: {}", e);
             bot.send_message(
                 msg.chat.id,
-                "❌ Failed to generate wallet. Please try again.",
+                "Welcome back! Please select the operation you want to perform:",
+            )
+            .reply_markup(keyboard)
+            .await?;
+        }
+        None => {
+            // Not registered
+            bot.send_message(
+                msg.chat.id,
+                "You are not registered yet, please send /start to register.",
             )
             .await?;
         }
@@ -292,167 +288,354 @@ async fn handle_generate_wallet(bot: Bot, msg: Message, _state: BotState) -> Bot
     Ok(())
 }
 
-async fn handle_pay(bot: Bot, msg: Message, state: BotState, text: &str) -> BotResult<()> {
-    let user_id = msg
-        .from
-        .as_ref()
-        .map(|u| u.id.0 as i64)
-        .ok_or_else(|| BotError::Config("User not found".to_string()))?;
+async fn handle_email_input(
+    bot: Bot,
+    chat_id: ChatId,
+    state: BotState,
+    email: &str,
+    telegram_id: i64,
+) -> BotResult<()> {
+    // Simple email validation
+    if !email.contains('@') || !email.contains('.') {
+        bot.send_message(chat_id, "Invalid email format, please enter again.")
+            .await?;
+        return Ok(());
+    }
 
-    // Get account from database
-    let account = match state
-        .database
-        .get_account_by_telegram_id(user_id)
-        .await
-        .map_err(BotError::from)?
+    // Update session state
     {
-        Some(account) => account,
-        None => {
-            bot.send_message(msg.chat.id, "❌ Account not found. Please use /start first")
-                .await?;
-            return Ok(());
-        }
-    };
+        let mut sessions = state.sessions.write().await;
+        sessions.insert(
+            telegram_id,
+            UserSession {
+                state: UserState::AwaitingUsername(email.to_string()),
+                temp_email: Some(email.to_string()),
+            },
+        );
+    }
 
-    // Parse amount from command
-    let amount_str = text.strip_prefix("/pay ").unwrap_or("").trim();
+    bot.send_message(chat_id, "Great! Now please enter your username:")
+        .await?;
 
-    if amount_str.is_empty() {
+    Ok(())
+}
+
+async fn handle_username_input(
+    bot: Bot,
+    chat_id: ChatId,
+    state: BotState,
+    username: &str,
+    email: String,
+    telegram_id: i64,
+) -> BotResult<()> {
+    // Basic username validation
+    if username.len() < 3 {
         bot.send_message(
-            msg.chat.id,
-            "❌ Please specify an amount\nExample: /pay 10.5",
+            chat_id,
+            "Username does not meet requirements or is already taken, please enter again.",
         )
         .await?;
         return Ok(());
     }
 
-    // Validate amount
-    if amount_str.parse::<f64>().is_err() {
-        bot.send_message(msg.chat.id, "❌ Invalid amount format\nExample: /pay 10.5")
-            .await?;
-        return Ok(());
-    }
+    // Generate wallet
+    let wallet = wallet::generate_wallet().await?;
 
-    let request = CreateOrderRequest {
-        account_id: account.id,
-        amount: amount_str.to_string(),
-        token_address: state.config.blockchain.payment_vault_address.clone(),
+    // Create encrypted private key (simplified here, should use more secure encryption in production)
+    let encrypted_pk = format!("encrypted_{}", wallet.private_key);
+
+    // Create account
+    let account = Account {
+        id: 0, // Will be set by database
+        username: username.to_string(),
+        telegram_id,
+        email: Some(email.clone()),
+        evm_address: Some(wallet.address.clone()),
+        encrypted_pk: Some(encrypted_pk),
+        is_admin: false,
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
     };
 
-    match state.balancer.create_order(request).await {
-        Ok(order) => {
-            let payment_text = format!(
-                "💳 Payment Request Created:\n\n\
-                Order ID: `{}`\n\
-                Amount: {} USDC\n\
-                Payment Address: `{}`\n\
-                Chain: Unichain Sepolia\n\n\
-                Send the exact amount to the payment address with the Order ID in the transaction data.",
-                order.order_id, order.amount, order.payment_address
-            );
+    let account_id = state.database.create_account(&account).await?;
 
-            bot.send_message(msg.chat.id, payment_text)
-                .parse_mode(teloxide::types::ParseMode::MarkdownV2)
-                .await?;
-        }
-        Err(e) => {
-            error!("Failed to create order: {}", e);
-            bot.send_message(
-                msg.chat.id,
-                "❌ Failed to create payment request. Please try again.",
-            )
-            .await?;
-        }
-    }
-
-    Ok(())
-}
-
-async fn handle_bind_address(bot: Bot, msg: Message, state: BotState, text: &str) -> BotResult<()> {
-    let user_id = msg
-        .from
-        .as_ref()
-        .map(|u| u.id.0 as i64)
-        .ok_or_else(|| BotError::Config("User not found".to_string()))?;
-
-    let address = text.strip_prefix("/bind ").unwrap_or("").trim();
-
-    if address.is_empty() {
-        bot.send_message(msg.chat.id, "❌ Please specify an address\nExample: /bind 0x742d35Cc6634C0532925a3b8D4fd6c4d4d61ddD6").await?;
-        return Ok(());
-    }
-
-    // Validate address
-    if !wallet::validate_address(address).map_err(BotError::from)? {
-        bot.send_message(msg.chat.id, "❌ Invalid address format")
-            .await?;
-        return Ok(());
-    }
-
-    let formatted_address = wallet::format_address(address);
-
-    match state
-        .database
-        .update_account_evm_address(user_id, &formatted_address)
-        .await
-        .map_err(BotError::from)
+    // Clear session state
     {
-        Ok(_) => {
-            let success_text = format!(
-                "✅ Address bound successfully!\n\n\
-                Your address: `{formatted_address}`"
-            );
-            bot.send_message(msg.chat.id, success_text)
-                .parse_mode(teloxide::types::ParseMode::MarkdownV2)
-                .await?;
-        }
-        Err(e) => {
-            error!("Failed to bind address: {}", e);
-            bot.send_message(msg.chat.id, "❌ Failed to bind address. Please try again.")
-                .await?;
-        }
+        let mut sessions = state.sessions.write().await;
+        sessions.remove(&telegram_id);
     }
+
+    // Send success message
+    let success_message = format!(
+        "Registration successful!\n\n\
+        Your account information:\n\
+        - Account ID: {}\n\
+        - Username: {}\n\
+        - Email: {}\n\
+        - Your exclusive wallet address: {}\n\n\
+        Type /menu to start using the service.",
+        account_id, username, email, wallet.address
+    );
+
+    bot.send_message(chat_id, success_message).await?;
 
     Ok(())
 }
 
-async fn handle_unknown_command(bot: Bot, msg: Message, _state: BotState) -> BotResult<()> {
+async fn handle_deposit_amount_input(
+    bot: Bot,
+    chat_id: ChatId,
+    state: BotState,
+    amount: &str,
+    telegram_id: i64,
+) -> BotResult<()> {
+    // Validate amount format
+    if amount.parse::<f64>().is_err() {
+        bot.send_message(
+            chat_id,
+            "Invalid amount format, please enter a valid number.",
+        )
+        .await?;
+        return Ok(());
+    }
+
+    // Get account information
+    let account = state
+        .database
+        .get_account_by_telegram_id(telegram_id)
+        .await?
+        .ok_or_else(|| BotError::Config("Account not found".to_string()))?;
+
+    // Generate order ID
+    let order_id = Uuid::new_v4().to_string();
+
+    // Create order
+    let order = Order {
+        id: 0,
+        order_id: order_id.clone(),
+        account_id: account.id,
+        broker_id: "default".to_string(),
+        amount: amount.to_string(),
+        token_address: "0xA0b86a33E6417C5aa8C0ddb86eB9f5F0C9b9e5F1".to_string(), // USDC example
+        chain_id: 1,
+        status: "pending".to_string(),
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
+        transaction_hash: None,
+        notified: false,
+    };
+
+    state.database.create_order(&order).await?;
+
+    // Clear session state
+    {
+        let mut sessions = state.sessions.write().await;
+        sessions.remove(&telegram_id);
+    }
+
+    // TODO: Here should call the actual CLI tool to execute deposit operation
+    // handle_deposit(telegram_id, amount)
+
     bot.send_message(
-        msg.chat.id,
-        "❓ Unknown command. Use /help to see available commands.",
+        chat_id,
+        format!("Deposit request submitted! Your order ID is {order_id}. We will notify you after transaction confirmation."),
     )
     .await?;
+
     Ok(())
 }
 
 // Callback handlers
-async fn handle_generate_wallet_callback(
-    bot: Bot,
-    callback: CallbackQuery,
-    state: BotState,
-) -> BotResult<()> {
-    bot.answer_callback_query(callback.id).await?;
+async fn handle_nav_projects(bot: Bot, callback: CallbackQuery, _state: BotState) -> BotResult<()> {
+    bot.answer_callback_query(callback.id.clone()).await?;
 
-    if let Some(msg) = callback.message
-        && let Some(regular_msg) = msg.regular_message()
-    {
-        handle_generate_wallet(bot, regular_msg.clone(), state).await?;
+    if let Some(message) = callback.message {
+        let chat = message.chat();
+        bot.edit_message_text(
+            chat.id,
+            message.id(),
+            "This feature is under development, please stay tuned!",
+        )
+        .await?;
     }
 
     Ok(())
 }
 
-async fn handle_balance_callback(
+async fn handle_nav_account(bot: Bot, callback: CallbackQuery, state: BotState) -> BotResult<()> {
+    bot.answer_callback_query(callback.id.clone()).await?;
+
+    let user = callback.from;
+    let telegram_id = user.id.0 as i64;
+
+    if let Some(message) = callback.message {
+        let chat = message.chat();
+        match state
+            .database
+            .get_account_by_telegram_id(telegram_id)
+            .await?
+        {
+            Some(account) => {
+                let balance = state.database.get_balance(account.id).await?;
+
+                let account_info = format!(
+                    "Your account information:\n\
+                    - Account ID: {}\n\
+                    - Username: {}\n\
+                    - Email: {}\n\
+                    - Telegram ID: {}\n\
+                    - Wallet Address: {}\n\
+                    - Account Balance: {} USDC",
+                    account.id,
+                    account.username,
+                    account.email.as_deref().unwrap_or("Not set"),
+                    account.telegram_id,
+                    account.evm_address.as_deref().unwrap_or("Not set"),
+                    balance
+                );
+
+                let keyboard =
+                    InlineKeyboardMarkup::new(vec![vec![InlineKeyboardButton::callback(
+                        "<< Back", "nav_main",
+                    )]]);
+
+                bot.edit_message_text(chat.id, message.id(), account_info)
+                    .reply_markup(keyboard)
+                    .await?;
+            }
+            None => {
+                bot.edit_message_text(chat.id, message.id(), "Account not found")
+                    .await?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn handle_nav_wallet(bot: Bot, callback: CallbackQuery, _state: BotState) -> BotResult<()> {
+    bot.answer_callback_query(callback.id.clone()).await?;
+
+    if let Some(message) = callback.message {
+        let chat = message.chat();
+        let keyboard = InlineKeyboardMarkup::new(vec![
+            vec![
+                InlineKeyboardButton::callback("💰 Deposit", "wallet_deposit"),
+                InlineKeyboardButton::callback("💸 Withdraw", "wallet_withdraw"),
+            ],
+            vec![InlineKeyboardButton::callback("<< Back", "nav_main")],
+        ]);
+
+        bot.edit_message_text(chat.id, message.id(), "Wallet Operations:")
+            .reply_markup(keyboard)
+            .await?;
+    }
+
+    Ok(())
+}
+
+async fn handle_nav_main(bot: Bot, callback: CallbackQuery, _state: BotState) -> BotResult<()> {
+    bot.answer_callback_query(callback.id.clone()).await?;
+
+    if let Some(message) = callback.message {
+        let chat = message.chat();
+        let keyboard = InlineKeyboardMarkup::new(vec![
+            vec![
+                InlineKeyboardButton::callback("Projects", "nav_projects"),
+                InlineKeyboardButton::callback("Wallet", "nav_wallet"),
+            ],
+            vec![InlineKeyboardButton::callback("Account", "nav_account")],
+        ]);
+
+        bot.edit_message_text(
+            chat.id,
+            message.id(),
+            "Welcome back! Please select the operation you want to perform:",
+        )
+        .reply_markup(keyboard)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn handle_wallet_deposit(
     bot: Bot,
     callback: CallbackQuery,
     state: BotState,
 ) -> BotResult<()> {
-    bot.answer_callback_query(callback.id).await?;
+    bot.answer_callback_query(callback.id.clone()).await?;
 
-    if let Some(msg) = callback.message
-        && let Some(regular_msg) = msg.regular_message()
-    {
-        handle_balance(bot, regular_msg.clone(), state).await?;
+    let user = callback.from;
+    let telegram_id = user.id.0 as i64;
+
+    if let Some(message) = callback.message {
+        let chat = message.chat();
+        bot.edit_message_text(
+            chat.id,
+            message.id(),
+            "Please enter the amount you want to deposit:",
+        )
+        .await?;
+
+        // 设置用户状态
+        {
+            let mut sessions = state.sessions.write().await;
+            sessions.insert(
+                telegram_id,
+                UserSession {
+                    state: UserState::AwaitingDepositAmount,
+                    temp_email: None,
+                },
+            );
+        }
+    }
+
+    Ok(())
+}
+
+async fn handle_wallet_withdraw(
+    bot: Bot,
+    callback: CallbackQuery,
+    state: BotState,
+) -> BotResult<()> {
+    bot.answer_callback_query(callback.id.clone()).await?;
+
+    let user = callback.from;
+    let telegram_id = user.id.0 as i64;
+
+    if let Some(message) = callback.message {
+        let chat = message.chat();
+        // 检查是否是管理员
+        match state
+            .database
+            .get_account_by_telegram_id(telegram_id)
+            .await?
+        {
+            Some(account) if account.is_admin => {
+                // TODO: 实现实际的提款操作
+                // handle_withdrawal(telegram_id)
+
+                bot.edit_message_text(
+                    chat.id,
+                    message.id(),
+                    "Withdrawal operation has been triggered. Please check progress in the backend or on blockchain explorer.",
+                )
+                .await?;
+            }
+            Some(_) => {
+                bot.edit_message_text(
+                    chat.id,
+                    message.id(),
+                    "Insufficient permissions, only administrators can perform this operation.",
+                )
+                .await?;
+            }
+            None => {
+                bot.edit_message_text(chat.id, message.id(), "Account not found")
+                    .await?;
+            }
+        }
     }
 
     Ok(())

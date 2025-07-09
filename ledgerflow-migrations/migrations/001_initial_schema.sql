@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS accounts (
     telegram_id BIGINT NOT NULL UNIQUE,
     email VARCHAR(320),
     evm_address VARCHAR(42),
+    encrypted_pk TEXT,
+    is_admin BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -27,7 +29,8 @@ CREATE TABLE IF NOT EXISTS orders (
     status order_status NOT NULL DEFAULT 'pending',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    transaction_hash VARCHAR(66)
+    transaction_hash VARCHAR(66),
+    notified BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 -- Create balances table (for tracking user balance aggregations)

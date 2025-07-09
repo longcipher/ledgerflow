@@ -1,8 +1,7 @@
-use clap::{Parser, Subcommand};
-use eyre::Result;
-use teloxide::{Bot, prelude::*};
-use tracing::info;
-use tracing_subscriber::EnvFilter;
+use std::error::Error;
+
+use teloxide::prelude::*;
+use tracing::{error, info};
 
 mod bot;
 mod config;
@@ -13,79 +12,33 @@ mod models;
 mod services;
 mod wallet;
 
-use crate::{config::Config, database::Database};
-
-#[derive(Parser)]
-#[command(author, version, about, long_about = None)]
-struct Cli {
-    #[command(subcommand)]
-    command: Commands,
-}
-
-#[derive(Subcommand)]
-enum Commands {
-    /// Start the Telegram bot
-    Start {
-        /// Path to configuration file
-        #[arg(short, long, default_value = "config.yaml")]
-        config: String,
-    },
-    /// Generate a new wallet
-    GenerateWallet,
-    /// Show version information
-    Version,
-}
+use crate::{
+    config::Config, database::Database, handlers::create_handler, services::NotificationService,
+};
 
 #[tokio::main]
-async fn main() -> Result<()> {
-    // Initialize color_eyre for better error reports
-    color_eyre::install()?;
+async fn main() -> Result<(), Box<dyn Error>> {
+    tracing_subscriber::fmt::init();
 
-    // Parse CLI arguments
-    let cli = Cli::parse();
+    info!("Starting LedgerFlow Bot...");
 
-    // Initialize tracing
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .init();
-
-    match cli.command {
-        Commands::Start { config } => {
-            info!("Starting LedgerFlow Telegram Bot");
-            start_bot(config).await?;
-        }
-        Commands::GenerateWallet => {
-            let wallet = wallet::generate_wallet().await?;
-            println!("Generated new wallet:");
-            println!("Address: {}", wallet.address);
-            println!("Private Key: {} (Keep this secure!)", wallet.private_key);
-        }
-        Commands::Version => {
-            println!("LedgerFlow Bot v{}", env!("CARGO_PKG_VERSION"));
-        }
-    }
-
-    Ok(())
-}
-
-async fn start_bot(config_path: String) -> Result<()> {
-    // Load configuration
-    let config = Config::from_file(&config_path)?;
-
-    // Initialize database connection
+    let config = Config::from_file("config.yaml")?;
     let database = Database::new(&config.database_url).await?;
-
-    // Initialize Telegram bot
     let bot = Bot::new(&config.telegram.bot_token);
 
-    info!("Bot started successfully!");
+    // Start notification service
+    let notification_service = NotificationService::new(bot.clone(), database.clone());
+    tokio::spawn(async move {
+        if let Err(e) = notification_service.start().await {
+            error!("Notification service error: {}", e);
+        }
+    });
 
-    // Create the handler with shared state
-    let handler = handlers::create_handler(bot.clone(), database, config).await?;
+    info!("Bot started successfully");
 
-    // Start the bot dispatcher
+    let handler = create_handler(bot.clone(), database, config).await?;
+
     Dispatcher::builder(bot, handler)
-        .dependencies(dptree::deps![])
         .enable_ctrlc_handler()
         .build()
         .dispatch()

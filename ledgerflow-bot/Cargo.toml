@@ -64,5 +64,8 @@ thiserror = { workspace = true }
 # YAML serialization
 serde_yaml = { workspace = true }
 
+# UUID generation
+uuid = { workspace = true, features = ["v4"] }
+
 # Base64 encoding
 base64 = { workspace = true }
