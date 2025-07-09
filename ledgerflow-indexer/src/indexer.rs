@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use alloy::{
     network::Ethereum,
@@ -6,7 +6,7 @@ use alloy::{
     providers::{Provider, ProviderBuilder},
     rpc::types::{Filter, Log},
 };
-use eyre::{Result, eyre};
+use eyre::Result;
 use tokio::time::{Duration, sleep};
 use tracing::{error, info};
 
@@ -19,22 +19,13 @@ use crate::{
 pub struct Indexer {
     config: Config,
     database: Arc<Database>,
-    chain_providers: HashMap<String, String>, // Store RPC URLs instead of providers
 }
 
 impl Indexer {
     pub async fn new(config: Config, database: Database) -> Result<Self> {
-        let mut chain_providers = HashMap::new();
-
-        // Store RPC URLs for each chain
-        for chain in &config.chains {
-            chain_providers.insert(chain.name.clone(), chain.rpc_http.clone());
-        }
-
         Ok(Indexer {
             config,
             database: Arc::new(database),
-            chain_providers,
         })
     }
 
@@ -45,14 +36,9 @@ impl Indexer {
         for chain in &self.config.chains {
             let chain_config = chain.clone();
             let database = Arc::clone(&self.database);
-            let rpc_url = self
-                .chain_providers
-                .get(&chain.name)
-                .ok_or_else(|| eyre!("RPC URL not found for chain: {}", chain.name))?
-                .clone();
 
             let handle = tokio::spawn(async move {
-                if let Err(e) = Self::index_chain(chain_config, database, rpc_url).await {
+                if let Err(e) = Self::index_chain(chain_config, database).await {
                     error!("Error indexing chain: {}", e);
                 }
             });
@@ -68,15 +54,13 @@ impl Indexer {
         Ok(())
     }
 
-    async fn index_chain(
-        chain_config: ChainConfig,
-        database: Arc<Database>,
-        rpc_url: String,
-    ) -> Result<()> {
+    async fn index_chain(chain_config: ChainConfig, database: Arc<Database>) -> Result<()> {
         info!("Starting indexer for chain: {}", chain_config.name);
 
         // Create provider for this chain
-        let provider = ProviderBuilder::new().connect(&rpc_url).await?;
+        let provider = ProviderBuilder::new()
+            .connect(&chain_config.rpc_http)
+            .await?;
 
         // Get the last scanned block from database
         let mut last_block = match database
