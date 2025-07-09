@@ -314,9 +314,7 @@ async fn handle_pay(bot: Bot, msg: Message, state: BotState, text: &str) -> BotR
                 Payment Address: `{}`\n\
                 Chain: Unichain Sepolia\n\n\
                 Send the exact amount to the payment address with the Order ID in the transaction data.",
-                order.order_id,
-                order.amount,
-                order.payment_address
+                order.order_id, order.amount, order.payment_address
             );
 
             bot.send_message(msg.chat.id, payment_text)

@@ -1,10 +1,8 @@
 [package]
 name = "ledgerflow-bot"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "Telegram Bot for LedgerFlow payment system"
-authors = ["LedgerFlow Team"]
-license = "MIT"
 
 [dependencies]
 # CLI argument parsing

@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use eyre::Result;
-use teloxide::{prelude::*, Bot};
+use teloxide::{Bot, prelude::*};
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 

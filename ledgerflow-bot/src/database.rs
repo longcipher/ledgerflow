@@ -1,7 +1,7 @@
 #![allow(unused)]
 
 use eyre::Result;
-use sqlx::{migrate, PgPool, Row};
+use sqlx::{PgPool, Row, migrate};
 use tracing::info;
 
 use crate::models::{Order, User};

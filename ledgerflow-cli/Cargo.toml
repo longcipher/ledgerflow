@@ -3,7 +3,6 @@ name = "ledgerflow-cli"
 version = "0.1.0"
 edition = "2024"
 description = "CLI tool for interacting with LedgerFlow PaymentVault contract"
-authors = ["longcipher"]
 
 [dependencies]
 alloy = { workspace = true, features = ["full"] }

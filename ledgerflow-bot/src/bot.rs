@@ -2,7 +2,7 @@
 
 use std::io::Cursor;
 
-use base64::{engine::general_purpose, Engine};
+use base64::{Engine, engine::general_purpose};
 use image::Rgb;
 use qrcode::QrCode;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
