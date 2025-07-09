@@ -45,15 +45,19 @@ async fn main() -> Result<()> {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
+    info!("🚀 LedgerFlow Balancer starting up...");
+
     let args = Args::parse();
 
     // Load configuration
+    info!("📋 Loading configuration from {}", args.config);
     let config = Arc::new(Config::from_file(&args.config)?);
-    info!("Configuration loaded from {}", args.config);
+    info!("✅ Configuration loaded successfully from {}", args.config);
 
     // Initialize database
+    info!("🔗 Connecting to database...");
     let db = Arc::new(Database::new(&config.database_url).await?);
-    info!("Database connected");
+    info!("✅ Database connected successfully");
 
     let app_state = AppState {
         db: db.clone(),
@@ -61,12 +65,15 @@ async fn main() -> Result<()> {
     };
 
     // Spawn background task for processing deposited orders
+    info!("🔄 Starting background task for processing deposited orders...");
     let db_clone = db.clone();
     tokio::spawn(async move {
         process_deposited_orders_task(db_clone).await;
     });
+    info!("✅ Background task started successfully");
 
     // Build application
+    info!("🏗️ Building application routes...");
     let app = Router::new()
         .route("/health", get(health_check))
         .route("/register", post(handlers::register_account))
@@ -91,15 +98,31 @@ async fn main() -> Result<()> {
         .with_state(app_state);
 
     let bind_address = format!("{}:{}", config.server.host, config.server.port);
+    info!("🌐 Binding server to {}", bind_address);
     let listener = TcpListener::bind(&bind_address).await?;
 
-    info!("Starting server on {}", bind_address);
+    info!(
+        "🎯 LedgerFlow Balancer is ready and listening on {}",
+        bind_address
+    );
+    info!("💡 Available endpoints:");
+    info!("   - GET  /health - Health check");
+    info!("   - POST /register - Register new account");
+    info!("   - GET  /accounts/username/{{username}} - Get account by username");
+    info!("   - GET  /accounts/email/{{email}} - Get account by email");
+    info!("   - GET  /accounts/telegram/{{telegram_id}} - Get account by telegram ID");
+    info!("   - POST /orders - Create new order");
+    info!("   - GET  /orders/{{order_id}} - Get order by ID");
+    info!("   - GET  /accounts/{{account_id}}/balance - Get account balance");
+    info!("   - GET  /admin/orders - List pending orders");
+
     axum::serve(listener, app).await?;
 
     Ok(())
 }
 
 async fn health_check() -> Result<Json<serde_json::Value>, AppError> {
+    info!("🏥 Health check requested");
     Ok(Json(serde_json::json!({
         "status": "healthy",
         "timestamp": chrono::Utc::now(),
@@ -109,6 +132,7 @@ async fn health_check() -> Result<Json<serde_json::Value>, AppError> {
 
 /// Background task to process deposited orders
 async fn process_deposited_orders_task(db: Arc<Database>) {
+    info!("🔄 Background task: Starting deposited orders processing loop");
     let balance_service = BalanceService::new((*db).clone());
     let mut interval = tokio::time::interval(Duration::from_secs(10)); // Check every 10 seconds
 
@@ -118,11 +142,19 @@ async fn process_deposited_orders_task(db: Arc<Database>) {
         match balance_service.process_deposited_orders().await {
             Ok(count) => {
                 if count > 0 {
-                    info!("Successfully processed {} deposited orders", count);
+                    info!(
+                        "✅ Background task: Successfully processed {} deposited orders",
+                        count
+                    );
+                } else {
+                    info!("⏸️ Background task: No deposited orders to process");
                 }
             }
             Err(e) => {
-                error!("Error processing deposited orders: {}", e);
+                error!(
+                    "❌ Background task: Error processing deposited orders: {}",
+                    e
+                );
             }
         }
     }

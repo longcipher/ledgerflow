@@ -1,5 +1,4 @@
 use sha3::{Digest, Keccak256};
-use sqlx::PgPool;
 
 /// Generate a unique order ID using keccak256 hash
 /// order_id = keccak256(abi.encodePacked(broker_id, account_id, order_id_num))
@@ -13,16 +12,6 @@ pub fn generate_order_id(broker_id: &str, account_id: i64, order_id_num: u64) ->
 
     let result = hasher.finalize();
     hex::encode(result)
-}
-
-/// Get the next order ID number from database sequence
-/// This function retrieves the next value from the PostgreSQL sequence
-pub async fn get_next_order_id_num(pool: &PgPool) -> Result<u64, sqlx::Error> {
-    let result: (i64,) = sqlx::query_as("SELECT nextval('orders_id_seq')")
-        .fetch_one(pool)
-        .await?;
-
-    Ok(result.0 as u64)
 }
 
 /// Get the next order ID number globally (auto-increment) - for testing/fallback

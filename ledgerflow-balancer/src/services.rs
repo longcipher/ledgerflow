@@ -1,11 +1,11 @@
-#![allow(unused)]
 use chrono::Utc;
+use tracing::{error, info, warn};
 
 use crate::{
     database::Database,
     error::AppError,
     models::{Account, Balance, CreateOrderRequest, Order, OrderStatus, RegisterAccountRequest},
-    utils::{generate_order_id, get_next_order_id_num},
+    utils::generate_order_id,
 };
 
 pub struct OrderService {
@@ -22,9 +22,18 @@ impl OrderService {
     }
 
     pub async fn create_order(&self, request: CreateOrderRequest) -> Result<Order, AppError> {
+        info!(
+            "Creating order for account {}: amount={}, token={}, chain_id={}",
+            request.account_id, request.amount, request.token_address, request.chain_id
+        );
+
         // Check if account has too many pending orders
         let pending_count = self.db.get_pending_orders_count(request.account_id).await?;
         if pending_count >= self.max_pending_orders as i64 {
+            warn!(
+                "Account {} has reached maximum pending orders limit: {}/{}",
+                request.account_id, pending_count, self.max_pending_orders
+            );
             return Err(AppError::TooManyPendingOrders(
                 request.account_id.to_string(),
             ));
@@ -36,6 +45,11 @@ impl OrderService {
             .unwrap_or_else(|| "ledgerflow".to_string());
         let order_id_num = self.db.get_next_order_id_num().await?;
         let order_id = generate_order_id(&broker_id, request.account_id, order_id_num);
+
+        info!(
+            "Generated order ID: {} for account {}",
+            order_id, request.account_id
+        );
 
         // Create order
         let order = Order {
@@ -52,7 +66,10 @@ impl OrderService {
             transaction_hash: None,
         };
 
-        self.db.create_order(&order).await
+        let created_order = self.db.create_order(&order).await?;
+        info!("Order created successfully: {}", created_order.order_id);
+
+        Ok(created_order)
     }
 
     pub async fn get_order(&self, order_id: &str) -> Result<Order, AppError> {
@@ -74,6 +91,7 @@ impl OrderService {
         self.db.list_pending_orders(limit, offset).await
     }
 
+    #[allow(unused)]
     pub async fn update_order_status(
         &self,
         order_id: &str,
@@ -100,17 +118,34 @@ impl AccountService {
         &self,
         request: RegisterAccountRequest,
     ) -> Result<Account, AppError> {
+        info!("Registering new account: username={}", request.username);
+
+        // Check if username already exists
+        if let Some(_existing) = self.db.get_account_by_username(&request.username).await? {
+            warn!("Username '{}' already exists", request.username);
+            return Err(AppError::NotFound(format!(
+                "Username {} already exists",
+                request.username
+            )));
+        }
+
         let account = Account {
-            id: 0, // Will be set by database
-            username: request.username,
-            email: request.email,
+            id: 0, // This will be set by the database
+            username: request.username.clone(),
+            email: request.email.clone(),
             telegram_id: request.telegram_id,
             evm_address: request.evm_address,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };
 
-        self.db.register_account(&account).await
+        let created_account = self.db.register_account(&account).await?;
+        info!(
+            "Account registered successfully: id={}, username={}",
+            created_account.id, created_account.username
+        );
+
+        Ok(created_account)
     }
 
     /// Get account by username
@@ -135,6 +170,7 @@ impl AccountService {
     }
 
     /// Get account by id
+    #[allow(unused)]
     pub async fn get_account_by_id(&self, id: i64) -> Result<Option<Account>, AppError> {
         self.db.get_account_by_id(id).await
     }
@@ -152,26 +188,36 @@ impl BalanceService {
     /// Process deposited orders and update balances
     pub async fn process_deposited_orders(&self) -> Result<u32, AppError> {
         let deposited_orders = self.db.get_deposited_orders().await?;
+        let orders_count = deposited_orders.len();
         let mut processed_count = 0;
+
+        if !deposited_orders.is_empty() {
+            info!("Processing {} deposited orders", orders_count);
+        }
 
         for order in deposited_orders {
             match self.process_single_order(&order).await {
                 Ok(_) => {
                     processed_count += 1;
-                    tracing::info!(
-                        "Successfully processed deposited order: {}, amount: {}",
-                        order.order_id,
-                        order.amount
+                    info!(
+                        "✅ Successfully processed deposited order: {}, amount: {} for account {}",
+                        order.order_id, order.amount, order.account_id
                     );
                 }
                 Err(e) => {
-                    tracing::error!(
-                        "Failed to process deposited order {}: {}",
-                        order.order_id,
-                        e
+                    error!(
+                        "❌ Failed to process deposited order {}: {}",
+                        order.order_id, e
                     );
                 }
             }
+        }
+
+        if processed_count > 0 {
+            info!(
+                "✅ Batch processing completed: {}/{} orders processed successfully",
+                processed_count, orders_count
+            );
         }
 
         Ok(processed_count)
