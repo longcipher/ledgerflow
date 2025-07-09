@@ -38,7 +38,6 @@ pub async fn create_order(
         amount: order.amount,
         token_address: order.token_address,
         chain_id: order.chain_id,
-        vault_address: "0x0000000000000000000000000000000000000000".to_string(), /* TODO: Get from config */
         status: order.status,
         created_at: order.created_at,
     };

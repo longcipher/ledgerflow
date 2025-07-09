@@ -62,7 +62,6 @@ pub struct CreateOrderResponse {
     pub amount: String,
     pub token_address: String,
     pub chain_id: i64,
-    pub vault_address: String,
     pub status: OrderStatus,
     pub created_at: DateTime<Utc>,
 }
