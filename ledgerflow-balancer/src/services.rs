@@ -47,6 +47,7 @@ impl OrderService {
             broker_id,
             amount: request.amount,
             token_address: request.token_address,
+            chain_id: request.chain_id,
             status: OrderStatus::Pending,
             created_at: Utc::now(),
             updated_at: Utc::now(),

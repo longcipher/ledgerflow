@@ -192,7 +192,7 @@ impl Indexer {
         // Convert to database format
         let deposit_event = DepositEvent {
             id: None,
-            chain_id: chain_config.chain_id,
+            chain_id: chain_config.chain_id as i64,
             contract_address: chain_config.payment_vault_contract.clone(),
             order_id: hex::encode(parsed_event.order_id),
             sender: parsed_event.sender.to_string(),

@@ -15,13 +15,13 @@ impl Database {
 
     pub async fn get_chain_state(
         &self,
-        chain_id: i32,
+        chain_id: u64,
         contract_address: &str,
     ) -> Result<Option<ChainState>> {
         let result = sqlx::query_as::<_, ChainState>(
             "SELECT chain_id, contract_address, last_scanned_block, updated_at FROM chain_states WHERE chain_id = $1 AND contract_address = $2"
         )
-        .bind(chain_id)
+        .bind(chain_id as i64)
         .bind(contract_address)
         .fetch_optional(&self.pool)
         .await?;
@@ -31,7 +31,7 @@ impl Database {
 
     pub async fn update_chain_state(
         &self,
-        chain_id: i32,
+        chain_id: u64,
         contract_address: &str,
         block_number: i64,
     ) -> Result<()> {
@@ -41,7 +41,7 @@ impl Database {
              ON CONFLICT (chain_id, contract_address) 
              DO UPDATE SET last_scanned_block = $3, updated_at = NOW()",
         )
-        .bind(chain_id)
+        .bind(chain_id as i64)
         .bind(contract_address)
         .bind(block_number)
         .execute(&self.pool)
@@ -81,14 +81,14 @@ impl Database {
     }
 
     #[allow(dead_code)]
-    pub async fn get_unprocessed_events(&self, chain_id: i32) -> Result<Vec<DepositEvent>> {
+    pub async fn get_unprocessed_events(&self, chain_id: u64) -> Result<Vec<DepositEvent>> {
         let events = sqlx::query_as::<_, DepositEvent>(
             "SELECT id, chain_id, contract_address, order_id, sender, amount, transaction_hash, block_number, log_index, created_at, processed 
              FROM deposit_events 
              WHERE chain_id = $1 AND processed = false 
              ORDER BY block_number, log_index"
         )
-        .bind(chain_id)
+        .bind(chain_id as i64)
         .fetch_all(&self.pool)
         .await?;
 

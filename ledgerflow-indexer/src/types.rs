@@ -5,7 +5,7 @@ use sqlx::FromRow;
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct DepositEvent {
     pub id: Option<i64>,
-    pub chain_id: i32,
+    pub chain_id: i64,
     pub contract_address: String,
     pub order_id: String,
     pub sender: String,
@@ -19,7 +19,7 @@ pub struct DepositEvent {
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct ChainState {
-    pub chain_id: i32,
+    pub chain_id: i64,
     pub contract_address: String,
     pub last_scanned_block: i64,
     pub updated_at: Option<chrono::DateTime<chrono::Utc>>,

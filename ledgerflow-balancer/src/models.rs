@@ -11,6 +11,7 @@ pub struct Order {
     pub broker_id: String,
     pub amount: String, // Using String to handle arbitrary precision
     pub token_address: String,
+    pub chain_id: i64, // Chain identifier for cross-chain support
     pub status: OrderStatus,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -42,6 +43,7 @@ pub struct CreateOrderRequest {
     pub account_id: String,
     pub amount: String,
     pub token_address: String,
+    pub chain_id: i64,
     pub broker_id: Option<String>,
 }
 
@@ -50,6 +52,7 @@ pub struct CreateOrderResponse {
     pub order_id: String,
     pub amount: String,
     pub token_address: String,
+    pub chain_id: i64,
     pub vault_address: String,
     pub status: OrderStatus,
     pub created_at: DateTime<Utc>,
@@ -61,6 +64,7 @@ pub struct OrderResponse {
     pub account_id: String,
     pub amount: String,
     pub token_address: String,
+    pub chain_id: i64,
     pub status: OrderStatus,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

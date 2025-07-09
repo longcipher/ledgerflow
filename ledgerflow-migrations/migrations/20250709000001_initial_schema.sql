@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS orders (
     broker_id VARCHAR(255) NOT NULL,
     amount VARCHAR(255) NOT NULL,
     token_address VARCHAR(42) NOT NULL,
+    chain_id BIGINT NOT NULL DEFAULT 1,
     status order_status NOT NULL DEFAULT 'pending',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -43,7 +44,7 @@ CREATE TABLE IF NOT EXISTS orders (
 
 -- Create chain_states table (from ledgerflow-indexer)
 CREATE TABLE IF NOT EXISTS chain_states (
-    chain_id INTEGER NOT NULL,
+    chain_id BIGINT NOT NULL,
     contract_address VARCHAR(255) NOT NULL,
     last_scanned_block BIGINT NOT NULL DEFAULT 0,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -53,7 +54,7 @@ CREATE TABLE IF NOT EXISTS chain_states (
 -- Create deposit_events table (from ledgerflow-indexer)
 CREATE TABLE IF NOT EXISTS deposit_events (
     id BIGSERIAL PRIMARY KEY,
-    chain_id INTEGER NOT NULL,
+    chain_id BIGINT NOT NULL,
     contract_address VARCHAR(255) NOT NULL,
     order_id VARCHAR(255) NOT NULL,
     sender VARCHAR(255) NOT NULL,
@@ -78,6 +79,7 @@ CREATE INDEX IF NOT EXISTS idx_users_evm_address ON users(evm_address);
 -- Create indexes for orders table
 CREATE INDEX IF NOT EXISTS idx_orders_order_id ON orders(order_id);
 CREATE INDEX IF NOT EXISTS idx_orders_account_id ON orders(account_id);
+CREATE INDEX IF NOT EXISTS idx_orders_chain_id ON orders(chain_id);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
 

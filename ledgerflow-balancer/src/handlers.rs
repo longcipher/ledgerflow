@@ -37,6 +37,7 @@ pub async fn create_order(
         order_id: order.order_id.clone(),
         amount: order.amount,
         token_address: order.token_address,
+        chain_id: order.chain_id,
         vault_address: "0x0000000000000000000000000000000000000000".to_string(), /* TODO: Get from config */
         status: order.status,
         created_at: order.created_at,
@@ -63,6 +64,7 @@ pub async fn get_order(
         account_id: order.account_id,
         amount: order.amount,
         token_address: order.token_address,
+        chain_id: order.chain_id,
         status: order.status,
         created_at: order.created_at,
         updated_at: order.updated_at,
@@ -115,6 +117,7 @@ pub async fn list_pending_orders(
             account_id: order.account_id,
             amount: order.amount,
             token_address: order.token_address,
+            chain_id: order.chain_id,
             status: order.status,
             created_at: order.created_at,
             updated_at: order.updated_at,
