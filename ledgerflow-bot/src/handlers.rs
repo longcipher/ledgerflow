@@ -5,7 +5,7 @@ use crate::{
     config::Config,
     database::Database,
     error::{BotError, BotResult},
-    models::{CreateOrderRequest, User},
+    models::{Account, CreateOrderRequest},
     services::BalancerService,
     wallet,
 };
@@ -70,19 +70,21 @@ async fn handle_message(
 
     // Ensure user exists in database
     if let Some(user) = &msg.from {
-        let db_user = User {
+        let db_account = Account {
             id: 0, // This will be set by the database
+            account_id: user
+                .username
+                .clone()
+                .unwrap_or_else(|| user.id.0.to_string()),
             telegram_id: user.id.0 as i64,
-            username: user.username.clone(),
-            first_name: Some(user.first_name.clone()),
-            last_name: user.last_name.clone(),
+            email: None,
             evm_address: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         };
 
-        if let Err(e) = state.database.create_user(&db_user).await {
-            error!("Failed to create user: {}", e);
+        if let Err(e) = state.database.create_account(&db_account).await {
+            error!("Failed to create account: {}", e);
         }
     }
 
@@ -214,12 +216,12 @@ async fn handle_wallet(bot: Bot, msg: Message, state: BotState) -> BotResult<()>
 
     match state
         .database
-        .get_user_by_telegram_id(user_id)
+        .get_account_by_telegram_id(user_id)
         .await
         .map_err(BotError::from)?
     {
-        Some(user) => {
-            let wallet_text = if let Some(address) = user.evm_address {
+        Some(account) => {
+            let wallet_text = if let Some(address) = account.evm_address {
                 format!(
                     "👛 Your Wallet:\n\n\
                     Address: `{address}`\n\n\
@@ -237,7 +239,8 @@ async fn handle_wallet(bot: Bot, msg: Message, state: BotState) -> BotResult<()>
                 .await?;
         }
         None => {
-            bot.send_message(msg.chat.id, "❌ User not found").await?;
+            bot.send_message(msg.chat.id, "❌ Account not found")
+                .await?;
         }
     }
 
@@ -359,7 +362,7 @@ async fn handle_bind_address(bot: Bot, msg: Message, state: BotState, text: &str
 
     match state
         .database
-        .update_user_evm_address(user_id, &formatted_address)
+        .update_account_evm_address(user_id, &formatted_address)
         .await
         .map_err(BotError::from)
     {

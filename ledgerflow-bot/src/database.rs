@@ -2,7 +2,7 @@
 use eyre::Result;
 use sqlx::{PgPool, Row};
 
-use crate::models::{Order, User};
+use crate::models::{Account, Order};
 
 #[derive(Clone)]
 pub struct Database {
@@ -15,45 +15,42 @@ impl Database {
         Ok(Self { pool })
     }
 
-    pub async fn create_user(&self, user: &User) -> Result<()> {
+    pub async fn create_account(&self, account: &Account) -> Result<()> {
         sqlx::query(
             r#"
-            INSERT INTO users (telegram_id, username, first_name, last_name, evm_address)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO accounts (account_id, telegram_id, email, evm_address)
+            VALUES ($1, $2, $3, $4)
             ON CONFLICT (telegram_id) DO UPDATE SET
-                username = EXCLUDED.username,
-                first_name = EXCLUDED.first_name,
-                last_name = EXCLUDED.last_name,
-                evm_address = COALESCE(EXCLUDED.evm_address, users.evm_address),
+                account_id = EXCLUDED.account_id,
+                email = EXCLUDED.email,
+                evm_address = COALESCE(EXCLUDED.evm_address, accounts.evm_address),
                 updated_at = NOW()
             "#,
         )
-        .bind(user.telegram_id)
-        .bind(&user.username)
-        .bind(&user.first_name)
-        .bind(&user.last_name)
-        .bind(&user.evm_address)
+        .bind(&account.account_id)
+        .bind(account.telegram_id)
+        .bind(&account.email)
+        .bind(&account.evm_address)
         .execute(&self.pool)
         .await?;
 
         Ok(())
     }
 
-    pub async fn get_user_by_telegram_id(&self, telegram_id: i64) -> Result<Option<User>> {
+    pub async fn get_account_by_telegram_id(&self, telegram_id: i64) -> Result<Option<Account>> {
         let row = sqlx::query(
-            "SELECT id, telegram_id, username, first_name, last_name, evm_address, created_at, updated_at FROM users WHERE telegram_id = $1"
+            "SELECT id, account_id, telegram_id, email, evm_address, created_at, updated_at FROM accounts WHERE telegram_id = $1"
         )
         .bind(telegram_id)
         .fetch_optional(&self.pool)
         .await?;
 
         if let Some(row) = row {
-            Ok(Some(User {
+            Ok(Some(Account {
                 id: row.get("id"),
+                account_id: row.get("account_id"),
                 telegram_id: row.get("telegram_id"),
-                username: row.get("username"),
-                first_name: row.get("first_name"),
-                last_name: row.get("last_name"),
+                email: row.get("email"),
                 evm_address: row.get("evm_address"),
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
@@ -63,23 +60,29 @@ impl Database {
         }
     }
 
-    pub async fn update_user_evm_address(&self, telegram_id: i64, evm_address: &str) -> Result<()> {
-        sqlx::query("UPDATE users SET evm_address = $1, updated_at = NOW() WHERE telegram_id = $2")
-            .bind(evm_address)
-            .bind(telegram_id)
-            .execute(&self.pool)
-            .await?;
+    pub async fn update_account_evm_address(
+        &self,
+        telegram_id: i64,
+        evm_address: &str,
+    ) -> Result<()> {
+        sqlx::query(
+            "UPDATE accounts SET evm_address = $1, updated_at = NOW() WHERE telegram_id = $2",
+        )
+        .bind(evm_address)
+        .bind(telegram_id)
+        .execute(&self.pool)
+        .await?;
 
         Ok(())
     }
 
-    pub async fn get_user_orders(&self, telegram_id: i64) -> Result<Vec<Order>> {
+    pub async fn get_account_orders(&self, telegram_id: i64) -> Result<Vec<Order>> {
         let rows = sqlx::query(
             r#"
             SELECT o.id, o.order_id, o.account_id, o.broker_id, o.amount, o.token_address, o.status, o.created_at, o.updated_at, o.transaction_hash
             FROM orders o
-            JOIN users u ON o.account_id = u.telegram_id::text
-            WHERE u.telegram_id = $1
+            JOIN accounts a ON o.account_id = a.telegram_id::text
+            WHERE a.telegram_id = $1
             ORDER BY o.created_at DESC
             "#
         )
@@ -106,13 +109,13 @@ impl Database {
         Ok(result)
     }
 
-    pub async fn get_user_balance(&self, telegram_id: i64) -> Result<String> {
+    pub async fn get_account_balance(&self, telegram_id: i64) -> Result<String> {
         let row = sqlx::query(
             r#"
             SELECT COALESCE(SUM(amount::decimal), 0)::text as balance
             FROM orders o
-            JOIN users u ON o.account_id = u.telegram_id::text
-            WHERE u.telegram_id = $1 AND o.status = 'completed'
+            JOIN accounts a ON o.account_id = a.telegram_id::text
+            WHERE a.telegram_id = $1 AND o.status = 'completed'
             "#,
         )
         .bind(telegram_id)

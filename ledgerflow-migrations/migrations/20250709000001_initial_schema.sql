@@ -8,20 +8,8 @@ CREATE TYPE order_status AS ENUM ('pending', 'completed', 'failed', 'cancelled')
 CREATE TABLE IF NOT EXISTS accounts (
     id BIGSERIAL PRIMARY KEY,
     account_id VARCHAR(255) NOT NULL UNIQUE,
-    email VARCHAR(255),
-    telegram_id VARCHAR(255),
-    evm_address VARCHAR(42),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create users table (from ledgerflow-bot)
-CREATE TABLE IF NOT EXISTS users (
-    id BIGSERIAL PRIMARY KEY,
     telegram_id BIGINT NOT NULL UNIQUE,
-    username VARCHAR(255),
-    first_name VARCHAR(255),
-    last_name VARCHAR(255),
+    email VARCHAR(255),
     evm_address VARCHAR(42),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -72,10 +60,6 @@ CREATE INDEX IF NOT EXISTS idx_accounts_account_id ON accounts(account_id);
 CREATE INDEX IF NOT EXISTS idx_accounts_telegram_id ON accounts(telegram_id);
 CREATE INDEX IF NOT EXISTS idx_accounts_evm_address ON accounts(evm_address);
 
--- Create indexes for users table
-CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id);
-CREATE INDEX IF NOT EXISTS idx_users_evm_address ON users(evm_address);
-
 -- Create indexes for orders table
 CREATE INDEX IF NOT EXISTS idx_orders_order_id ON orders(order_id);
 CREATE INDEX IF NOT EXISTS idx_orders_account_id ON orders(account_id);
@@ -103,9 +87,6 @@ $$ LANGUAGE 'plpgsql';
 
 -- Create triggers for updated_at
 CREATE TRIGGER update_accounts_updated_at BEFORE UPDATE ON accounts 
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_orders_updated_at BEFORE UPDATE ON orders 
