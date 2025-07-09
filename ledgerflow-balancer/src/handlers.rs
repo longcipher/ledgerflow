@@ -12,7 +12,7 @@ use crate::{
         AdminOrdersResponse, BalanceResponse, CreateOrderRequest, CreateOrderResponse,
         OrderResponse,
     },
-    services::OrderService,
+    services::{BalanceService, OrderService},
 };
 
 #[derive(Debug, Deserialize)]
@@ -84,12 +84,42 @@ pub async fn get_balance(
         (*state.db).clone(),
         state.config.business.max_pending_orders_per_account,
     );
-    let (total_balance, completed_orders_count) =
-        order_service.get_account_balance(account_id).await?;
+    let balance_service = BalanceService::new((*state.db).clone());
+
+    let balance = balance_service.get_account_balance(account_id).await?;
+    let completed_orders_count = order_service.get_completed_orders(account_id).await?;
 
     let response = BalanceResponse {
         account_id,
-        total_balance,
+        total_balance: balance.balance,
+        completed_orders_count: completed_orders_count as u32,
+    };
+
+    Ok(Json(response))
+}
+
+pub async fn get_account_balance_new(
+    State(state): State<AppState>,
+    Path(account_id): Path<i64>,
+) -> Result<Json<BalanceResponse>, AppError> {
+    info!(
+        "Getting balance from balances table for account: {}",
+        account_id
+    );
+
+    let balance_service = BalanceService::new((*state.db).clone());
+    let balance_record = balance_service.get_account_balance(account_id).await?;
+
+    // Get count of completed orders for backward compatibility
+    let order_service = OrderService::new(
+        (*state.db).clone(),
+        state.config.business.max_pending_orders_per_account,
+    );
+    let completed_orders_count = order_service.get_completed_orders(account_id).await?;
+
+    let response = BalanceResponse {
+        account_id,
+        total_balance: balance_record.balance,
         completed_orders_count: completed_orders_count as u32,
     };
 

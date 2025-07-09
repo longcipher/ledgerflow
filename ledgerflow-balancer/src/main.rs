@@ -72,6 +72,10 @@ async fn main() -> Result<()> {
         .route("/orders", post(handlers::create_order))
         .route("/orders/:order_id", get(handlers::get_order))
         .route("/accounts/:account_id/balance", get(handlers::get_balance))
+        .route(
+            "/accounts/:account_id/balance/v2",
+            get(handlers::get_account_balance_new),
+        )
         .route("/admin/orders", get(handlers::list_pending_orders))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())

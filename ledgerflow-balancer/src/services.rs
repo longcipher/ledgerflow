@@ -62,8 +62,8 @@ impl OrderService {
             .ok_or_else(|| AppError::OrderNotFound(order_id.to_string()))
     }
 
-    pub async fn get_account_balance(&self, account_id: i64) -> Result<(String, i64), AppError> {
-        self.db.get_account_balance(account_id).await
+    pub async fn get_completed_orders(&self, account_id: i64) -> Result<i64, AppError> {
+        self.db.get_completed_orders_count(account_id).await
     }
 
     pub async fn list_pending_orders(

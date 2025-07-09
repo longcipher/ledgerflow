@@ -74,20 +74,22 @@ impl Database {
         Ok(result)
     }
 
-    pub async fn get_account_balance(&self, account_id: i64) -> Result<(String, i64), AppError> {
-        // Get total balance
-        let total_balance = sqlx::query_scalar::<_, String>(
-            r#"
-            SELECT COALESCE(SUM(CAST(amount AS NUMERIC)), 0)::text
-            FROM orders 
-            WHERE account_id = $1 AND status = 'completed'
-            "#,
+    pub async fn get_completed_orders_count(&self, account_id: i64) -> Result<i64, AppError> {
+        let result = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM orders WHERE account_id = $1 AND status = 'completed'",
         )
         .bind(account_id)
         .fetch_one(&self.pool)
         .await?;
 
-        // Get count
+        Ok(result)
+    }
+
+    pub async fn get_account_balance(&self, account_id: i64) -> Result<(String, i64), AppError> {
+        // Get balance from balances table
+        let balance_record = self.get_account_balance_record(account_id).await?;
+
+        // Get count of completed orders
         let count = sqlx::query_scalar::<_, i64>(
             "SELECT COUNT(*) FROM orders WHERE account_id = $1 AND status = 'completed'",
         )
@@ -95,7 +97,7 @@ impl Database {
         .fetch_one(&self.pool)
         .await?;
 
-        Ok((total_balance, count))
+        Ok((balance_record.balance, count))
     }
 
     pub async fn list_pending_orders(
