@@ -41,9 +41,11 @@ pub struct AppState {
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize tracing
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .init();
+    let filter = std::env::var("RUST_LOG")
+        .map(|_| tracing_subscriber::EnvFilter::from_default_env())
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+
+    tracing_subscriber::fmt().with_env_filter(filter).init();
 
     info!("🚀 LedgerFlow Balancer starting up...");
 
