@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Account {
     pub id: i64,
-    pub account_id: String,
+    pub username: String,
     pub telegram_id: i64,
     pub email: Option<String>,
     pub evm_address: Option<String>,
@@ -16,7 +16,7 @@ pub struct Account {
 pub struct Order {
     pub id: i64,
     pub order_id: String,
-    pub account_id: String,
+    pub account_id: i64,
     pub broker_id: String,
     pub amount: String,
     pub token_address: String,
@@ -28,7 +28,7 @@ pub struct Order {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateOrderRequest {
-    pub account_id: String,
+    pub account_id: i64,
     pub amount: String,
     pub token_address: String,
 }
@@ -45,9 +45,9 @@ pub struct CreateOrderResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BalanceResponse {
-    pub account_id: String,
-    pub balance: String,
-    pub token_address: String,
+    pub account_id: i64,
+    pub total_balance: String,
+    pub completed_orders_count: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

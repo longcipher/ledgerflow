@@ -72,7 +72,7 @@ async fn handle_message(
     if let Some(user) = &msg.from {
         let db_account = Account {
             id: 0, // This will be set by the database
-            account_id: user
+            username: user
                 .username
                 .clone()
                 .unwrap_or_else(|| user.id.0.to_string()),
@@ -183,14 +183,30 @@ async fn handle_balance(bot: Bot, msg: Message, state: BotState) -> BotResult<()
         .map(|u| u.id.0 as i64)
         .ok_or_else(|| BotError::Config("User not found".to_string()))?;
 
-    match state.balancer.get_balance(&user_id.to_string()).await {
+    // Get account from database
+    let account = match state
+        .database
+        .get_account_by_telegram_id(user_id)
+        .await
+        .map_err(BotError::from)?
+    {
+        Some(account) => account,
+        None => {
+            bot.send_message(msg.chat.id, "❌ Account not found. Please use /start first")
+                .await?;
+            return Ok(());
+        }
+    };
+
+    match state.balancer.get_balance(account.id).await {
         Ok(balance) => {
             let balance_text = format!(
                 "💰 Your Balance:\n\n\
                 Total: {} USDC\n\
+                Completed Orders: {}\n\
                 Account: {}\n\n\
                 Use /pay <amount> to create a payment request",
-                balance.balance, balance.account_id
+                balance.total_balance, balance.completed_orders_count, balance.account_id
             );
             bot.send_message(msg.chat.id, balance_text).await?;
         }
@@ -283,6 +299,21 @@ async fn handle_pay(bot: Bot, msg: Message, state: BotState, text: &str) -> BotR
         .map(|u| u.id.0 as i64)
         .ok_or_else(|| BotError::Config("User not found".to_string()))?;
 
+    // Get account from database
+    let account = match state
+        .database
+        .get_account_by_telegram_id(user_id)
+        .await
+        .map_err(BotError::from)?
+    {
+        Some(account) => account,
+        None => {
+            bot.send_message(msg.chat.id, "❌ Account not found. Please use /start first")
+                .await?;
+            return Ok(());
+        }
+    };
+
     // Parse amount from command
     let amount_str = text.strip_prefix("/pay ").unwrap_or("").trim();
 
@@ -303,7 +334,7 @@ async fn handle_pay(bot: Bot, msg: Message, state: BotState, text: &str) -> BotR
     }
 
     let request = CreateOrderRequest {
-        account_id: user_id.to_string(),
+        account_id: account.id,
         amount: amount_str.to_string(),
         token_address: state.config.blockchain.payment_vault_address.clone(),
     };

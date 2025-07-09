@@ -3,12 +3,12 @@ use sqlx::PgPool;
 
 /// Generate a unique order ID using keccak256 hash
 /// order_id = keccak256(abi.encodePacked(broker_id, account_id, order_id_num))
-pub fn generate_order_id(broker_id: &str, account_id: &str, order_id_num: u64) -> String {
+pub fn generate_order_id(broker_id: &str, account_id: i64, order_id_num: u64) -> String {
     let mut hasher = Keccak256::new();
 
     // Encode the parameters (similar to abi.encodePacked)
     hasher.update(broker_id.as_bytes());
-    hasher.update(account_id.as_bytes());
+    hasher.update(account_id.to_be_bytes());
     hasher.update(order_id_num.to_be_bytes());
 
     let result = hasher.finalize();
@@ -43,7 +43,7 @@ mod tests {
     #[test]
     fn test_generate_order_id() {
         let broker_id = "test_broker";
-        let account_id = "test_account";
+        let account_id = 12345i64;
         let order_id_num = 123;
 
         let order_id = generate_order_id(broker_id, account_id, order_id_num);

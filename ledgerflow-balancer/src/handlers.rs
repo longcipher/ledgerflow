@@ -76,7 +76,7 @@ pub async fn get_order(
 
 pub async fn get_balance(
     State(state): State<AppState>,
-    Path(account_id): Path<String>,
+    Path(account_id): Path<i64>,
 ) -> Result<Json<BalanceResponse>, AppError> {
     info!("Getting balance for account: {}", account_id);
 
@@ -85,7 +85,7 @@ pub async fn get_balance(
         state.config.business.max_pending_orders_per_account,
     );
     let (total_balance, completed_orders_count) =
-        order_service.get_account_balance(&account_id).await?;
+        order_service.get_account_balance(account_id).await?;
 
     let response = BalanceResponse {
         account_id,

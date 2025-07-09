@@ -23,12 +23,11 @@ impl OrderService {
 
     pub async fn create_order(&self, request: CreateOrderRequest) -> Result<Order, AppError> {
         // Check if account has too many pending orders
-        let pending_count = self
-            .db
-            .get_pending_orders_count(&request.account_id)
-            .await?;
+        let pending_count = self.db.get_pending_orders_count(request.account_id).await?;
         if pending_count >= self.max_pending_orders as i64 {
-            return Err(AppError::TooManyPendingOrders(request.account_id));
+            return Err(AppError::TooManyPendingOrders(
+                request.account_id.to_string(),
+            ));
         }
 
         // Generate unique order ID
@@ -36,7 +35,7 @@ impl OrderService {
             .broker_id
             .unwrap_or_else(|| "ledgerflow".to_string());
         let order_id_num = self.db.get_next_order_id_num().await?;
-        let order_id = generate_order_id(&broker_id, &request.account_id, order_id_num);
+        let order_id = generate_order_id(&broker_id, request.account_id, order_id_num);
 
         // Create order
         let order = Order {
@@ -63,7 +62,7 @@ impl OrderService {
             .ok_or_else(|| AppError::OrderNotFound(order_id.to_string()))
     }
 
-    pub async fn get_account_balance(&self, account_id: &str) -> Result<(String, i64), AppError> {
+    pub async fn get_account_balance(&self, account_id: i64) -> Result<(String, i64), AppError> {
         self.db.get_account_balance(account_id).await
     }
 
@@ -98,14 +97,14 @@ impl AccountService {
 
     pub async fn create_or_update_account(
         &self,
-        account_id: String,
+        username: String,
         email: Option<String>,
-        telegram_id: Option<String>,
+        telegram_id: Option<i64>,
         evm_address: Option<String>,
     ) -> Result<Account, AppError> {
         let account = Account {
             id: 0, // This will be set by the database
-            account_id,
+            username,
             email,
             telegram_id,
             evm_address,

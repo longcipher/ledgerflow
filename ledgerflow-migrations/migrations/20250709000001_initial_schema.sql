@@ -7,7 +7,7 @@ CREATE TYPE order_status AS ENUM ('pending', 'completed', 'failed', 'cancelled')
 -- Create accounts table (from ledgerflow-balancer)
 CREATE TABLE IF NOT EXISTS accounts (
     id BIGSERIAL PRIMARY KEY,
-    account_id VARCHAR(255) NOT NULL UNIQUE,
+    username VARCHAR(255) NOT NULL UNIQUE,
     telegram_id BIGINT NOT NULL UNIQUE,
     email VARCHAR(255),
     evm_address VARCHAR(42),
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS accounts (
 CREATE TABLE IF NOT EXISTS orders (
     id BIGSERIAL PRIMARY KEY,
     order_id VARCHAR(255) NOT NULL UNIQUE,
-    account_id VARCHAR(255) NOT NULL,
+    account_id BIGINT NOT NULL,
     broker_id VARCHAR(255) NOT NULL,
     amount VARCHAR(255) NOT NULL,
     token_address VARCHAR(42) NOT NULL,
@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS deposit_events (
 );
 
 -- Create indexes for accounts table
-CREATE INDEX IF NOT EXISTS idx_accounts_account_id ON accounts(account_id);
+CREATE INDEX IF NOT EXISTS idx_accounts_username ON accounts(username);
 CREATE INDEX IF NOT EXISTS idx_accounts_telegram_id ON accounts(telegram_id);
 CREATE INDEX IF NOT EXISTS idx_accounts_evm_address ON accounts(evm_address);
 

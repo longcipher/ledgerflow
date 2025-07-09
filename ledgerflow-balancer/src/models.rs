@@ -6,7 +6,7 @@ use sqlx::FromRow;
 pub struct Order {
     pub id: i64,
     pub order_id: String,
-    pub account_id: String,
+    pub account_id: i64,
     pub broker_id: String,
     pub amount: String, // Using String to handle arbitrary precision
     pub token_address: String,
@@ -29,9 +29,9 @@ pub enum OrderStatus {
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Account {
     pub id: i64,
-    pub account_id: String,
+    pub username: String,
     pub email: Option<String>,
-    pub telegram_id: Option<String>,
+    pub telegram_id: Option<i64>,
     pub evm_address: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -39,7 +39,7 @@ pub struct Account {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CreateOrderRequest {
-    pub account_id: String,
+    pub account_id: i64,
     pub amount: String,
     pub token_address: String,
     pub chain_id: i64,
@@ -60,7 +60,7 @@ pub struct CreateOrderResponse {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OrderResponse {
     pub order_id: String,
-    pub account_id: String,
+    pub account_id: i64,
     pub amount: String,
     pub token_address: String,
     pub chain_id: i64,
@@ -72,7 +72,7 @@ pub struct OrderResponse {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BalanceResponse {
-    pub account_id: String,
+    pub account_id: i64,
     pub total_balance: String,
     pub completed_orders_count: u32,
 }

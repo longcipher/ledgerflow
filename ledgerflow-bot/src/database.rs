@@ -18,16 +18,16 @@ impl Database {
     pub async fn create_account(&self, account: &Account) -> Result<()> {
         sqlx::query(
             r#"
-            INSERT INTO accounts (account_id, telegram_id, email, evm_address)
+            INSERT INTO accounts (username, telegram_id, email, evm_address)
             VALUES ($1, $2, $3, $4)
             ON CONFLICT (telegram_id) DO UPDATE SET
-                account_id = EXCLUDED.account_id,
+                username = EXCLUDED.username,
                 email = EXCLUDED.email,
                 evm_address = COALESCE(EXCLUDED.evm_address, accounts.evm_address),
                 updated_at = NOW()
             "#,
         )
-        .bind(&account.account_id)
+        .bind(&account.username)
         .bind(account.telegram_id)
         .bind(&account.email)
         .bind(&account.evm_address)
@@ -39,7 +39,7 @@ impl Database {
 
     pub async fn get_account_by_telegram_id(&self, telegram_id: i64) -> Result<Option<Account>> {
         let row = sqlx::query(
-            "SELECT id, account_id, telegram_id, email, evm_address, created_at, updated_at FROM accounts WHERE telegram_id = $1"
+            "SELECT id, username, telegram_id, email, evm_address, created_at, updated_at FROM accounts WHERE telegram_id = $1"
         )
         .bind(telegram_id)
         .fetch_optional(&self.pool)
@@ -48,7 +48,7 @@ impl Database {
         if let Some(row) = row {
             Ok(Some(Account {
                 id: row.get("id"),
-                account_id: row.get("account_id"),
+                username: row.get("username"),
                 telegram_id: row.get("telegram_id"),
                 email: row.get("email"),
                 evm_address: row.get("evm_address"),
@@ -81,7 +81,7 @@ impl Database {
             r#"
             SELECT o.id, o.order_id, o.account_id, o.broker_id, o.amount, o.token_address, o.status, o.created_at, o.updated_at, o.transaction_hash
             FROM orders o
-            JOIN accounts a ON o.account_id = a.telegram_id::text
+            JOIN accounts a ON o.account_id = a.id
             WHERE a.telegram_id = $1
             ORDER BY o.created_at DESC
             "#
@@ -114,7 +114,7 @@ impl Database {
             r#"
             SELECT COALESCE(SUM(amount::decimal), 0)::text as balance
             FROM orders o
-            JOIN accounts a ON o.account_id = a.telegram_id::text
+            JOIN accounts a ON o.account_id = a.id
             WHERE a.telegram_id = $1 AND o.status = 'completed'
             "#,
         )

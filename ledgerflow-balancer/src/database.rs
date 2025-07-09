@@ -34,7 +34,7 @@ impl Database {
             "#,
         )
         .bind(&order.order_id)
-        .bind(&order.account_id)
+        .bind(order.account_id)
         .bind(&order.broker_id)
         .bind(&order.amount)
         .bind(&order.token_address)
@@ -63,7 +63,7 @@ impl Database {
         Ok(result)
     }
 
-    pub async fn get_pending_orders_count(&self, account_id: &str) -> Result<i64, AppError> {
+    pub async fn get_pending_orders_count(&self, account_id: i64) -> Result<i64, AppError> {
         let result = sqlx::query_scalar::<_, i64>(
             "SELECT COUNT(*) FROM orders WHERE account_id = $1 AND status = 'pending'",
         )
@@ -74,7 +74,7 @@ impl Database {
         Ok(result)
     }
 
-    pub async fn get_account_balance(&self, account_id: &str) -> Result<(String, i64), AppError> {
+    pub async fn get_account_balance(&self, account_id: i64) -> Result<(String, i64), AppError> {
         // Get total balance
         let total_balance = sqlx::query_scalar::<_, String>(
             r#"
@@ -144,20 +144,20 @@ impl Database {
     pub async fn create_or_update_account(&self, account: &Account) -> Result<Account, AppError> {
         let result = sqlx::query_as::<_, Account>(
             r#"
-            INSERT INTO accounts (account_id, email, telegram_id, evm_address, created_at, updated_at)
+            INSERT INTO accounts (username, email, telegram_id, evm_address, created_at, updated_at)
             VALUES ($1, $2, $3, $4, $5, $6)
-            ON CONFLICT (account_id) 
+            ON CONFLICT (username) 
             DO UPDATE SET 
                 email = COALESCE($2, accounts.email),
                 telegram_id = COALESCE($3, accounts.telegram_id),
                 evm_address = COALESCE($4, accounts.evm_address),
                 updated_at = $6
-            RETURNING id, account_id, email, telegram_id, evm_address, created_at, updated_at
+            RETURNING id, username, email, telegram_id, evm_address, created_at, updated_at
             "#,
         )
-        .bind(&account.account_id)
+        .bind(&account.username)
         .bind(&account.email)
-        .bind(&account.telegram_id)
+        .bind(account.telegram_id)
         .bind(&account.evm_address)
         .bind(account.created_at)
         .bind(account.updated_at)

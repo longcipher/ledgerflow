@@ -74,7 +74,7 @@ impl BalancerService {
         Ok(order)
     }
 
-    pub async fn get_balance(&self, account_id: &str) -> BotResult<BalanceResponse> {
+    pub async fn get_balance(&self, account_id: i64) -> BotResult<BalanceResponse> {
         let url = format!("{}/accounts/{}/balance", self.base_url, account_id);
 
         let response = self.client.get(&url).send().await?;
