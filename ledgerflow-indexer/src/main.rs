@@ -29,22 +29,37 @@ async fn main() -> Result<()> {
 
     let args = Args::parse();
 
-    info!("Starting LedgerFlow Indexer");
+    info!("🚀 Starting LedgerFlow Indexer");
+    info!("📋 Configuration file: {}", args.config.display());
 
     // Load configuration
     let config = Config::from_file(&args.config).await?;
-    info!("Loaded configuration for {} chains", config.chains.len());
+    info!("✅ Loaded configuration for {} chains", config.chains.len());
+
+    // Log chain configurations
+    for chain in &config.chains {
+        info!(
+            "⛓️  Chain: {} (ID: {}) - RPC: {}",
+            chain.name, chain.chain_id, chain.rpc_http
+        );
+        info!(
+            "   📄 Contract: {}, Start Block: {}",
+            chain.payment_vault_contract, chain.start_block
+        );
+    }
 
     // Initialize database
     let database = Database::new(&config.database.url).await?;
-    info!("Connected to database");
+    info!("✅ Connected to database successfully");
 
     // Create and start indexer
     let indexer = Indexer::new(config, database).await?;
-    info!("Indexer initialized");
+    info!("✅ Indexer initialized successfully");
 
+    info!("🔥 Starting indexing process...");
     // Start indexing
     indexer.start().await?;
 
+    info!("🛑 Indexer stopped");
     Ok(())
 }
