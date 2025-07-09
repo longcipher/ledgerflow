@@ -399,10 +399,10 @@ async fn handle_generate_wallet_callback(
 ) -> BotResult<()> {
     bot.answer_callback_query(callback.id).await?;
 
-    if let Some(msg) = callback.message {
-        if let Some(regular_msg) = msg.regular_message() {
-            handle_generate_wallet(bot, regular_msg.clone(), state).await?;
-        }
+    if let Some(msg) = callback.message
+        && let Some(regular_msg) = msg.regular_message()
+    {
+        handle_generate_wallet(bot, regular_msg.clone(), state).await?;
     }
 
     Ok(())
@@ -415,10 +415,10 @@ async fn handle_balance_callback(
 ) -> BotResult<()> {
     bot.answer_callback_query(callback.id).await?;
 
-    if let Some(msg) = callback.message {
-        if let Some(regular_msg) = msg.regular_message() {
-            handle_balance(bot, regular_msg.clone(), state).await?;
-        }
+    if let Some(msg) = callback.message
+        && let Some(regular_msg) = msg.regular_message()
+    {
+        handle_balance(bot, regular_msg.clone(), state).await?;
     }
 
     Ok(())
