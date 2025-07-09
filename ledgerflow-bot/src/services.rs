@@ -102,28 +102,3 @@ impl BalancerService {
         }
     }
 }
-
-use teloxide::Bot;
-
-use crate::database::Database;
-
-pub struct NotificationService {
-    bot: Bot,
-    database: Database,
-}
-
-impl NotificationService {
-    pub fn new(bot: Bot, database: Database) -> Self {
-        Self { bot, database }
-    }
-
-    pub async fn start(&self) -> BotResult<()> {
-        info!("Notification service started");
-
-        // TODO: Implement actual notification checking logic
-        // For now, just run an empty loop
-        loop {
-            tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
-        }
-    }
-}

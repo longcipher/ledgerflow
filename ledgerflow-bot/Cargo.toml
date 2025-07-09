@@ -5,11 +5,7 @@ edition = "2024"
 description = "Telegram Bot for LedgerFlow payment system"
 
 [dependencies]
-# CLI argument parsing
-clap = { workspace = true, features = ["derive"] }
-
 # Error handling
-color-eyre = { workspace = true }
 eyre = { workspace = true }
 
 # Async runtime

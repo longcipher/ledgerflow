@@ -9,11 +9,12 @@ mod database;
 mod error;
 mod handlers;
 mod models;
+mod notification;
 mod services;
 mod wallet;
 
 use crate::{
-    config::Config, database::Database, handlers::create_handler, services::NotificationService,
+    config::Config, database::Database, handlers::create_handler, notification::NotificationService,
 };
 
 #[tokio::main]
@@ -29,7 +30,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Start notification service
     let notification_service = NotificationService::new(bot.clone(), database.clone());
     tokio::spawn(async move {
-        if let Err(e) = notification_service.start().await {
+        if let Err(e) = notification_service.start_notification_loop().await {
             error!("Notification service error: {}", e);
         }
     });
