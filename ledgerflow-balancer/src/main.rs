@@ -54,10 +54,6 @@ async fn main() -> Result<()> {
     let db = Arc::new(Database::new(&config.database_url).await?);
     info!("Database connected");
 
-    // Run migrations
-    db.migrate().await?;
-    info!("Database migrations completed");
-
     let app_state = AppState {
         db,
         config: config.clone(),

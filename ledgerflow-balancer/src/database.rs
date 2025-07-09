@@ -17,11 +17,6 @@ impl Database {
         Ok(Self { pool })
     }
 
-    pub async fn migrate(&self) -> Result<()> {
-        sqlx::migrate!("./migrations").run(&self.pool).await?;
-        Ok(())
-    }
-
     pub async fn create_order(&self, order: &Order) -> Result<Order, AppError> {
         let result = sqlx::query_as::<_, Order>(
             r#"

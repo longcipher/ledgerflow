@@ -39,10 +39,6 @@ async fn main() -> Result<()> {
     let database = Database::new(&config.database.url).await?;
     info!("Connected to database");
 
-    // Run migrations
-    database.migrate().await?;
-    info!("Database migrations completed");
-
     // Create and start indexer
     let indexer = Indexer::new(config, database).await?;
     info!("Indexer initialized");

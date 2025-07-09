@@ -75,9 +75,6 @@ async fn start_bot(config_path: String) -> Result<()> {
     // Initialize database connection
     let database = Database::new(&config.database_url).await?;
 
-    // Run database migrations
-    database.migrate().await?;
-
     // Initialize Telegram bot
     let bot = Bot::new(&config.telegram.bot_token);
 

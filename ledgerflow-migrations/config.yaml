@@ -1,0 +1,40 @@
+# LedgerFlow Migrations Configuration
+
+# Database connection settings
+database:
+  # Default connection URL
+  url: "postgresql://postgres:password@localhost/ledgerflow"
+  
+  # Connection pool settings
+  max_connections: 5
+  min_connections: 1
+  acquire_timeout: 30s
+  idle_timeout: 600s
+  max_lifetime: 1800s
+
+# Migration settings
+migrations:
+  # Directory containing migration files
+  path: "./migrations"
+  
+  # Table name for tracking migrations
+  table: "_sqlx_migrations"
+  
+  # Lock timeout for migration operations
+  lock_timeout: 30s
+
+# Environment-specific overrides
+environments:
+  development:
+    database:
+      url: "postgresql://postgres:password@localhost/ledgerflow_dev"
+  
+  test:
+    database:
+      url: "postgresql://postgres:password@localhost/ledgerflow_test"
+  
+  production:
+    database:
+      # Use environment variable in production
+      url: "${DATABASE_URL}"
+      max_connections: 10

@@ -4,6 +4,7 @@ members = [
     "ledgerflow-bot",
     "ledgerflow-cli",
     "ledgerflow-indexer",
+    "ledgerflow-migrations",
 ]
 resolver = "2"
 
@@ -11,6 +12,7 @@ resolver = "2"
 # Web framework
 axum = "0.8.4"
 tokio = "1.46.1"
+tokio-test = "0.4.4"
 tower-http = "0.6.6"
 
 # Database
@@ -44,7 +46,7 @@ rand = "0.9.1"
 sha3 = "0.10.8"
 
 # Ethereum/EVM interaction
-alloy = "1.0.17"
+alloy = "1.0.19"
 
 # Telegram Bot Framework
 teloxide = "0.16.0"

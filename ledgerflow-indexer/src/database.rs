@@ -13,11 +13,6 @@ impl Database {
         Ok(Database { pool })
     }
 
-    pub async fn migrate(&self) -> Result<()> {
-        sqlx::migrate!("./migrations").run(&self.pool).await?;
-        Ok(())
-    }
-
     pub async fn get_chain_state(
         &self,
         chain_id: i32,

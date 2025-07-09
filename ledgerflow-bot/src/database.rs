@@ -1,8 +1,6 @@
 #![allow(unused)]
-
 use eyre::Result;
-use sqlx::{PgPool, Row, migrate};
-use tracing::info;
+use sqlx::{PgPool, Row};
 
 use crate::models::{Order, User};
 
@@ -15,13 +13,6 @@ impl Database {
     pub async fn new(database_url: &str) -> Result<Self> {
         let pool = PgPool::connect(database_url).await?;
         Ok(Self { pool })
-    }
-
-    pub async fn migrate(&self) -> Result<()> {
-        info!("Running database migrations...");
-        migrate!("./migrations").run(&self.pool).await?;
-        info!("Database migrations completed successfully");
-        Ok(())
     }
 
     pub async fn create_user(&self, user: &User) -> Result<()> {
