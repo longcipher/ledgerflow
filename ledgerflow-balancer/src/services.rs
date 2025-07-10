@@ -50,13 +50,13 @@ impl OrderService {
         let order_id = generate_order_id(&broker_id, request.account_id, order_id_num);
 
         info!(
-            "Generated order ID: {} for account {}",
-            order_id, request.account_id
+            "Generated order ID: {}, order_id_num: {}, for account {}",
+            order_id, order_id_num, request.account_id
         );
 
         // Create order
         let order = Order {
-            id: 0, // This will be set by the database
+            id: order_id_num as i64,
             order_id,
             account_id: request.account_id,
             broker_id,
