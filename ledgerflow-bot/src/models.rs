@@ -73,18 +73,21 @@ pub struct Order {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateOrderRequest {
     pub account_id: i64,
-    pub amount: String,
-    pub token_address: String,
+    pub amount: Option<String>,
+    pub token_address: Option<String>,
+    pub chain_id: Option<i64>,
+    pub broker_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateOrderResponse {
     pub order_id: String,
-    pub payment_address: String,
-    pub amount: String,
-    pub token_address: String,
-    pub chain_id: u64,
+    pub payment_address: Option<String>,
+    pub amount: Option<String>,
+    pub token_address: Option<String>,
+    pub chain_id: Option<i64>,
     pub status: OrderStatus,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
