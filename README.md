@@ -15,6 +15,12 @@ By leveraging blockchain's transparency, security, and composability, LedgerFlow
 * PaymentVault Contract: [0x8b6f22009ae835795b9b33d75ad218c730db039b](https://sepolia.uniscan.xyz/address/0x8b6f22009ae835795b9b33d75ad218c730db039b)
 * Telegram Bot: [@LedgerFlowBot](https://t.me/LedgerFlowBot)
 
+## Arch
+
+<div align="center">
+  <img src="/assets/ledgerflow_arch.png" alt="LedgerFlow Arch" />
+</div>
+
 ## 🎯 Problems We Solve
 
 Current centralized payment gateways, while powerful, have inherent flaws that create barriers for emerging digital economies and global collaboration:
