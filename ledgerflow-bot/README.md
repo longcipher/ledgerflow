@@ -12,6 +12,27 @@ LedgerFlow Bot is a Telegram bot that serves as the primary user interface for t
 - **Order notifications**: Users are notified when their deposit is confirmed
 - **Stateful user sessions**: The bot remembers where each user is in the flow
 - **English-only interface**: All prompts, errors, and menus are in English
+- **Command-line configuration**: Specify a custom config file path via CLI arguments
+
+## Usage
+
+Run the bot with the default configuration:
+
+```bash
+cargo run
+```
+
+Specify a custom configuration file:
+
+```bash
+cargo run -- --config /path/to/custom-config.yaml
+```
+
+View all available options:
+
+```bash
+cargo run -- --help
+```
 
 ## Technology Stack
 

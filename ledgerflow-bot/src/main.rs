@@ -1,5 +1,6 @@
-use std::error::Error;
+use std::{error::Error, path::PathBuf};
 
+use clap::Parser;
 use teloxide::prelude::*;
 use tracing::{error, info};
 
@@ -17,8 +18,19 @@ use crate::{
     config::Config, database::Database, handlers::create_handler, notification::NotificationService,
 };
 
+#[derive(Parser)]
+#[command(author, version, about = "LedgerFlow Telegram Bot")]
+struct Cli {
+    /// Path to the configuration file
+    #[arg(short, long, default_value = "config.yaml")]
+    config: PathBuf,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    // Parse command-line arguments
+    let cli = Cli::parse();
+
     // Initialize tracing
     let filter = std::env::var("RUST_LOG")
         .map(|_| tracing_subscriber::EnvFilter::from_default_env())
@@ -27,8 +39,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     tracing_subscriber::fmt().with_env_filter(filter).init();
 
     info!("Starting LedgerFlow Bot...");
+    info!("Using config file: {}", cli.config.display());
 
-    let config = Config::from_file("config.yaml")?;
+    let config = Config::from_file(cli.config)?;
     let database = Database::new(&config.database_url).await?;
     let bot = Bot::new(&config.telegram.bot_token);
 

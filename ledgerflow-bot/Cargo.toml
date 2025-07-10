@@ -11,6 +11,9 @@ eyre = { workspace = true }
 # Async runtime
 tokio = { workspace = true, features = ["full"] }
 
+# Command-line argument parsing
+clap = { workspace = true, features = ["derive"] }
+
 # Telegram Bot Framework
 teloxide = { workspace = true, features = [
     "macros",
