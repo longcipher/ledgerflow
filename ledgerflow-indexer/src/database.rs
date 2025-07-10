@@ -150,27 +150,39 @@ impl Database {
         Ok(events)
     }
 
-    /// Update order status to 'deposited' when deposit event is detected
-    pub async fn update_order_status_deposited(
+    pub async fn update_order_with_deposit_details(
         &self,
         order_id: &str,
         transaction_hash: &str,
+        amount: &str,
+        chain_id: i64,
     ) -> Result<()> {
         debug!(
-            "Updating order status to 'deposited' for order_id: {}, tx_hash: {}",
-            order_id, transaction_hash
+            "Updating order with deposit details - order_id: {}, tx_hash: {}, amount: {}, chain_id: {}",
+            order_id, transaction_hash, amount, chain_id
         );
 
         let result = sqlx::query(
-            "UPDATE orders SET status = 'deposited', transaction_hash = $1, updated_at = NOW() WHERE order_id = $2",
+            "UPDATE orders SET 
+                status = 'deposited', 
+                transaction_hash = $1, 
+                amount = $2, 
+                chain_id = $3, 
+                updated_at = NOW() 
+             WHERE order_id = $4",
         )
         .bind(transaction_hash)
+        .bind(amount)
+        .bind(chain_id)
         .bind(order_id)
         .execute(&self.pool)
         .await?;
 
         if result.rows_affected() > 0 {
-            info!("Updated order {} status to 'deposited'", order_id);
+            info!(
+                "Updated order {} with deposit details - status: deposited, amount: {}, chain_id: {}",
+                order_id, amount, chain_id
+            );
         } else {
             warn!(
                 "Order {} not found in database or already updated",

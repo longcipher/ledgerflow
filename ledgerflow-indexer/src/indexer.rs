@@ -306,14 +306,19 @@ impl Indexer {
         // Insert into database
         database.insert_deposit_event(&deposit_event).await?;
 
-        // Update order status to 'deposited'
+        // Update order with deposit details including status, amount, and chain_id
         database
-            .update_order_status_deposited(&deposit_event.order_id, &deposit_event.transaction_hash)
+            .update_order_with_deposit_details(
+                &deposit_event.order_id,
+                &deposit_event.transaction_hash,
+                &deposit_event.amount,
+                deposit_event.chain_id,
+            )
             .await?;
 
         info!(
-            "✅ Successfully processed deposit event for order {} on chain {} - Status updated to 'deposited'",
-            deposit_event.order_id, chain_config.name
+            "✅ Successfully processed deposit event for order {} on chain {} - Updated with amount {}, chain_id {}",
+            deposit_event.order_id, chain_config.name, deposit_event.amount, chain_config.chain_id
         );
 
         Ok(())
