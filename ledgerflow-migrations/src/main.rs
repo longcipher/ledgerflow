@@ -173,11 +173,11 @@ mod tests {
 
         match result {
             Ok(manager) => {
-                assert!(manager.get_pool().is_closed() == false);
+                assert!(!manager.get_pool().is_closed());
                 println!("✓ Migration manager created successfully");
             }
             Err(e) => {
-                println!("⚠️  Skipping test - database not available: {}", e);
+                println!("⚠️  Skipping test - database not available: {e}");
                 // Don't fail the test if database is not available
             }
         }
