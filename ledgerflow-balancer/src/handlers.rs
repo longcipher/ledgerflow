@@ -35,9 +35,9 @@ pub async fn create_order(
 
     let response = CreateOrderResponse {
         order_id: order.order_id.clone(),
-        amount: order.amount,
-        token_address: order.token_address,
-        chain_id: order.chain_id,
+        amount: Some(order.amount),
+        token_address: Some(order.token_address),
+        chain_id: Some(order.chain_id),
         status: order.status,
         created_at: order.created_at,
     };

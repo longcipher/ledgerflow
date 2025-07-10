@@ -24,7 +24,10 @@ impl OrderService {
     pub async fn create_order(&self, request: CreateOrderRequest) -> Result<Order, AppError> {
         info!(
             "Creating order for account {}: amount={}, token={}, chain_id={}",
-            request.account_id, request.amount, request.token_address, request.chain_id
+            request.account_id,
+            request.amount.as_deref().unwrap_or("0"),
+            request.token_address.as_deref().unwrap_or("0x0"),
+            request.chain_id.unwrap_or(0)
         );
 
         // Check if account has too many pending orders
@@ -57,9 +60,9 @@ impl OrderService {
             order_id,
             account_id: request.account_id,
             broker_id,
-            amount: request.amount,
-            token_address: request.token_address,
-            chain_id: request.chain_id,
+            amount: request.amount.unwrap_or_else(|| "0".to_string()),
+            token_address: request.token_address.unwrap_or_else(|| "0x0".to_string()),
+            chain_id: request.chain_id.unwrap_or(0),
             status: OrderStatus::Pending,
             created_at: Utc::now(),
             updated_at: Utc::now(),

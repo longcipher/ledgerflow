@@ -52,18 +52,18 @@ pub struct Balance {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CreateOrderRequest {
     pub account_id: i64,
-    pub amount: String,
-    pub token_address: String,
-    pub chain_id: i64,
+    pub amount: Option<String>,
+    pub token_address: Option<String>,
+    pub chain_id: Option<i64>,
     pub broker_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CreateOrderResponse {
     pub order_id: String,
-    pub amount: String,
-    pub token_address: String,
-    pub chain_id: i64,
+    pub amount: Option<String>,
+    pub token_address: Option<String>,
+    pub chain_id: Option<i64>,
     pub status: OrderStatus,
     pub created_at: DateTime<Utc>,
 }
