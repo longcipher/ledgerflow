@@ -129,10 +129,10 @@ impl AccountService {
             )));
         }
 
-        // Process EVM private key if provided
-        let (evm_address, encrypted_pk) = if let Some(evm_pk) = &request.evm_pk {
+        // Process EVM private key (now required)
+        let (evm_address, encrypted_pk) = {
             // Generate address from private key
-            let address = match crate::utils::generate_evm_address_from_pk(evm_pk) {
+            let address = match crate::utils::generate_evm_address_from_pk(&request.evm_pk) {
                 Ok(addr) => addr,
                 Err(e) => {
                     error!("Failed to generate EVM address: {}", e);
@@ -143,7 +143,7 @@ impl AccountService {
             };
 
             // Encrypt private key
-            let encrypted = match crate::utils::encrypt_private_key(evm_pk) {
+            let encrypted = match crate::utils::encrypt_private_key(&request.evm_pk) {
                 Ok(enc) => enc,
                 Err(e) => {
                     error!("Failed to encrypt private key: {}", e);
@@ -154,15 +154,13 @@ impl AccountService {
             };
 
             (Some(address), Some(encrypted))
-        } else {
-            (None, None)
         };
 
         let account = Account {
             id: 0, // This will be set by the database
             username: request.username.clone(),
-            email: request.email.clone(),
-            telegram_id: request.telegram_id,
+            email: Some(request.email.clone()),
+            telegram_id: Some(request.telegram_id),
             evm_address,
             encrypted_pk,
             is_admin: request.is_admin.unwrap_or(false),

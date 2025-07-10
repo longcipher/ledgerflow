@@ -97,9 +97,9 @@ pub struct AdminOrdersResponse {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RegisterAccountRequest {
     pub username: String,
-    pub email: Option<String>,
-    pub telegram_id: Option<i64>,
-    pub evm_pk: Option<String>,
+    pub email: String,
+    pub telegram_id: i64,
+    pub evm_pk: String,
     pub is_admin: Option<bool>,
 }
 
