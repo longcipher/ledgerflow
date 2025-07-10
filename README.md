@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="/assets/ledgerflow_banner.png" alt="LedgerFlow Banner" />
+</div>
+
 # LedgerFlow
 
 **Making value flow as freely, efficiently, and borderlessly as information flow.**
