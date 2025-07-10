@@ -13,6 +13,7 @@ By leveraging blockchain's transparency, security, and composability, LedgerFlow
 ## Testnet(Unichain Sepolia) Demo
 
 * PaymentVault Contract: [0x8b6f22009ae835795b9b33d75ad218c730db039b](https://sepolia.uniscan.xyz/address/0x8b6f22009ae835795b9b33d75ad218c730db039b)
+* Telegram Bot: [@LedgerFlowBot](https://t.me/LedgerFlowBot)
 
 ## 🎯 Problems We Solve
 
