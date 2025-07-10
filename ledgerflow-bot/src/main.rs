@@ -6,9 +6,11 @@ use tracing::{error, info};
 
 mod bot;
 mod config;
+mod contracts;
 mod database;
 mod error;
 mod handlers;
+mod lib_utils;
 mod models;
 mod notification;
 mod services;

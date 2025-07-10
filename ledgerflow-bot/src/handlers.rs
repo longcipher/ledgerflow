@@ -10,7 +10,7 @@ use crate::{
     error::{BotError, BotResult},
     models::{Account, CreateOrderRequest, UserSession, UserState},
     services::BalancerService,
-    wallet,
+    wallet::{self, execute_deposit},
 };
 
 pub type SessionManager = Arc<RwLock<HashMap<i64, UserSession>>>;
@@ -389,7 +389,7 @@ async fn handle_deposit_amount_input(
     telegram_id: i64,
 ) -> BotResult<()> {
     // Validate amount format
-    if amount.parse::<i64>().is_err() {
+    if amount.parse::<u64>().is_err() {
         bot.send_message(
             chat_id,
             "Invalid amount format, please enter a valid number.",
@@ -422,8 +422,19 @@ async fn handle_deposit_amount_input(
         sessions.remove(&telegram_id);
     }
 
-    // TODO: Here should call the actual CLI tool to execute deposit operation
-    // handle_deposit(telegram_id, amount)
+    let private_key = state
+        .database
+        .get_account_evm_pk_by_id(account.id)
+        .await?
+        .ok_or_else(|| BotError::Config("Account private key not found".to_string()))?;
+    let rpc_url = state.config.blockchain.rpc_url.clone();
+    let contract_address = state.config.blockchain.payment_vault_address.clone();
+    let order_id = response.order_id.clone();
+    let amount = amount
+        .parse::<u64>()
+        .map_err(|e| BotError::Config(format!("Invalid amount format: {e}")))?;
+
+    execute_deposit(rpc_url, private_key, contract_address, order_id, amount).await?;
 
     bot.send_message(
         chat_id,
@@ -563,7 +574,7 @@ async fn handle_wallet_deposit(
         bot.edit_message_text(
             chat.id,
             message.id(),
-            "Please enter the amount you want to deposit:",
+            "Please enter the USDC amount you want to deposit(1000000 = 1 USDC):",
         )
         .await?;
 

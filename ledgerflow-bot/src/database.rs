@@ -3,7 +3,10 @@ use eyre::Result;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use crate::models::{Account, Order};
+use crate::{
+    models::{Account, Order},
+    wallet::decrypt_private_key,
+};
 
 #[derive(Clone)]
 pub struct Database {
@@ -14,6 +17,21 @@ impl Database {
     pub async fn new(database_url: &str) -> Result<Self> {
         let pool = PgPool::connect(database_url).await?;
         Ok(Self { pool })
+    }
+
+    pub async fn get_account_evm_pk_by_id(&self, account_id: i64) -> Result<Option<String>> {
+        let row = sqlx::query("SELECT encrypted_pk FROM accounts WHERE id = $1")
+            .bind(account_id)
+            .fetch_optional(&self.pool)
+            .await?;
+
+        let encrypted_pk = row.map(|r| r.get::<String, _>("encrypted_pk"));
+        let decrypted_pk = encrypted_pk
+            .as_ref()
+            .map(|pk| decrypt_private_key(pk))
+            .transpose()?;
+
+        Ok(decrypted_pk)
     }
 
     pub async fn create_account(&self, account: &Account) -> Result<i64> {

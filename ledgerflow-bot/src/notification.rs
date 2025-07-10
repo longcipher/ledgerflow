@@ -34,7 +34,7 @@ impl NotificationService {
 
         for (order, telegram_id) in orders {
             let message = format!(
-                "✅ Deposit successful! Your order {} with amount {} USDC has been credited to your account.",
+                "✅ Deposit successful! Your order 0x{} with amount {} USDC has been credited to your account.",
                 order.order_id, order.amount
             );
 

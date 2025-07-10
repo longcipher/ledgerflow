@@ -24,7 +24,7 @@ impl FromStr for OrderStatus {
             "completed" => Ok(OrderStatus::Completed),
             "failed" => Ok(OrderStatus::Failed),
             "cancelled" => Ok(OrderStatus::Cancelled),
-            _ => Err(format!("Unknown order status: {}", s)),
+            _ => Err(format!("Unknown order status: {s}")),
         }
     }
 }
