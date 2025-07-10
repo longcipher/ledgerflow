@@ -10,7 +10,7 @@ use crate::{
     error::{BotError, BotResult},
     models::{Account, CreateOrderRequest, UserSession, UserState},
     services::BalancerService,
-    wallet::{self, execute_deposit},
+    wallet::{self, execute_deposit, execute_withdraw},
 };
 
 pub type SessionManager = Arc<RwLock<HashMap<i64, UserSession>>>;
@@ -578,7 +578,7 @@ async fn handle_wallet_deposit(
         )
         .await?;
 
-        // 设置用户状态
+        // Set user state
         {
             let mut sessions = state.sessions.write().await;
             sessions.insert(
@@ -606,15 +606,22 @@ async fn handle_wallet_withdraw(
 
     if let Some(message) = callback.message {
         let chat = message.chat();
-        // 检查是否是管理员
+        // Check if user is an administrator
         match state
             .database
             .get_account_by_telegram_id(telegram_id)
             .await?
         {
             Some(account) if account.is_admin => {
-                // TODO: 实现实际的提款操作
-                // handle_withdrawal(telegram_id)
+                let private_key = state
+                    .database
+                    .get_account_evm_pk_by_id(account.id)
+                    .await?
+                    .ok_or_else(|| BotError::Config("Account private key not found".to_string()))?;
+                let rpc_url = state.config.blockchain.rpc_url.clone();
+                let contract_address = state.config.blockchain.payment_vault_address.clone();
+
+                execute_withdraw(rpc_url, private_key, contract_address).await?;
 
                 bot.edit_message_text(
                     chat.id,
