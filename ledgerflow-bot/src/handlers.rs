@@ -9,7 +9,7 @@ use crate::{
     config::Config,
     database::Database,
     error::{BotError, BotResult},
-    models::{Account, Order, UserSession, UserState},
+    models::{Account, Order, OrderStatus, UserSession, UserState},
     services::BalancerService,
     wallet,
 };
@@ -418,7 +418,7 @@ async fn handle_deposit_amount_input(
         amount: amount.to_string(),
         token_address: "0xA0b86a33E6417C5aa8C0ddb86eB9f5F0C9b9e5F1".to_string(), // USDC example
         chain_id: 1,
-        status: "pending".to_string(),
+        status: OrderStatus::Pending,
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
         transaction_hash: None,

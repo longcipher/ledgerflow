@@ -1,5 +1,45 @@
+use std::str::FromStr;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::Type;
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq)]
+#[sqlx(type_name = "order_status", rename_all = "lowercase")]
+pub enum OrderStatus {
+    Pending,
+    Deposited,
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+impl FromStr for OrderStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "pending" => Ok(OrderStatus::Pending),
+            "deposited" => Ok(OrderStatus::Deposited),
+            "completed" => Ok(OrderStatus::Completed),
+            "failed" => Ok(OrderStatus::Failed),
+            "cancelled" => Ok(OrderStatus::Cancelled),
+            _ => Err(format!("Unknown order status: {}", s)),
+        }
+    }
+}
+
+impl std::fmt::Display for OrderStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OrderStatus::Pending => write!(f, "pending"),
+            OrderStatus::Deposited => write!(f, "deposited"),
+            OrderStatus::Completed => write!(f, "completed"),
+            OrderStatus::Failed => write!(f, "failed"),
+            OrderStatus::Cancelled => write!(f, "cancelled"),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Account {
@@ -23,7 +63,7 @@ pub struct Order {
     pub amount: String,
     pub token_address: String,
     pub chain_id: i64,
-    pub status: String,
+    pub status: OrderStatus,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub transaction_hash: Option<String>,
@@ -44,7 +84,7 @@ pub struct CreateOrderResponse {
     pub amount: String,
     pub token_address: String,
     pub chain_id: u64,
-    pub status: String,
+    pub status: OrderStatus,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

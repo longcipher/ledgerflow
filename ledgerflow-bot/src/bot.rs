@@ -7,7 +7,10 @@ use image::Rgb;
 use qrcode::QrCode;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
-use crate::{error::BotResult, models::PaymentDetails};
+use crate::{
+    error::BotResult,
+    models::{OrderStatus, PaymentDetails},
+};
 
 pub fn create_main_keyboard() -> InlineKeyboardMarkup {
     InlineKeyboardMarkup::new(vec![
@@ -114,12 +117,12 @@ pub fn format_order_list(orders: &[crate::models::Order]) -> String {
     let mut text = "📋 **Your Orders**\n\n".to_string();
 
     for (_i, order) in orders.iter().enumerate().take(10) {
-        let status_emoji = match order.status.as_str() {
-            "pending" => "⏳",
-            "completed" => "✅",
-            "failed" => "❌",
-            "cancelled" => "🚫",
-            _ => "❓",
+        let status_emoji = match order.status {
+            OrderStatus::Pending => "⏳",
+            OrderStatus::Completed => "✅",
+            OrderStatus::Failed => "❌",
+            OrderStatus::Cancelled => "🚫",
+            OrderStatus::Deposited => "💰",
         };
 
         text.push_str(&format!(
@@ -128,7 +131,7 @@ pub fn format_order_list(orders: &[crate::models::Order]) -> String {
             Created: {}\n\n",
             status_emoji,
             order.amount,
-            order.status.to_uppercase(),
+            order.status.to_string().to_uppercase(),
             if let Some(tx) = &order.transaction_hash {
                 format!("(TX: `{}`)", &tx[..8])
             } else {
