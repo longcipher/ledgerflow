@@ -5,7 +5,10 @@ use tracing::{error, info};
 use crate::{
     config::Config,
     error::{BotError, BotResult},
-    models::{BalanceResponse, CreateOrderRequest, CreateOrderResponse, Order},
+    models::{
+        BalanceResponse, CreateOrderRequest, CreateOrderResponse, Order, RegisterAccountRequest,
+        RegisterAccountResponse,
+    },
 };
 
 pub struct BalancerService {
@@ -26,6 +29,36 @@ impl BalancerService {
             client,
             base_url: config.balancer.base_url.clone(),
         }
+    }
+
+    pub async fn register_account(
+        &self,
+        request: RegisterAccountRequest,
+    ) -> BotResult<RegisterAccountResponse> {
+        let url = format!("{}/register", self.base_url);
+
+        info!("Registering account: {:?}", request);
+
+        let response = self.client.post(&url).json(&request).send().await?;
+
+        if !response.status().is_success() {
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            error!("Failed to register account: {}", error_text);
+            return Err(BotError::BalancerApi(format!(
+                "Failed to register account: {error_text}"
+            )));
+        }
+
+        let account_response: RegisterAccountResponse = response.json().await?;
+        info!(
+            "Account registered successfully, account_id: {}",
+            account_response.id
+        );
+
+        Ok(account_response)
     }
 
     pub async fn create_order(

@@ -70,6 +70,27 @@ pub struct Order {
     pub notified: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RegisterAccountRequest {
+    pub username: String,
+    pub email: String,
+    pub telegram_id: i64,
+    pub evm_pk: String,
+    pub is_admin: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RegisterAccountResponse {
+    pub id: i64,
+    pub username: String,
+    pub email: Option<String>,
+    pub telegram_id: Option<i64>,
+    pub evm_address: Option<String>,
+    pub is_admin: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateOrderRequest {
     pub account_id: i64,
@@ -118,7 +139,8 @@ pub struct PaymentDetails {
 pub enum UserState {
     None,
     AwaitingEmail,
-    AwaitingUsername(String), // Save email
+    AwaitingUsername(String),      // Save email
+    AwaitingEvmPk(String, String), // Save email and username
     AwaitingDepositAmount,
 }
 

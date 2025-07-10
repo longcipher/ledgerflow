@@ -8,9 +8,9 @@ use crate::{
     config::Config,
     database::Database,
     error::{BotError, BotResult},
-    models::{Account, CreateOrderRequest, UserSession, UserState},
+    models::{CreateOrderRequest, RegisterAccountRequest, UserSession, UserState},
     services::BalancerService,
-    wallet::{self, execute_deposit, execute_withdraw},
+    wallet::{execute_deposit, execute_withdraw},
 };
 
 pub type SessionManager = Arc<RwLock<HashMap<i64, UserSession>>>;
@@ -128,6 +128,18 @@ async fn handle_text_input(bot: Bot, msg: Message, state: BotState) -> BotResult
             UserState::AwaitingUsername(ref email) => {
                 handle_username_input(bot, msg.chat.id, state, text, email.clone(), telegram_id)
                     .await
+            }
+            UserState::AwaitingEvmPk(ref email, ref username) => {
+                handle_evm_pk_input(
+                    bot,
+                    msg.chat.id,
+                    state,
+                    text,
+                    email.clone(),
+                    username.clone(),
+                    telegram_id,
+                )
+                .await
             }
             UserState::AwaitingDepositAmount => {
                 handle_deposit_amount_input(bot, msg.chat.id, state, text, telegram_id).await
@@ -337,26 +349,60 @@ async fn handle_username_input(
         return Ok(());
     }
 
-    // Generate wallet
-    let wallet = wallet::generate_wallet().await?;
+    // Update session state to collect EVM private key
+    {
+        let mut sessions = state.sessions.write().await;
+        sessions.insert(
+            telegram_id,
+            UserSession {
+                state: UserState::AwaitingEvmPk(email.clone(), username.to_string()),
+                temp_email: Some(email.clone()),
+            },
+        );
+    }
 
-    // Create encrypted private key (simplified here, should use more secure encryption in production)
-    let encrypted_pk = format!("encrypted_{}", wallet.private_key);
+    bot.send_message(
+        chat_id,
+        "Great! Now please enter your EVM private key (without '0x' prefix):",
+    )
+    .await?;
 
-    // Create account
-    let account = Account {
-        id: 0, // Will be set by database
-        username: username.to_string(),
+    Ok(())
+}
+
+async fn handle_evm_pk_input(
+    bot: Bot,
+    chat_id: ChatId,
+    state: BotState,
+    evm_pk: &str,
+    email: String,
+    username: String,
+    telegram_id: i64,
+) -> BotResult<()> {
+    // Basic validation for EVM private key
+    if evm_pk.len() != 64 || evm_pk.chars().any(|c| !c.is_ascii_hexdigit()) {
+        bot.send_message(
+            chat_id,
+            "Invalid EVM private key format. Please enter a valid 64-character hexadecimal string (without '0x' prefix):",
+        )
+        .await?;
+        return Ok(());
+    }
+
+    let register_request = RegisterAccountRequest {
+        username: username.clone(),
+        email: email.clone(),
         telegram_id,
-        email: Some(email.clone()),
-        evm_address: Some(wallet.address.clone()),
-        encrypted_pk: Some(encrypted_pk),
-        is_admin: false,
-        created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
+        evm_pk: evm_pk.to_string(),
+        is_admin: None,
     };
 
-    let account_id = state.database.create_account(&account).await?;
+    let response = state.balancer.register_account(register_request).await?;
+
+    let account_id = response.id;
+    let address = response
+        .evm_address
+        .expect("EVM address should be available after registration");
 
     // Clear session state
     {
@@ -368,12 +414,11 @@ async fn handle_username_input(
     let success_message = format!(
         "Registration successful!\n\n\
         Your account information:\n\
-        - Account ID: {}\n\
-        - Username: {}\n\
-        - Email: {}\n\
-        - Your exclusive wallet address: {}\n\n\
-        Type /menu to start using the service.",
-        account_id, username, email, wallet.address
+        - Account ID: {account_id}\n\
+        - Username: {username}\n\
+        - Email: {email}\n\
+        - Your exclusive wallet address: {address}\n\n\
+        Type /menu to start using the service."
     );
 
     bot.send_message(chat_id, success_message).await?;
@@ -454,7 +499,7 @@ async fn handle_nav_projects(bot: Bot, callback: CallbackQuery, _state: BotState
         bot.edit_message_text(
             chat.id,
             message.id(),
-            "This feature is under development, please stay tuned!",
+            "🚧This feature is under development, please stay tuned!",
         )
         .await?;
     }
