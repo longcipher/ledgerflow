@@ -33,8 +33,14 @@ pub async fn create_order(
     );
     let order = order_service.create_order(request).await?;
 
+    let order_id = if order.order_id.starts_with("0x") {
+        order.order_id.clone()
+    } else {
+        format!("0x{}", order.order_id)
+    };
+
     let response = CreateOrderResponse {
-        order_id: order.order_id.clone(),
+        order_id,
         amount: Some(order.amount),
         token_address: Some(order.token_address),
         chain_id: Some(order.chain_id),
@@ -56,7 +62,18 @@ pub async fn get_order(
         (*state.db).clone(),
         state.config.business.max_pending_orders_per_account,
     );
-    let order = order_service.get_order(&order_id).await?;
+
+    // Remove "0x" prefix if present
+    let normalized_order_id = if order_id.starts_with("0x") {
+        order_id
+            .strip_prefix("0x")
+            .expect("Failed to strip '0x' prefix")
+            .to_string()
+    } else {
+        order_id.clone()
+    };
+
+    let order = order_service.get_order(&normalized_order_id).await?;
 
     let response = OrderResponse {
         order_id: order.order_id,
