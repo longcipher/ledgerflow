@@ -3,13 +3,12 @@ use std::{collections::HashMap, sync::Arc};
 use teloxide::{dispatching::UpdateHandler, prelude::*, types::*};
 use tokio::sync::RwLock;
 use tracing::{error, info};
-use uuid::Uuid;
 
 use crate::{
     config::Config,
     database::Database,
     error::{BotError, BotResult},
-    models::{Account, Order, OrderStatus, UserSession, UserState},
+    models::{Account, CreateOrderRequest, UserSession, UserState},
     services::BalancerService,
     wallet,
 };
@@ -390,7 +389,7 @@ async fn handle_deposit_amount_input(
     telegram_id: i64,
 ) -> BotResult<()> {
     // Validate amount format
-    if amount.parse::<f64>().is_err() {
+    if amount.parse::<i64>().is_err() {
         bot.send_message(
             chat_id,
             "Invalid amount format, please enter a valid number.",
@@ -406,26 +405,16 @@ async fn handle_deposit_amount_input(
         .await?
         .ok_or_else(|| BotError::Config("Account not found".to_string()))?;
 
-    // Generate order ID
-    let order_id = Uuid::new_v4().to_string();
-
-    // Create order
-    let order = Order {
-        id: 0,
-        order_id: order_id.clone(),
+    // Create order using BalancerService
+    let create_order_request = CreateOrderRequest {
         account_id: account.id,
-        broker_id: "default".to_string(),
-        amount: amount.to_string(),
-        token_address: "0xA0b86a33E6417C5aa8C0ddb86eB9f5F0C9b9e5F1".to_string(), // USDC example
-        chain_id: 1,
-        status: OrderStatus::Pending,
-        created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
-        transaction_hash: None,
-        notified: false,
+        amount: None,
+        token_address: None,
+        chain_id: None,
+        broker_id: None,
     };
 
-    state.database.create_order(&order).await?;
+    let response = state.balancer.create_order(create_order_request).await?;
 
     // Clear session state
     {
@@ -438,7 +427,7 @@ async fn handle_deposit_amount_input(
 
     bot.send_message(
         chat_id,
-        format!("Deposit request submitted! Your order ID is {order_id}. We will notify you after transaction confirmation."),
+        format!("Deposit request submitted! Your order ID is {}. We will notify you after transaction confirmation.", response.order_id),
     )
     .await?;
 
