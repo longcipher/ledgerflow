@@ -152,6 +152,7 @@ pub async fn register_account(
         email: account.email,
         telegram_id: account.telegram_id,
         evm_address: account.evm_address,
+        is_admin: account.is_admin,
         created_at: account.created_at,
         updated_at: account.updated_at,
     };
@@ -177,6 +178,7 @@ pub async fn get_account_by_username(
                 email: account.email,
                 telegram_id: account.telegram_id,
                 evm_address: account.evm_address,
+                is_admin: account.is_admin,
                 created_at: account.created_at,
                 updated_at: account.updated_at,
             };
@@ -205,6 +207,7 @@ pub async fn get_account_by_email(
                 email: account.email,
                 telegram_id: account.telegram_id,
                 evm_address: account.evm_address,
+                is_admin: account.is_admin,
                 created_at: account.created_at,
                 updated_at: account.updated_at,
             };
@@ -235,6 +238,7 @@ pub async fn get_account_by_telegram_id(
                 email: account.email,
                 telegram_id: account.telegram_id,
                 evm_address: account.evm_address,
+                is_admin: account.is_admin,
                 created_at: account.created_at,
                 updated_at: account.updated_at,
             };

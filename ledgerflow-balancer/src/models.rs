@@ -34,6 +34,8 @@ pub struct Account {
     pub email: Option<String>,
     pub telegram_id: Option<i64>,
     pub evm_address: Option<String>,
+    pub encrypted_pk: Option<String>,
+    pub is_admin: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -97,7 +99,8 @@ pub struct RegisterAccountRequest {
     pub username: String,
     pub email: Option<String>,
     pub telegram_id: Option<i64>,
-    pub evm_address: Option<String>,
+    pub evm_pk: Option<String>,
+    pub is_admin: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -107,6 +110,7 @@ pub struct RegisterAccountResponse {
     pub email: Option<String>,
     pub telegram_id: Option<i64>,
     pub evm_address: Option<String>,
+    pub is_admin: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -118,6 +122,7 @@ pub struct AccountResponse {
     pub email: Option<String>,
     pub telegram_id: Option<i64>,
     pub evm_address: Option<String>,
+    pub is_admin: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

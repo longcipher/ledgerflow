@@ -146,21 +146,25 @@ impl Database {
     pub async fn create_or_update_account(&self, account: &Account) -> Result<Account, AppError> {
         let result = sqlx::query_as::<_, Account>(
             r#"
-            INSERT INTO accounts (username, email, telegram_id, evm_address, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO accounts (username, email, telegram_id, evm_address, encrypted_pk, is_admin, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             ON CONFLICT (username) 
             DO UPDATE SET 
                 email = COALESCE($2, accounts.email),
                 telegram_id = COALESCE($3, accounts.telegram_id),
                 evm_address = COALESCE($4, accounts.evm_address),
-                updated_at = $6
-            RETURNING id, username, email, telegram_id, evm_address, created_at, updated_at
+                encrypted_pk = COALESCE($5, accounts.encrypted_pk),
+                is_admin = COALESCE($6, accounts.is_admin),
+                updated_at = $8
+            RETURNING id, username, email, telegram_id, evm_address, encrypted_pk, is_admin, created_at, updated_at
             "#,
         )
         .bind(&account.username)
         .bind(&account.email)
         .bind(account.telegram_id)
         .bind(&account.evm_address)
+        .bind(&account.encrypted_pk)
+        .bind(account.is_admin)
         .bind(account.created_at)
         .bind(account.updated_at)
         .fetch_one(&self.pool)
@@ -204,15 +208,17 @@ impl Database {
 
         let result = sqlx::query_as::<_, Account>(
             r#"
-            INSERT INTO accounts (username, email, telegram_id, evm_address, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, NOW(), NOW())
-            RETURNING id, username, email, telegram_id, evm_address, created_at, updated_at
+            INSERT INTO accounts (username, email, telegram_id, evm_address, encrypted_pk, is_admin, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+            RETURNING id, username, email, telegram_id, evm_address, encrypted_pk, is_admin, created_at, updated_at
             "#,
         )
         .bind(&account.username)
         .bind(&account.email)
         .bind(account.telegram_id)
         .bind(&account.evm_address)
+        .bind(&account.encrypted_pk)
+        .bind(account.is_admin)
         .fetch_one(&self.pool)
         .await?;
 
@@ -226,7 +232,7 @@ impl Database {
     ) -> Result<Option<Account>, AppError> {
         let result = sqlx::query_as::<_, Account>(
             r#"
-            SELECT id, username, email, telegram_id, evm_address, created_at, updated_at
+            SELECT id, username, email, telegram_id, evm_address, encrypted_pk, is_admin, created_at, updated_at
             FROM accounts
             WHERE username = $1
             "#,
@@ -242,7 +248,7 @@ impl Database {
     pub async fn get_account_by_email(&self, email: &str) -> Result<Option<Account>, AppError> {
         let result = sqlx::query_as::<_, Account>(
             r#"
-            SELECT id, username, email, telegram_id, evm_address, created_at, updated_at
+            SELECT id, username, email, telegram_id, evm_address, encrypted_pk, is_admin, created_at, updated_at
             FROM accounts
             WHERE email = $1
             "#,
@@ -261,7 +267,7 @@ impl Database {
     ) -> Result<Option<Account>, AppError> {
         let result = sqlx::query_as::<_, Account>(
             r#"
-            SELECT id, username, email, telegram_id, evm_address, created_at, updated_at
+            SELECT id, username, email, telegram_id, evm_address, encrypted_pk, is_admin, created_at, updated_at
             FROM accounts
             WHERE telegram_id = $1
             "#,
@@ -277,7 +283,7 @@ impl Database {
     pub async fn get_account_by_id(&self, id: i64) -> Result<Option<Account>, AppError> {
         let result = sqlx::query_as::<_, Account>(
             r#"
-            SELECT id, username, email, telegram_id, evm_address, created_at, updated_at
+            SELECT id, username, email, telegram_id, evm_address, encrypted_pk, is_admin, created_at, updated_at
             FROM accounts
             WHERE id = $1
             "#,
