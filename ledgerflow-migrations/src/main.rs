@@ -217,7 +217,7 @@ mod tests {
         assert!(migrations_dir.exists(), "Migrations directory should exist");
 
         // Check if initial migration file exists
-        let initial_migration = migrations_dir.join("20250709000001_initial_schema.sql");
+        let initial_migration = migrations_dir.join("001_initial_schema.sql");
         assert!(
             initial_migration.exists(),
             "Initial migration file should exist"
