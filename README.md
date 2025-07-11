@@ -16,7 +16,7 @@ By leveraging blockchain's transparency, security, and composability, LedgerFlow
 * Telegram Bot: [@LedgerFlowBot](https://t.me/LedgerFlowBot)
 * USDC Faucet: <https://faucet.circle.com/>
 * Unichain Faucet: <https://docs.unichain.org/docs/tools/faucets>
-* MVP Demo video: <https://www.youtube.com/watch?v=h3CaVSmiohA>
+* MVP Demo video: <https://youtu.be/YedfwqCenMQ>
 
 ## Arch
 
