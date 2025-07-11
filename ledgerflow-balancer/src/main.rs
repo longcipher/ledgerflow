@@ -136,7 +136,7 @@ async fn health_check() -> Result<Json<serde_json::Value>, AppError> {
 async fn process_deposited_orders_task(db: Arc<Database>) {
     info!("🔄 Background task: Starting deposited orders processing loop");
     let balance_service = BalanceService::new((*db).clone());
-    let mut interval = tokio::time::interval(Duration::from_secs(10)); // Check every 10 seconds
+    let mut interval = tokio::time::interval(Duration::from_secs(5)); // Check every 5 seconds
 
     loop {
         interval.tick().await;

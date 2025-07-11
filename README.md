@@ -14,6 +14,9 @@ By leveraging blockchain's transparency, security, and composability, LedgerFlow
 
 * PaymentVault Contract: [0x8b6f22009ae835795b9b33d75ad218c730db039b](https://sepolia.uniscan.xyz/address/0x8b6f22009ae835795b9b33d75ad218c730db039b)
 * Telegram Bot: [@LedgerFlowBot](https://t.me/LedgerFlowBot)
+* USDC Faucet: <https://faucet.circle.com/>
+* Unichain Faucet: <https://docs.unichain.org/docs/tools/faucets>
+* MVP Demo video: <https://www.youtube.com/watch?v=h3CaVSmiohA>
 
 ## Arch
 

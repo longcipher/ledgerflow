@@ -63,18 +63,6 @@ pub fn format_address(address: &str) -> String {
     }
 }
 
-pub fn generate_order_id(broker_id: &str, account_id: &str, order_num: u64) -> String {
-    // Create the input data for keccak256
-    let input = format!("{broker_id}{account_id}{order_num}");
-    let input_bytes = input.as_bytes();
-
-    // Calculate keccak256 hash
-    let hash = keccak256(input_bytes);
-
-    // Convert to hex string
-    format!("0x{}", hex::encode(hash))
-}
-
 pub fn decrypt_private_key(encrypted_key: &str) -> Result<String> {
     let master_key = env::var("ENCRYPTED_MASTER_KEY").map_err(|e| {
         eyre!(
@@ -374,12 +362,5 @@ mod tests {
             format_address("0x742d35Cc6634C0532925a3b8D4fd6c4d4d61ddD6"),
             "0x742d35Cc6634C0532925a3b8D4fd6c4d4d61ddD6"
         );
-    }
-
-    #[test]
-    fn test_generate_order_id() {
-        let order_id = generate_order_id("broker1", "account1", 1);
-        assert!(order_id.starts_with("0x"));
-        assert_eq!(order_id.len(), 66); // 0x + 64 hex chars
     }
 }
