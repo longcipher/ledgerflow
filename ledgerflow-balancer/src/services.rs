@@ -56,7 +56,7 @@ impl OrderService {
 
         // Create order
         let order = Order {
-            id: order_id_num as i64,
+            id: order_id_num,
             order_id,
             account_id: request.account_id,
             broker_id,
