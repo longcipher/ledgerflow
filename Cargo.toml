@@ -19,10 +19,10 @@ tower-http = "0.6.6"
 sqlx = "0.8.6"
 
 # CLI
-clap = "4.5.40"
+clap = "4.5.41"
 
 # Configuration
-config = "0.15.12"
+config = "0.15.13"
 serde = "1.0.219"
 serde_json = "1.0.140"
 serde_yaml = "0.9.33"
@@ -45,10 +45,10 @@ rand = "0.9.1"
 sha3 = "0.10.8"
 
 # Ethereum/EVM interaction
-alloy = "1.0.20"
+alloy = "1.0.22"
 
 # Telegram Bot Framework
-teloxide = "0.16.0"
+teloxide = "0.17.0"
 
 # HTTP client
 reqwest = "0.12.22"
