@@ -1,0 +1,18 @@
+[package]
+name = "ledgerflow_vault"
+version = "1.0.0"
+authors = ["LongCipher"]
+upgrade_policy = "compatible"
+
+[addresses]
+ledgerflow_vault = "_"
+
+[dev-addresses]
+ledgerflow_vault = "0x999"
+
+[dependencies.AptosFramework]
+git = "https://github.com/aptos-labs/aptos-framework.git"
+rev = "mainnet"
+subdir = "aptos-framework"
+
+[dev-dependencies]

@@ -257,7 +257,7 @@ ledgerflow-vault/
 ├── docs/                        # Documentation
 ├── foundry.toml                 # Foundry configuration
 ├── remappings.txt              # Import path mappings
-├── soldeer.lock                # Dependency lock file
+├── soldeer.lock               # Dependency lock file
 ├── chain_config.env            # Chain configuration
 ├── Makefile                    # Build automation
 ├── Justfile                    # Just build automation
