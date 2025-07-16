@@ -1,0 +1,2 @@
+   Compiling ledgerflow-indexer-aptos v0.1.0 (/Users/akagi201/src/github.com/longcipher/ledgerflow/ledgerflow-indexer-aptos)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.08s

@@ -1,0 +1,13 @@
+health_check_port: 8085
+contract_address: "0x..." # Aptos PaymentVault contract address
+starting_version: 0
+server_config:
+  transaction_stream_config:
+    indexer_grpc_data_service_address: "https://grpc.mainnet.aptoslabs.com:443"
+    auth_token: "YOUR_AUTH_TOKEN"
+    request_name_header: "LEDGERFLOW_APTOS_INDEXER"
+    starting_version: 0
+  postgres_config:
+    connection_string: "postgresql://postgres:password@localhost:5432/ledgerflow"
+postgres_config:
+  connection_string: "postgresql://postgres:password@localhost:5432/ledgerflow"

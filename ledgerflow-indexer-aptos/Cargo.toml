@@ -1,0 +1,33 @@
+[package]
+name = "ledgerflow-indexer-aptos"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# Aptos indexer SDK
+aptos-indexer-processor-sdk = { workspace = true, features = ["postgres_full"] }
+diesel_migrations = { workspace = true }
+
+# Core dependencies
+clap = { workspace = true, features = ["derive"] }
+eyre = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_yaml = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
+
+# Time handling
+chrono = { workspace = true, features = ["serde"] }
+
+# Utilities
+bigdecimal = { workspace = true }
+
+# Database (Diesel for compatibility with aptos-indexer-processor-sdk)
+diesel = { workspace = true, features = [
+    "chrono",
+    "postgres_backend",
+    "numeric",
+    "serde_json",
+    "uuid",
+] }
