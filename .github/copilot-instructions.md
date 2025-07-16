@@ -7,7 +7,8 @@ LedgerFlow is a blockchain-based payment gateway built on stablecoins (USDC) to 
 ## Architecture & Service Boundaries
 
 ### Core Components
-- **ledgerflow-vault/**: Smart contracts (Solidity/Foundry) - single PaymentVault contract that receives all USDC deposits
+- **ledgerflow-vault-evm/**: EVM smart contracts (Solidity/Foundry) - single PaymentVault contract that receives all USDC deposits
+- **ledgerflow-vault-aptos/**: Aptos smart contracts (Move) - alternative blockchain implementation
 - **ledgerflow-balancer/**: Backend API service (Rust/Axum) - business logic core, order management, account system
 - **ledgerflow-indexer/**: Event monitoring service (Rust/Alloy) - listens for DepositReceived events, updates order status
 - **ledgerflow-bot/**: Telegram bot frontend (Rust/Teloxide) - user interface for payment requests and notifications
@@ -25,15 +26,18 @@ LedgerFlow is a blockchain-based payment gateway built on stablecoins (USDC) to 
 ### Order ID Generation Algorithm
 All components use the same keccak256-based order ID generation:
 ```rust
+// From ledgerflow-balancer/src/utils.rs
 order_id = keccak256(abi.encodePacked(broker_id, account_id, order_id_num))
 ```
-- This pattern appears in `ledgerflow-balancer/src/services.rs` and must be consistent across all components
+- This pattern appears in `ledgerflow-balancer/src/utils.rs:generate_order_id()` and must be consistent across all components
+- Uses big-endian encoding for numeric values to match Solidity's abi.encodePacked
 
 ### Database Schema Patterns
 - Use `VARCHAR(255)` for amounts (arbitrary precision handling, no floating point)
 - All timestamps are `TIMESTAMP WITH TIME ZONE`
 - Order status uses PostgreSQL ENUM: `pending`, `deposited`, `completed`, `failed`, `cancelled`
 - Chain ID support built into all tables for multi-chain deployments
+- See `ledgerflow-migrations/migrations/001_initial_schema.sql` for complete schema
 
 ### Error Handling Convention
 - Use `eyre::Result` for error propagation in all Rust components
@@ -46,7 +50,7 @@ order_id = keccak256(abi.encodePacked(broker_id, account_id, order_id_num))
 ```bash
 # Use Just for common tasks (workspace root)
 just format    # Format all code (cargo fmt + taplo fmt)
-just lint      # Full linting pipeline with strict rules
+just lint      # Full linting pipeline with strict rules including clippy::unwrap_used
 just test      # Run all tests
 
 # Per-component builds
@@ -64,9 +68,12 @@ cargo run -- migrate
 
 ### Smart Contract Deployment
 ```bash
-# From ledgerflow-vault/
+# EVM contracts from ledgerflow-vault-evm/
 forge script script/DeployDeterministic.s.sol --rpc-url $RPC_URL --broadcast
 # Uses CREATE2 for deterministic addresses across chains
+
+# Move contracts from ledgerflow-vault-aptos/
+# See individual README files for Move-specific deployment
 ```
 
 ## Project-Specific Conventions
@@ -81,15 +88,17 @@ forge script script/DeployDeterministic.s.sol --rpc-url $RPC_URL --broadcast
 - Standardized on `tracing` framework across all Rust components
 - Structured logging with consistent field names: `order_id`, `account_id`, `chain_id`
 - Database operations always logged with context
+- Use info!/warn!/error! macros consistently
 
 ### Multi-Chain Support Pattern
-- Chain ID embedded in all data models and database tables
+- Chain ID embedded in all data models and database tables (`chain_id` field)
 - Indexer runs separate monitoring loops per chain/contract pair
 - Configuration supports multiple chain endpoints and contract addresses
+- Both EVM and non-EVM (Aptos) chains supported
 
 ### Security Patterns
 - Smart contract uses UUPS upgradeable pattern with OpenZeppelin
-- Bot manages encrypted private keys for user wallets (custodial model)
+- Bot manages encrypted private keys for user wallets (custodial model using XOR encryption)
 - Balancer validates business rules (max 2 pending orders per account)
 - All services validate order ownership before state changes
 
@@ -104,7 +113,7 @@ forge script script/DeployDeterministic.s.sol --rpc-url $RPC_URL --broadcast
 ```solidity
 event DepositReceived(address indexed payer, bytes32 indexed orderId, uint256 amount);
 ```
-- Indexer processes this event to complete payment flow
+- Indexer processes this event to complete payment flow using keccak256 signature matching
 - Event data maps directly to database order records
 - Must handle duplicate events (idempotent processing)
 
@@ -116,14 +125,16 @@ event DepositReceived(address indexed payer, bytes32 indexed orderId, uint256 am
 ## Key Files for Understanding Patterns
 
 - `ledgerflow-balancer/src/models.rs` - Core data models shared across services
+- `ledgerflow-balancer/src/utils.rs` - Order ID generation and encryption utilities
 - `ledgerflow-migrations/migrations/001_initial_schema.sql` - Complete database schema
-- `ledgerflow-vault/src/PaymentVault.sol` - Smart contract interface
+- `ledgerflow-vault-evm/src/PaymentVault.sol` - EVM smart contract interface
+- `ledgerflow-indexer/src/indexer.rs` - Event monitoring patterns and multi-chain handling
 - `Cargo.toml` (workspace root) - Shared dependency versions and features
-- `ledgerflow-indexer/src/indexer.rs` - Event monitoring patterns
 
 ## Testing Approach
 
 - Unit tests for business logic (order generation, validation)
 - Integration tests require PostgreSQL database
-- Smart contract tests use Foundry framework in `ledgerflow-vault/test/`
+- Smart contract tests use Foundry framework in `ledgerflow-vault-evm/test/`
 - Bot testing uses mock HTTP clients for Balancer API calls
+- Clippy configured to forbid `.unwrap()` usage - use proper error handling

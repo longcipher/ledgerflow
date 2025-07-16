@@ -51,28 +51,37 @@ LedgerFlow fundamentally solves these problems through the Web3 technology stack
 LedgerFlow uses a lightweight decoupled architecture consisting of the following core components:
 
 ```text
-ledgerflow/                    # Project root directory
-├── ledgerflow-vault/               # Smart contract module (PaymentVault)
-│   ├── src/                        # Contract source code
-│   ├── test/                       # Contract tests
+ledgerflow/                         # Project root directory
+├── ledgerflow-vault-evm/           # EVM smart contracts (PaymentVault)
+│   ├── src/                        # Solidity contract source code
+│   ├── test/                       # Contract tests (Foundry)
 │   ├── script/                     # Deployment scripts
-│   └── ...                         # Contract-related files
+│   └── ...                         # EVM contract-related files
+├── ledgerflow-vault-aptos/         # Aptos smart contracts (PaymentVault)
+│   ├── sources/                    # Move contract source code
+│   ├── tests/                      # Contract tests
+│   ├── scripts/                    # Deployment scripts
+│   └── ...                         # Aptos contract-related files
 ├── ledgerflow-balancer/            # Backend service (business logic core)
 ├── ledgerflow-bot/                 # Telegram Bot (user frontend)
 ├── ledgerflow-cli/                 # Command-line tool
 ├── ledgerflow-indexer/             # Event indexer (on-chain monitoring)
+├── ledgerflow-migrations/          # Database schema management
 └── ...                             # Workspace configuration
 ```
 
 ### Component Description
 
 1. **PaymentVault Contract (Smart Contract)**
+   - **EVM Implementation**: Solidity-based contracts for Ethereum, Polygon, Arbitrum, BSC, and other EVM-compatible chains
+   - **Aptos Implementation**: Move-based contracts for the Aptos blockchain ecosystem
    - Serves as the sole entry point and vault for funds, receiving and storing all USDC payments
    - Supports both standard `approve/deposit` and `permit/deposit` modes
    - Triggers events for Indexer monitoring, enabling on-chain and off-chain data synchronization
 
 2. **Indexer (Event Indexer)**
    - Real-time monitoring of DepositReceived events from PaymentVault contracts across multiple chains
+   - Supports both EVM and non-EVM blockchain architectures
    - Parses event data and updates order status to "completed"
 
 3. **Balancer (Backend Service)**
@@ -102,11 +111,12 @@ ledgerflow/                    # Project root directory
 - Eliminates complexity and security risks of server private key management
 - Supports secure storage of large amounts of funds
 
-### 2. Seamless Multi-Chain Support
+### 2. Comprehensive Multi-Chain Support
 
-- Can be deployed on any EVM-compatible chain
-- Supports Ethereum, Polygon, Arbitrum, Optimism, Base, BNB Chain, etc.
+- Can be deployed on any EVM-compatible chain (Ethereum, Polygon, Arbitrum, Optimism, Base, BNB Chain, etc.)
+- Supports non-EVM blockchains through dedicated implementations (Aptos with Move language)
 - Merchants can freely choose to enable payment collection on one or multiple chains based on needs
+- Unified indexer supports monitoring across different blockchain architectures
 
 ### 3. Programmable & Composable
 
@@ -124,7 +134,8 @@ ledgerflow/                    # Project root directory
 
 For detailed usage instructions, please refer to the README.md files in each module:
 
-- [Smart Contract Deployment and Usage](./ledgerflow-vault/README.md)
+- [EVM Smart Contract Deployment](./ledgerflow-vault-evm/README.md)
+- [Aptos Smart Contract Deployment](./ledgerflow-vault-aptos/README.md)
 - [Backend Service Configuration](./ledgerflow-balancer/README.md)
 - [Telegram Bot Setup](./ledgerflow-bot/README.md)
 - [Event Indexer Configuration](./ledgerflow-indexer/README.md)
