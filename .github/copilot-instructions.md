@@ -13,7 +13,7 @@ LedgerFlow is a blockchain-based payment gateway built on stablecoins (USDC) pro
 - **ledgerflow-indexer-evm/**: EVM event monitoring (Rust/Alloy) - listens for DepositReceived events
 - **ledgerflow-indexer-aptos/**: Aptos event monitoring (Rust) - monitors Move-based deposits
 - **ledgerflow-bot/**: Telegram bot frontend (Rust/Teloxide) - user interface for payment requests
-- **ledgerflow-cli/**: Command-line tools (Rust/Clap) - developer utilities
+- **ledgerflow-eth-cli/**: Command-line tools (Rust/Clap) - developer utilities
 - **ledgerflow-migrations/**: Database schema management (SQL) - unified PostgreSQL schema
 
 ### Critical Data Flow

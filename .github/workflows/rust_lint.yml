@@ -5,7 +5,7 @@ on:
     paths:
       - 'ledgerflow-balancer/**'
       - 'ledgerflow-bot/**'
-      - 'ledgerflow-cli/**'
+      - 'ledgerflow-eth-cli/**'
       - 'ledgerflow-indexer/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
@@ -14,7 +14,7 @@ on:
     paths:
       - 'ledgerflow-balancer/**'
       - 'ledgerflow-bot/**'
-      - 'ledgerflow-cli/**'
+      - 'ledgerflow-eth-cli/**'
       - 'ledgerflow-indexer/**'
       - 'Cargo.toml'
       - 'Cargo.lock'

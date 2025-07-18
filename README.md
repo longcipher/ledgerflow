@@ -64,7 +64,7 @@ ledgerflow/                         # Project root directory
 │   └── ...                         # Aptos contract-related files
 ├── ledgerflow-balancer/            # Backend service (business logic core)
 ├── ledgerflow-bot/                 # Telegram Bot (user frontend)
-├── ledgerflow-cli/                 # Command-line tool
+├── ledgerflow-eth-cli/             # Command-line tool for Ethereum
 ├── ledgerflow-indexer/             # Event indexer (on-chain monitoring)
 ├── ledgerflow-migrations/          # Database schema management
 └── ...                             # Workspace configuration
@@ -139,7 +139,7 @@ For detailed usage instructions, please refer to the README.md files in each mod
 - [Backend Service Configuration](./ledgerflow-balancer/README.md)
 - [Telegram Bot Setup](./ledgerflow-bot/README.md)
 - [Event Indexer Configuration](./ledgerflow-indexer/README.md)
-- [Command Line Tool Usage](./ledgerflow-cli/README.md)
+- [Command Line Tool Usage](./ledgerflow-eth-cli/README.md)
 
 ## 🔮 Future Vision
 

@@ -1,8 +1,8 @@
 [package]
-name = "ledgerflow-cli"
+name = "ledgerflow-eth-cli"
 version = "0.1.0"
 edition = "2024"
-description = "CLI tool for interacting with LedgerFlow PaymentVault contract"
+description = "CLI tool for interacting with LedgerFlow PaymentVault contract on Ethereum"
 
 [dependencies]
 alloy = { workspace = true, features = ["full"] }

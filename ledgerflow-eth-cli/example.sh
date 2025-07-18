@@ -12,7 +12,7 @@ AMOUNT="1000000"  # 1 USDC (6 decimals)
 DEADLINE=$(($(date +%s) + 3600))  # 1 hour from now
 
 # CLI binary path
-CLI="./target/release/ledgerflow-cli"
+CLI="./target/release/ledgerflow-eth-cli"
 
 echo "🚀 LedgerFlow CLI Example Usage"
 echo "================================="

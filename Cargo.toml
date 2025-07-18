@@ -2,7 +2,7 @@
 members = [
     "ledgerflow-balancer",
     "ledgerflow-bot",
-    "ledgerflow-cli",
+    "ledgerflow-eth-cli",
     "ledgerflow-indexer-evm",
     "ledgerflow-indexer-aptos",
     "ledgerflow-migrations",

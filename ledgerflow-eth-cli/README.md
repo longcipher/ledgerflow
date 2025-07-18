@@ -1,6 +1,6 @@
-# LedgerFlow CLI
+# LedgerFlow ETH CLI
 
-A command-line interface for interacting with the LedgerFlow PaymentVault smart contract using Rust and Alloy.
+A command-line interface for interacting with the LedgerFlow PaymentVault smart contract on Ethereum using Rust and Alloy.
 
 ## Features
 
@@ -13,7 +13,7 @@ A command-line interface for interacting with the LedgerFlow PaymentVault smart 
 ## Installation
 
 ```bash
-cd ledgerflow-cli
+cd ledgerflow-eth-cli
 cargo build --release
 ```
 
@@ -24,7 +24,7 @@ cargo build --release
 Requires prior USDC approval to the PaymentVault contract:
 
 ```bash
-./target/release/ledgerflow-cli deposit \
+./target/release/ledgerflow-eth-cli deposit \
   --rpc-url "https://sepolia.unichain.org" \
   --private-key "0x..." \
   --contract-address "0x..." \
@@ -37,7 +37,7 @@ Requires prior USDC approval to the PaymentVault contract:
 Combines approval and deposit in a single transaction:
 
 ```bash
-./target/release/ledgerflow-cli deposit-with-permit \
+./target/release/ledgerflow-eth-cli deposit-with-permit \
   --rpc-url "https://sepolia.unichain.org" \
   --private-key "0x..." \
   --contract-address "0x..." \
@@ -51,7 +51,7 @@ Combines approval and deposit in a single transaction:
 Withdraw all USDC from the vault:
 
 ```bash
-./target/release/ledgerflow-cli withdraw \
+./target/release/ledgerflow-eth-cli withdraw \
   --rpc-url "https://sepolia.unichain.org" \
   --private-key "0x..." \
   --contract-address "0x..."
@@ -112,7 +112,7 @@ export RPC_URL="https://sepolia.unichain.org"
 export VAULT_ADDRESS="0x742d35Cc6634C0532925a3b8D11C5d2B7e5B3F6E"
 
 # Use with CLI
-./target/release/ledgerflow-cli deposit \
+./target/release/ledgerflow-eth-cli deposit \
   --rpc-url "$RPC_URL" \
   --private-key "$PRIVATE_KEY" \
   --contract-address "$VAULT_ADDRESS" \
@@ -134,7 +134,7 @@ ORDERS=(
 
 for order in "${ORDERS[@]}"; do
   echo "Depositing for order: $order"
-  ./target/release/ledgerflow-cli deposit-with-permit \
+  ./target/release/ledgerflow-eth-cli deposit-with-permit \
     --rpc-url "$RPC_URL" \
     --private-key "$PRIVATE_KEY" \
     --contract-address "$VAULT_ADDRESS" \

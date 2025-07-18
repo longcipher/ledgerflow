@@ -38,7 +38,7 @@ check:
 # Run with example parameters (requires environment variables)
 example-deposit:
 	@echo "Running example deposit..."
-	@./target/release/ledgerflow-cli deposit \
+	@./target/release/ledgerflow-eth-cli deposit \
 		--rpc-url "${RPC_URL}" \
 		--private-key "${PRIVATE_KEY}" \
 		--contract-address "${VAULT_ADDRESS}" \
@@ -47,7 +47,7 @@ example-deposit:
 
 example-permit:
 	@echo "Running example permit deposit..."
-	@./target/release/ledgerflow-cli deposit-with-permit \
+	@./target/release/ledgerflow-eth-cli deposit-with-permit \
 		--rpc-url "${RPC_URL}" \
 		--private-key "${PRIVATE_KEY}" \
 		--contract-address "${VAULT_ADDRESS}" \
@@ -57,7 +57,7 @@ example-permit:
 
 example-withdraw:
 	@echo "Running example withdrawal..."
-	@./target/release/ledgerflow-cli withdraw \
+	@./target/release/ledgerflow-eth-cli withdraw \
 		--rpc-url "${RPC_URL}" \
 		--private-key "${PRIVATE_KEY}" \
 		--contract-address "${VAULT_ADDRESS}"

@@ -8,8 +8,8 @@ mod lib_utils;
 use commands::{execute_deposit, execute_deposit_with_permit, execute_withdraw};
 
 #[derive(Parser)]
-#[command(name = "ledgerflow-cli")]
-#[command(about = "A CLI tool for interacting with LedgerFlow PaymentVault contract")]
+#[command(name = "ledgerflow-eth-cli")]
+#[command(about = "A CLI tool for interacting with LedgerFlow PaymentVault contract on Ethereum")]
 #[command(version = "0.1.0")]
 struct Cli {
     #[command(subcommand)]

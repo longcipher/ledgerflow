@@ -3842,7 +3842,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ledgerflow-cli"
+name = "ledgerflow-eth-cli"
 version = "0.1.0"
 dependencies = [
  "alloy",
