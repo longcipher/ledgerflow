@@ -1,0 +1,34 @@
+[package]
+name = "ledgerflow-aptos-cli"
+version = "0.1.0"
+edition = "2021"
+authors = ["LedgerFlow Team"]
+description = "Command-line interface for interacting with LedgerFlow Aptos payment vault contracts"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/longcipher/ledgerflow"
+
+[dependencies]
+# Aptos SDK for blockchain interaction
+aptos-sdk = { git = "https://github.com/aptos-labs/aptos-core", branch = "devnet" }
+# bcs = { workspace = true }
+
+# CLI framework
+clap = { workspace = true, features = ["derive"] }
+# Async runtime
+tokio = { workspace = true, features = ["full"] }
+# Error handling
+color-eyre = { workspace = true }
+eyre = { workspace = true }
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+# Utilities
+config = { workspace = true }
+hex = { workspace = true }
+# HTTP client for REST API
+reqwest = { workspace = true, features = ["json"] }
+# chrono = { workspace = true, features = ["serde"] }

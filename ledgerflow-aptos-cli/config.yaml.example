@@ -1,0 +1,30 @@
+network:
+  # Aptos node REST API URL
+  node_url: "https://api.devnet.aptoslabs.com/v1"
+  # Chain ID (4 for devnet, 2 for testnet, 1 for mainnet)
+  chain_id: 4
+  # Optional faucet URL for testnet/devnet funding
+  faucet_url: "https://faucet.devnet.aptoslabs.com"
+
+account:
+  # Your private key in hex format (with or without 0x prefix)
+  # IMPORTANT: Keep this secure and never commit to version control
+  private_key: "0x0000000000000000000000000000000000000000000000000000000000000000"
+  # Optional: Override account address (derived from private key if not provided)
+  address: null
+
+transaction:
+  # Maximum gas units to spend on transactions
+  max_gas: 100000
+  # Gas unit price in octas (if null, will be estimated automatically)
+  gas_unit_price: null
+  # Transaction expiration timeout in seconds
+  expiration_secs: 600
+  # Whether to wait for transaction completion before returning
+  wait_for_transaction: true
+
+vault:
+  # Address where the payment vault contract is deployed
+  contract_address: "0x0000000000000000000000000000000000000000000000000000000000000000"
+  # Module name (usually "payment_vault")
+  module_name: "payment_vault"
