@@ -5,7 +5,7 @@ authors = ["LongCipher"]
 upgrade_policy = "compatible"
 
 [addresses]
-ledgerflow_vault = "_"
+ledgerflow_vault = "0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846"
 
 [dev-addresses]
 ledgerflow_vault = "0x999"

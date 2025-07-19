@@ -1,18 +1,18 @@
-/// # LedgerFlow Payment Vault
+/// # LedgerFlow Payment Vault (Fungible Asset Version)
 ///
 /// This module implements a secure payment vault for USDC deposits on Aptos blockchain.
 /// It provides non-custodial fund management with order tracking and owner-controlled withdrawals.
+/// This version uses Fungible Assets (FA) instead of the legacy Coin standard.
 ///
 /// ## Core Features
 /// - Secure USDC deposit with order ID tracking
 /// - Owner-only withdrawal functionality
 /// - Event emission for off-chain monitoring
 /// - Ownership transfer capability
-/// - Emergency token recovery (future enhancement)
 ///
 /// ## Architecture
 /// The vault uses Aptos' resource model for enhanced security:
-/// - PaymentVault resource stores USDC coins and metadata
+/// - PaymentVault resource stores USDC fungible assets and metadata
 /// - OwnerCapability resource controls administrative functions
 /// - Events provide real-time updates for indexers
 ///
@@ -22,14 +22,16 @@
 /// - Input validation on all public functions
 /// - Linear type safety prevents double-spending
 
-module ledgerflow_vault::payment_vault {
+module ledgerflow_vault::payment_vault_fa {
     use std::error;
     use std::signer;
     use std::vector;
     use std::timestamp;
+    use std::object::{Self, Object};
 
-    use aptos_framework::coin::{Self, Coin};
     use aptos_framework::event;
+    use aptos_framework::fungible_asset::{Self, Metadata, FungibleStore};
+    use aptos_framework::primary_fungible_store;
 
     // ==================== Error Codes ====================
 
@@ -52,10 +54,12 @@ module ledgerflow_vault::payment_vault {
 
     // ==================== Resources ====================
 
-    /// Main vault resource that stores USDC coins and manages deposits/withdrawals
+    /// Main vault resource that stores USDC fungible assets and manages deposits/withdrawals
     struct PaymentVault has key {
-        /// USDC coin store for holding deposited funds
-        usdc_store: Coin<USDC>,
+        /// USDC fungible store for holding deposited funds
+        usdc_store: Object<FungibleStore>,
+        /// USDC metadata object reference
+        usdc_metadata: Object<Metadata>,
         /// Total number of deposits made (for tracking and event indexing)
         deposit_count: u64,
         /// Vault creation timestamp
@@ -117,6 +121,7 @@ module ledgerflow_vault::payment_vault {
     ///
     /// # Parameters
     /// * `account` - The signer who will become the vault owner
+    /// * `usdc_metadata_addr` - The address of the USDC metadata object
     ///
     /// # Aborts
     /// * `E_ALREADY_INITIALIZED` - If vault already exists at this address
@@ -124,9 +129,9 @@ module ledgerflow_vault::payment_vault {
     /// # Examples
     /// ```move
     /// // Initialize vault (called by contract deployer)
-    /// initialize(&deployer_signer);
+    /// initialize(&deployer_signer, @0x69091fbab5f7d635ee7ac5098cf0c1efbe31d68fec0f2cd565e8d168daf52832);
     /// ```
-    public entry fun initialize(account: &signer) {
+    public entry fun initialize(account: &signer, usdc_metadata_addr: address) {
         let account_addr = signer::address_of(account);
 
         // Ensure vault hasn't been initialized yet
@@ -139,12 +144,16 @@ module ledgerflow_vault::payment_vault {
             error::already_exists(E_ALREADY_INITIALIZED)
         );
 
-        // Create empty USDC coin store
-        let usdc_store = coin::zero<USDC>();
+        // Get USDC metadata object
+        let usdc_metadata = object::address_to_object<Metadata>(usdc_metadata_addr);
+        
+        // Create a fungible store for USDC
+        let usdc_store = fungible_asset::create_store(&object::create_object_from_account(account), usdc_metadata);
 
         // Create vault resource
         let vault = PaymentVault {
             usdc_store,
+            usdc_metadata,
             deposit_count: 0,
             created_at: timestamp::now_seconds()
         };
@@ -195,21 +204,22 @@ module ledgerflow_vault::payment_vault {
         );
 
         let payer_addr = signer::address_of(payer);
+        let vault = borrow_global_mut<PaymentVault>(vault_address);
 
+        // Get payer's primary store for USDC
+        let payer_store = primary_fungible_store::primary_store(payer_addr, vault.usdc_metadata);
+        
         // Ensure payer has sufficient USDC balance
         assert!(
-            coin::balance<USDC>(payer_addr) >= amount,
+            fungible_asset::balance(payer_store) >= amount,
             error::invalid_state(E_INSUFFICIENT_BALANCE)
         );
 
-        // Extract USDC from payer's account
-        let deposit_coin = coin::withdraw<USDC>(payer, amount);
+        // Withdraw USDC from payer's primary store
+        let deposit_fa = primary_fungible_store::withdraw(payer, vault.usdc_metadata, amount);
 
-        // Get mutable reference to vault
-        let vault = borrow_global_mut<PaymentVault>(vault_address);
-
-        // Merge the deposited coin into vault's store
-        coin::merge(&mut vault.usdc_store, deposit_coin);
+        // Deposit to vault's store
+        fungible_asset::deposit(vault.usdc_store, deposit_fa);
 
         // Increment deposit counter
         vault.deposit_count = vault.deposit_count + 1;
@@ -272,21 +282,14 @@ module ledgerflow_vault::payment_vault {
         let vault = borrow_global_mut<PaymentVault>(vault_address);
 
         // Check vault has sufficient balance
-        let vault_balance = coin::value(&vault.usdc_store);
+        let vault_balance = fungible_asset::balance(vault.usdc_store);
         assert!(vault_balance >= amount, error::invalid_state(E_INSUFFICIENT_BALANCE));
 
-        // Extract coins from vault
-        let withdraw_coin = coin::extract(&mut vault.usdc_store, amount);
+        // Withdraw from vault store
+        let withdraw_fa = fungible_asset::withdraw(owner, vault.usdc_store, amount);
 
-        // Ensure recipient can receive coins (register if needed)
-        if (!coin::is_account_registered<USDC>(recipient)) {
-            // Note: In production, the recipient should register themselves
-            // This is a simplified approach for testing/demo purposes
-            assert!(false, error::invalid_state(E_INVALID_ADDRESS));
-        };
-
-        // Deposit to recipient
-        coin::deposit(recipient, withdraw_coin);
+        // Deposit to recipient's primary store
+        primary_fungible_store::deposit(recipient, withdraw_fa);
 
         // Emit withdrawal event
         event::emit(
@@ -321,7 +324,7 @@ module ledgerflow_vault::payment_vault {
         );
 
         let vault = borrow_global<PaymentVault>(vault_address);
-        let total_balance = coin::value(&vault.usdc_store);
+        let total_balance = fungible_asset::balance(vault.usdc_store);
 
         assert!(total_balance > 0, error::invalid_state(E_INSUFFICIENT_BALANCE));
 
@@ -385,7 +388,7 @@ module ledgerflow_vault::payment_vault {
             error::not_found(E_NOT_INITIALIZED)
         );
         let vault = borrow_global<PaymentVault>(vault_address);
-        coin::value(&vault.usdc_store)
+        fungible_asset::balance(vault.usdc_store)
     }
 
     #[view]
@@ -427,6 +430,17 @@ module ledgerflow_vault::payment_vault {
         exists<PaymentVault>(vault_address) && exists<OwnerCapability>(vault_address)
     }
 
+    #[view]
+    /// Get the USDC metadata object address
+    public fun get_usdc_metadata_address(vault_address: address): address acquires PaymentVault {
+        assert!(
+            exists<PaymentVault>(vault_address),
+            error::not_found(E_NOT_INITIALIZED)
+        );
+        let vault = borrow_global<PaymentVault>(vault_address);
+        object::object_address(&vault.usdc_metadata)
+    }
+
     // ==================== Helper Functions ====================
 
     /// Internal function to verify that the caller is the vault owner
@@ -441,49 +455,5 @@ module ledgerflow_vault::payment_vault {
         let caller_addr = signer::address_of(caller);
         let owner_cap = borrow_global<OwnerCapability>(vault_address);
         assert!(caller_addr == owner_cap.owner, error::permission_denied(E_NOT_OWNER));
-    }
-
-    // ==================== Test-Only Functions ====================
-
-    #[test_only]
-    use aptos_framework::coin::BurnCapability;
-    #[test_only]
-    use aptos_framework::coin::FreezeCapability;
-    #[test_only]
-    use aptos_framework::coin::MintCapability;
-
-    #[test_only]
-    use std::string;
-
-    #[test_only]
-    /// Initialize a fake USDC coin for testing purposes
-    public fun init_usdc_for_test(
-        admin: &signer
-    ): (BurnCapability<USDC>, FreezeCapability<USDC>, MintCapability<USDC>) {
-        coin::initialize<USDC>(
-            admin,
-            string::utf8(b"USD Coin"),
-            string::utf8(b"USDC"),
-            6, // 6 decimal places like real USDC
-            true // monitor_supply
-        )
-    }
-
-    #[test_only]
-    /// Helper function to create test accounts with USDC
-    public fun setup_test_account(
-        _admin: &signer,
-        user: &signer,
-        mint_cap: &MintCapability<USDC>,
-        amount: u64
-    ) {
-        let user_addr = signer::address_of(user);
-
-        // Register user for USDC
-        coin::register<USDC>(user);
-
-        // Mint USDC to user
-        let usdc_coins = coin::mint<USDC>(amount, mint_cap);
-        coin::deposit(user_addr, usdc_coins);
     }
 }
