@@ -1,0 +1,39 @@
+{
+  "name": "ledgerflow-aptos-cli-ts",
+  "version": "1.0.0",
+  "description": "TypeScript CLI for interacting with LedgerFlow Aptos contracts",
+  "main": "dist/index.js",
+  "bin": {
+    "ledgerflow-aptos": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "bun --watch src/index.ts",
+    "format": "biome format --write .",
+    "lint": "biome lint .",
+    "check": "biome check .",
+    "test": "bun test",
+    "clean": "rm -rf dist"
+  },
+  "keywords": ["aptos", "blockchain", "cli", "ledgerflow", "usdc"],
+  "author": "LongCipher",
+  "license": "MIT",
+  "dependencies": {
+    "@aptos-labs/ts-sdk": "^1.29.0",
+    "commander": "^12.0.0",
+    "chalk": "^5.3.0",
+    "ora": "^8.0.1",
+    "inquirer": "^10.2.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.9",
+    "@types/inquirer": "^9.0.7",
+    "@biomejs/biome": "^1.9.4",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "bun": ">=1.0.0"
+  }
+}
