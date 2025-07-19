@@ -13,7 +13,9 @@ LedgerFlow is a blockchain-based payment gateway built on stablecoins (USDC) pro
 - **ledgerflow-indexer-evm/**: EVM event monitoring (Rust/Alloy) - listens for DepositReceived events
 - **ledgerflow-indexer-aptos/**: Aptos event monitoring (Rust) - monitors Move-based deposits
 - **ledgerflow-bot/**: Telegram bot frontend (Rust/Teloxide) - user interface for payment requests
-- **ledgerflow-eth-cli/**: Command-line tools (Rust/Clap) - developer utilities
+- **ledgerflow-eth-cli/**: Command-line tools (Rust/Clap) - EVM developer utilities
+- **ledgerflow-aptos-cli/**: Command-line tools (Rust/Clap) - Aptos developer utilities
+- **ledgerflow-aptos-cli-ts/**: TypeScript CLI (Bun/Commander.js) - modern Aptos interaction tool
 - **ledgerflow-migrations/**: Database schema management (SQL) - unified PostgreSQL schema
 
 ### Critical Data Flow
@@ -52,11 +54,15 @@ order_id = keccak256(abi.encodePacked(broker_id, account_id, order_id_num))
 ```bash
 # Root workspace commands
 just format    # taplo fmt + cargo +nightly fmt --all
-just lint      # strict clippy with -D clippy::unwrap_used
+just lint      # strict clippy with -D clippy::unwrap_used + cargo machete
 just test      # cargo test workspace-wide
 
-# Component-specific
-cd ledgerflow-{component} && make build
+# Component-specific builds
+cd ledgerflow-{component} && cargo build
+
+# TypeScript CLI (separate ecosystem)
+cd ledgerflow-aptos-cli-ts && npm run build
+cd ledgerflow-aptos-cli-ts && npm run dev    # Bun watch mode
 ```
 
 ### Database Management Pattern
@@ -71,6 +77,11 @@ cargo run -- migrate
 # EVM: Foundry with deterministic deployment
 forge script script/DeployDeterministic.s.sol --rpc-url $RPC_URL --broadcast
 
+# Aptos: Move commands via CLI tools
+cd ledgerflow-vault-aptos && aptos move publish
+# Or use TypeScript CLI for modern UX
+cd ledgerflow-aptos-cli-ts && npm run build && node dist/index.js
+
 # Configuration supports multiple chains simultaneously
 # Each indexer instance monitors one chain/contract pair
 ```
@@ -82,6 +93,12 @@ forge script script/DeployDeterministic.s.sol --rpc-url $RPC_URL --broadcast
 - Config struct + `serde` + `config` crate pattern
 - CLI `--config` argument overrides default `config.yaml`
 - Environment variables override file values
+
+### Workspace Dependencies
+- All dependencies specified in root `Cargo.toml` `[workspace.dependencies]`
+- Individual crates reference workspace versions to avoid conflicts
+- Key patterns: `axum`, `tokio`, `sqlx`, `clap`, `config`, `tracing`, `eyre`
+- Special handling for Aptos SDK via git dependencies with patches
 
 ### Error Handling Standard
 - `eyre::Result` for all fallible operations

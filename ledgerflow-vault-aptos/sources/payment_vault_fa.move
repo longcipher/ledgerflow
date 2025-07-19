@@ -32,6 +32,7 @@ module ledgerflow_vault::payment_vault_fa {
     use aptos_framework::event;
     use aptos_framework::fungible_asset::{Self, Metadata, FungibleStore};
     use aptos_framework::primary_fungible_store;
+    use aptos_framework::dispatchable_fungible_asset;
 
     // ==================== Error Codes ====================
 
@@ -215,11 +216,11 @@ module ledgerflow_vault::payment_vault_fa {
             error::invalid_state(E_INSUFFICIENT_BALANCE)
         );
 
-        // Withdraw USDC from payer's primary store
-        let deposit_fa = primary_fungible_store::withdraw(payer, vault.usdc_metadata, amount);
+        // Withdraw USDC from payer's primary store using dispatchable FA
+        let deposit_fa = dispatchable_fungible_asset::withdraw(payer, payer_store, amount);
 
-        // Deposit to vault's store
-        fungible_asset::deposit(vault.usdc_store, deposit_fa);
+        // Deposit to vault's store using dispatchable FA
+        dispatchable_fungible_asset::deposit(vault.usdc_store, deposit_fa);
 
         // Increment deposit counter
         vault.deposit_count = vault.deposit_count + 1;
@@ -285,11 +286,12 @@ module ledgerflow_vault::payment_vault_fa {
         let vault_balance = fungible_asset::balance(vault.usdc_store);
         assert!(vault_balance >= amount, error::invalid_state(E_INSUFFICIENT_BALANCE));
 
-        // Withdraw from vault store
-        let withdraw_fa = fungible_asset::withdraw(owner, vault.usdc_store, amount);
+        // Withdraw from vault store using dispatchable FA
+        let withdraw_fa = dispatchable_fungible_asset::withdraw(owner, vault.usdc_store, amount);
 
-        // Deposit to recipient's primary store
-        primary_fungible_store::deposit(recipient, withdraw_fa);
+        // Deposit to recipient's primary store using dispatchable FA
+        let recipient_store = primary_fungible_store::primary_store(recipient, vault.usdc_metadata);
+        dispatchable_fungible_asset::deposit(recipient_store, withdraw_fa);
 
         // Emit withdrawal event
         event::emit(

@@ -18,6 +18,12 @@ By leveraging blockchain's transparency, security, and composability, LedgerFlow
 * Unichain Faucet: <https://docs.unichain.org/docs/tools/faucets>
 * MVP Demo video: <https://youtu.be/YedfwqCenMQ>
 
+## Aptos Testnet Demo
+
+* PaymentVault Contract: [0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846](https://aptoscan.com/account/0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846?network=testnet)
+* Deposit tx: [0x93e242a077c1424b1ff64e2dfafd7b965a77ed4f4f381e74615a76b1c14a7e58](https://aptoscan.com/transaction/6812053128?network=testnet)
+* Withdraw tx: [0x28a2e327961686fdaa0e3bf1ea5ef1a342019044fe161b7ea9d61417e4c1e38b](https://aptoscan.com/transaction/6812054574?network=testnet)
+
 ## Arch
 
 <div align="center">
@@ -64,8 +70,11 @@ ledgerflow/                         # Project root directory
 │   └── ...                         # Aptos contract-related files
 ├── ledgerflow-balancer/            # Backend service (business logic core)
 ├── ledgerflow-bot/                 # Telegram Bot (user frontend)
+├── ledgerflow-indexer-evm/         # EVM event indexer (on-chain monitoring)
+├── ledgerflow-indexer-aptos/       # Aptos event indexer (on-chain monitoring)
 ├── ledgerflow-eth-cli/             # Command-line tool for Ethereum
-├── ledgerflow-indexer/             # Event indexer (on-chain monitoring)
+├── ledgerflow-aptos-cli/           # Command-line tool for Aptos (Rust)
+├── ledgerflow-aptos-cli-ts/        # Command-line tool for Aptos (TypeScript)
 ├── ledgerflow-migrations/          # Database schema management
 └── ...                             # Workspace configuration
 ```
@@ -73,25 +82,35 @@ ledgerflow/                         # Project root directory
 ### Component Description
 
 1. **PaymentVault Contract (Smart Contract)**
-   - **EVM Implementation**: Solidity-based contracts for Ethereum, Polygon, Arbitrum, BSC, and other EVM-compatible chains
-   - **Aptos Implementation**: Move-based contracts for the Aptos blockchain ecosystem
-   - Serves as the sole entry point and vault for funds, receiving and storing all USDC payments
-   - Supports both standard `approve/deposit` and `permit/deposit` modes
-   - Triggers events for Indexer monitoring, enabling on-chain and off-chain data synchronization
+   * **EVM Implementation**: Solidity-based contracts for Ethereum, Polygon, Arbitrum, BSC, and other EVM-compatible chains
+   * **Aptos Implementation**: Move-based contracts for the Aptos blockchain ecosystem
+   * Serves as the sole entry point and vault for funds, receiving and storing all USDC payments
+   * Supports both standard `approve/deposit` and `permit/deposit` modes
+   * Triggers events for Indexer monitoring, enabling on-chain and off-chain data synchronization
 
-2. **Indexer (Event Indexer)**
-   - Real-time monitoring of DepositReceived events from PaymentVault contracts across multiple chains
-   - Supports both EVM and non-EVM blockchain architectures
-   - Parses event data and updates order status to "completed"
+2. **Event Indexers (Blockchain Monitoring)**
+   * **EVM Indexer**: Real-time monitoring of DepositReceived events from PaymentVault contracts on EVM-compatible chains
+   * **Aptos Indexer**: Dedicated indexer for monitoring events on the Aptos blockchain
+   * Supports multi-chain monitoring with separate instances for each blockchain
+   * Parses event data and updates order status to "completed"
 
 3. **Balancer (Backend Service)**
-   - Business logic core of the system, providing REST APIs
-   - Handles account management, order creation, status queries, balance calculations, and other business functions
-   - Connects user frontend with off-chain data
+   * Business logic core of the system, providing REST APIs
+   * Handles account management, order creation, status queries, balance calculations, and other business functions
+   * Connects user frontend with off-chain data
 
 4. **Telegram Bot (User Frontend)**
-   - Primary interface for users to interact with the LedgerFlow system
-   - Handles user onboarding, payment initiation, status notifications, balance queries, and other functions
+   * Primary interface for users to interact with the LedgerFlow system
+   * Handles user onboarding, payment initiation, status notifications, balance queries, and other functions
+
+5. **Command Line Tools**
+   * **ledgerflow-eth-cli**: Rust-based CLI for EVM blockchain interactions
+   * **ledgerflow-aptos-cli**: Rust-based CLI for Aptos blockchain interactions
+   * **ledgerflow-aptos-cli-ts**: TypeScript-based CLI for modern Aptos development experience
+
+6. **Database Migrations**
+   * **ledgerflow-migrations**: Unified database schema management across all services
+   * Supports PostgreSQL with proper migration versioning and rollback capabilities
 
 ## 🔄 Payment Flow
 
@@ -107,46 +126,50 @@ ledgerflow/                         # Project root directory
 
 ### 1. Non-Custodial Vault
 
-- Uses a single PaymentVault smart contract as the fund aggregation entry point
-- Eliminates complexity and security risks of server private key management
-- Supports secure storage of large amounts of funds
+* Uses a single PaymentVault smart contract as the fund aggregation entry point
+* Eliminates complexity and security risks of server private key management
+* Supports secure storage of large amounts of funds
 
 ### 2. Comprehensive Multi-Chain Support
 
-- Can be deployed on any EVM-compatible chain (Ethereum, Polygon, Arbitrum, Optimism, Base, BNB Chain, etc.)
-- Supports non-EVM blockchains through dedicated implementations (Aptos with Move language)
-- Merchants can freely choose to enable payment collection on one or multiple chains based on needs
-- Unified indexer supports monitoring across different blockchain architectures
+* Can be deployed on any EVM-compatible chain (Ethereum, Polygon, Arbitrum, Optimism, Base, BNB Chain, etc.)
+* Supports non-EVM blockchains through dedicated implementations (Aptos with Move language)
+* Merchants can freely choose to enable payment collection on one or multiple chains based on needs
+* Specialized indexers support monitoring across different blockchain architectures
 
 ### 3. Programmable & Composable
 
-- **Subscription payments**: Support time-locked automatic deduction subscription models
-- **DeFi integration**: Idle funds can be combined with Staking, Lending and other protocols to generate additional yield
-- **Multi-currency support**: Can be combined with DEX aggregators to support payments in any token
+* **Subscription payments**: Support time-locked automatic deduction subscription models
+* **DeFi integration**: Idle funds can be combined with Staking, Lending and other protocols to generate additional yield
+* **Multi-currency support**: Can be combined with DEX aggregators to support payments in any token
 
 ### 4. User-Friendly Payment Experience
 
-- Supports EIP-2612 permit signatures for "user-side gasless" experience
-- One off-chain signature completes authorization and payment
-- Greatly improves conversion rates and user experience
+* Supports EIP-2612 permit signatures for "user-side gasless" experience
+* One off-chain signature completes authorization and payment
+* Greatly improves conversion rates and user experience
 
 ## 🎯 Quick Start
 
 For detailed usage instructions, please refer to the README.md files in each module:
 
-- [EVM Smart Contract Deployment](./ledgerflow-vault-evm/README.md)
-- [Aptos Smart Contract Deployment](./ledgerflow-vault-aptos/README.md)
-- [Backend Service Configuration](./ledgerflow-balancer/README.md)
-- [Telegram Bot Setup](./ledgerflow-bot/README.md)
-- [Event Indexer Configuration](./ledgerflow-indexer/README.md)
-- [Command Line Tool Usage](./ledgerflow-eth-cli/README.md)
+* [EVM Smart Contract Deployment](./ledgerflow-vault-evm/README.md)
+* [Aptos Smart Contract Deployment](./ledgerflow-vault-aptos/README.md)
+* [Backend Service Configuration](./ledgerflow-balancer/README.md)
+* [Telegram Bot Setup](./ledgerflow-bot/README.md)
+* [EVM Event Indexer Configuration](./ledgerflow-indexer-evm/README.md)
+* [Aptos Event Indexer Configuration](./ledgerflow-indexer-aptos/README.md)
+* [Database Migrations Setup](./ledgerflow-migrations/README.md)
+* [EVM Command Line Tool Usage](./ledgerflow-eth-cli/README.md)
+* [Aptos CLI Tools](./ledgerflow-aptos-cli/README.md)
+* [TypeScript Aptos CLI](./ledgerflow-aptos-cli-ts/README.md)
 
 ## 🔮 Future Vision
 
-- **SaaS Merchant Dashboard**: Develop Web frontend for merchants to manage orders and data more intuitively
-- **One-Click Plugin Integration**: Develop payment plugins for mainstream e-commerce platforms
-- **Subscription & Recurring Payments**: Implement authorization and time-lock logic at the contract level
-- **Business Model**: Free usage initially, future minimal service fees (0.1% - 0.25%) on withdrawals
+* **SaaS Merchant Dashboard**: Develop Web frontend for merchants to manage orders and data more intuitively
+* **One-Click Plugin Integration**: Develop payment plugins for mainstream e-commerce platforms
+* **Subscription & Recurring Payments**: Implement authorization and time-lock logic at the contract level
+* **Business Model**: Free usage initially, future minimal service fees (0.1% - 0.25%) on withdrawals
 
 ---
 
