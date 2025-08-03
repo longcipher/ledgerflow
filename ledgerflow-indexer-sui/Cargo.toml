@@ -1,0 +1,45 @@
+[package]
+name = "ledgerflow-indexer-sui"
+version = "0.1.0"
+edition = "2024"
+authors = ["LedgerFlow Team"]
+description = "Event indexer for LedgerFlow Sui payment vault contracts"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/longcipher/ledgerflow"
+
+[dependencies]
+# Sui SDK for blockchain interaction
+sui-json-rpc-types = { git = "https://github.com/mystenlabs/sui", package = "sui-json-rpc-types" }
+sui-sdk = { git = "https://github.com/mystenlabs/sui", package = "sui-sdk" }
+
+# Core dependencies
+clap = { workspace = true, features = ["derive"] }
+eyre = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
+
+# Time handling
+chrono = { workspace = true, features = ["serde"] }
+
+# Database (SQLx for async database operations)
+sqlx = { workspace = true, features = [
+    "runtime-tokio-rustls",
+    "postgres",
+    "chrono",
+    "bigdecimal",
+    "migrate",
+] }
+
+# Utilities
+bigdecimal = { workspace = true, features = ["serde"] }
+hex = { workspace = true }
+
+# Configuration
+config = { workspace = true }
+
+# HTTP client and server for health check
+axum = { workspace = true }

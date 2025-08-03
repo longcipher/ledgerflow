@@ -5,6 +5,7 @@ members = [
     "ledgerflow-eth-cli",
     "ledgerflow-indexer-evm",
     "ledgerflow-indexer-aptos",
+    "ledgerflow-indexer-sui",
     "ledgerflow-migrations",
     "ledgerflow-aptos-cli",
     "ledgerflow-sui-cli",
@@ -52,7 +53,7 @@ alloy = "1.0.22"
 
 # Diesel (for Aptos indexer compatibility)
 aptos-indexer-processor-sdk = { git = "https://github.com/aptos-labs/aptos-indexer-processor-sdk.git", tag = "aptos-indexer-processor-sdk-v2.1.1" }
-bigdecimal = "0.4.8"
+bigdecimal = { version = "0.4.8", features = ["serde"] }
 diesel = "=2.2.0"
 diesel_migrations = "=2.2.0"
 

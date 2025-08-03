@@ -1,0 +1,25 @@
+health_check_port: 8086
+
+network:
+  rpc_url: "https://fullnode.devnet.sui.io:443"
+  ws_url: "wss://fullnode.devnet.sui.io:443"
+  network: "devnet"
+
+contract:
+  package_id: "0x..." # Sui PaymentVault package ID
+  module_name: "payment_vault"
+  deposit_event_type: "DepositReceived"
+  withdraw_event_type: "WithdrawCompleted"
+  ownership_transfer_event_type: "OwnershipTransferred"
+
+indexer:
+  starting_checkpoint: 0
+  checkpoint_batch_size: 100
+  processing_delay_ms: 1000
+  max_retries: 5
+  retry_delay_ms: 5000
+
+database:
+  connection_string: "postgresql://postgres:password@localhost:5432/ledgerflow"
+  max_connections: 10
+  connection_timeout_secs: 30
