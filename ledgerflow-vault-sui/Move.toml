@@ -1,0 +1,12 @@
+[package]
+name = "ledgerflow_vault_sui"
+edition = "2024.beta"
+version = "1.0.0"
+license = "MIT"
+authors = ["LedgerFlow Team"]
+
+[dependencies]
+usdc = { git = "https://github.com/circlefin/stablecoin-sui.git", subdir = "packages/usdc", rev = "master" }
+
+[addresses]
+ledgerflow_vault_sui = "0x0"

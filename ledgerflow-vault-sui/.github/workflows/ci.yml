@@ -1,0 +1,47 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+    paths: 
+      - 'ledgerflow-vault-sui/**'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'ledgerflow-vault-sui/**'
+
+defaults:
+  run:
+    working-directory: ledgerflow-vault-sui
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Sui CLI
+      run: |
+        curl -fLJO https://github.com/MystenLabs/sui/releases/download/testnet-v1.17.0/sui-testnet-v1.17.0-ubuntu-x86_64.tgz
+        tar -xzf sui-testnet-v1.17.0-ubuntu-x86_64.tgz
+        sudo mv sui-testnet-v1.17.0-ubuntu-x86_64/sui /usr/local/bin/
+        sui --version
+    
+    - name: Build Move package
+      run: |
+        sui move build
+    
+    - name: Run Move tests
+      run: |
+        sui move test
+    
+    - name: Check Move formatting
+      run: |
+        sui move build --dump-bytecode-as-base64 --path . > /dev/null
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: move-build-output
+        path: ledgerflow-vault-sui/build/

@@ -1,0 +1,33 @@
+# Build artifacts
+build/
+.sui/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Deployment files
+deployments/*.json
+
+# Logs
+*.log
+
+# Environment variables
+.env
+.env.local
+
+# Node modules (if using TypeScript tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Cache directories
+.cache/
+.tmp/
