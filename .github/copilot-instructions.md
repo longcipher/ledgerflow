@@ -9,12 +9,15 @@ LedgerFlow is a blockchain-based payment gateway built on stablecoins (USDC) pro
 ### Core Components
 - **ledgerflow-vault-evm/**: EVM smart contracts (Solidity/Foundry) - PaymentVault UUPS upgradeable contract for USDC deposits
 - **ledgerflow-vault-aptos/**: Aptos smart contracts (Move) - alternative blockchain implementation
+- **ledgerflow-vault-sui/**: Sui smart contracts (Move) - object-based payment vault with capability control
 - **ledgerflow-balancer/**: Backend API service (Rust/Axum) - business logic core, order management, account system
 - **ledgerflow-indexer-evm/**: EVM event monitoring (Rust/Alloy) - listens for DepositReceived events
 - **ledgerflow-indexer-aptos/**: Aptos event monitoring (Rust) - monitors Move-based deposits
+- **ledgerflow-indexer-sui/**: Sui event monitoring (Rust/Sui SDK) - checkpoint-based event processing
 - **ledgerflow-bot/**: Telegram bot frontend (Rust/Teloxide) - user interface for payment requests
 - **ledgerflow-eth-cli/**: Command-line tools (Rust/Clap) - EVM developer utilities
 - **ledgerflow-aptos-cli/**: Command-line tools (Rust/Clap) - Aptos developer utilities
+- **ledgerflow-sui-cli/**: Command-line tools (Rust/Clap) - Sui interaction with dry-run support
 - **ledgerflow-aptos-cli-ts/**: TypeScript CLI (Bun/Commander.js) - modern Aptos interaction tool
 - **ledgerflow-migrations/**: Database schema management (SQL) - unified PostgreSQL schema
 
@@ -43,10 +46,12 @@ order_id = keccak256(abi.encodePacked(broker_id, account_id, order_id_num))
 - **Unique constraints**: Composite keys for chain_id + transaction_hash + log_index
 
 ### Smart Contract Architecture
-- **UUPS Upgradeable**: Uses OpenZeppelin's UUPS pattern (`UUPSUpgradeable`)
-- **Event Structure**: `DepositReceived(address indexed payer, bytes32 indexed orderId, uint256 amount)`
-- **Both deposit modes**: Standard `approve/transferFrom` and `permit` for better UX
-- **Deterministic deployment**: CREATE2 for consistent addresses across chains
+- **UUPS Upgradeable (EVM)**: Uses OpenZeppelin's UUPS pattern (`UUPSUpgradeable`)
+- **Resource-based (Aptos)**: Move resources with structured events
+- **Object-based (Sui)**: `PaymentVault` objects with `OwnerCap` capability control
+- **Event Structure**: `DepositReceived(address/account indexed payer, bytes32/vector<u8> indexed orderId, uint256/u64 amount)`
+- **Multi-coin support**: EVM (approve/transferFrom + permit), Aptos (Fungible Assets), Sui (Coin<USDC> with Balance storage)
+- **Deterministic deployment**: CREATE2 for EVM, consistent addresses across chains
 
 ## Development Workflows
 
@@ -82,6 +87,10 @@ cd ledgerflow-vault-aptos && aptos move publish
 # Or use TypeScript CLI for modern UX
 cd ledgerflow-aptos-cli-ts && npm run build && node dist/index.js
 
+# Sui: Move package deployment with automatic object sharing
+cd ledgerflow-vault-sui && ./scripts/deploy.sh
+# Or manually: sui client publish --gas-budget 100000000
+
 # Configuration supports multiple chains simultaneously
 # Each indexer instance monitors one chain/contract pair
 ```
@@ -99,6 +108,7 @@ cd ledgerflow-aptos-cli-ts && npm run build && node dist/index.js
 - Individual crates reference workspace versions to avoid conflicts
 - Key patterns: `axum`, `tokio`, `sqlx`, `clap`, `config`, `tracing`, `eyre`
 - Special handling for Aptos SDK via git dependencies with patches
+- **Sui SDK**: Uses git dependencies from mystenlabs/sui with `sui-sdk` and `sui-json-rpc-types`
 
 ### Error Handling Standard
 - `eyre::Result` for all fallible operations
@@ -115,3 +125,26 @@ cd ledgerflow-aptos-cli-ts && npm run build && node dist/index.js
 - Indexer config supports array of chain configurations
 - Each chain has separate state tracking (`chain_states` table)
 - Both EVM and Aptos chains use same database schema
+- **Sui Integration**: Checkpoint-based event processing with same database schema, using `sui_*` table prefixes
+
+## Sui-Specific Implementation Details
+
+### Object Model & Architecture
+- **PaymentVault**: Shared object for public deposits, uses `Balance<USDC>` for efficient storage
+- **OwnerCap**: Capability object bound to specific vault for admin operations
+- **Event Access**: Uses `parsed_json` field instead of BCS for event data extraction
+- **Clock Parameter**: Functions require `&Clock` object for timestamp management (`sui client call --args 0x6`)
+
+### CLI Tools Pattern
+- **Dry-run support**: `--dry-run` flag for transaction simulation without execution
+- **Multiple output formats**: `--output json|pretty|compact` for different use cases
+- **Configuration management**: YAML-based config with `.example` templates and environment variable overrides
+- **Key handling**: Supports ed25519/secp256k1 with proper SuiAddress derivation from private keys
+
+### Deployment Workflow
+```bash
+# Standard Sui deployment pattern used across vault and CLI tools
+sui move build && sui client publish --gas-budget 100000000
+# Object sharing for public access: sui client call --package sui --module transfer --function share_object
+# Save deployment info to deployments/{network}.json for reference
+```
