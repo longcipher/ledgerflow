@@ -23,9 +23,8 @@ async fn main() -> Result<()> {
 
     // Initialize tracing
     let log_level = if args.verbose { "debug" } else { "info" };
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-        EnvFilter::new(format!("ledgerflow_aptos_cli={log_level},aptos_sdk=warn"))
-    });
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new(format!("ledgerflow_sui_cli={log_level},sui_sdk=warn")));
 
     fmt().with_env_filter(filter).with_target(false).init();
 
@@ -77,7 +76,8 @@ async fn handle_init(path: PathBuf, force: bool) -> Result<()> {
         path.display()
     );
     println!("   - Set your private key in account.private_key");
-    println!("   - Set the vault contract address in vault.contract_address");
+    println!("   - Set the vault package ID in vault.package_id");
+    println!("   - Set the vault object ID in vault.vault_object_id");
     println!("   - Adjust network settings if needed");
 
     Ok(())
@@ -91,10 +91,12 @@ async fn handle_deposit(
     output_format: OutputFormat,
 ) -> Result<()> {
     let mut client = VaultClient::new(
-        config.network.node_url.clone(),
+        config.network.rpc_url.clone(),
         config.account.private_key.clone(),
-        config.vault.contract_address.clone(),
-        config.network.chain_id,
+        config.vault.package_id.clone(),
+        config.vault.vault_object_id.clone(),
+        config.vault.usdc_type.clone(),
+        config.transaction.gas_budget,
     )?;
 
     if dry_run {
@@ -104,7 +106,7 @@ async fn handle_deposit(
             "operation": "deposit",
             "order_id": order_id,
             "amount": amount,
-            "account": client.account_address().to_string(),
+            "account": client.account_address(),
             "dry_run": true,
             "status": "simulated"
         });
@@ -114,7 +116,7 @@ async fn handle_deposit(
     }
 
     info!(
-        "💰 Processing deposit: {} APT with order_id: {}",
+        "💰 Processing deposit: {} units with order_id: {}",
         amount, order_id
     );
 
@@ -135,7 +137,7 @@ async fn handle_deposit(
             if matches!(output_format, OutputFormat::Pretty) {
                 println!("✅ Deposit successful!");
                 println!("📦 Order ID: {order_id}");
-                println!("💎 Amount: {amount} USDC");
+                println!("💎 Amount: {amount} units");
                 println!("🔗 Transaction: {}", tx_result.hash);
             }
         }
@@ -146,7 +148,7 @@ async fn handle_deposit(
                 "operation": "deposit",
                 "order_id": order_id,
                 "amount": amount,
-                "account": client.account_address().to_string(),
+                "account": client.account_address(),
                 "status": "error",
                 "error": format!("{:#}", e)
             });
@@ -168,10 +170,12 @@ async fn handle_withdraw(
     output_format: OutputFormat,
 ) -> Result<()> {
     let mut client = VaultClient::new(
-        config.network.node_url.clone(),
+        config.network.rpc_url.clone(),
         config.account.private_key.clone(),
-        config.vault.contract_address.clone(),
-        config.network.chain_id,
+        config.vault.package_id.clone(),
+        config.vault.vault_object_id.clone(),
+        config.vault.usdc_type.clone(),
+        config.transaction.gas_budget,
     )?;
 
     if dry_run {
@@ -186,7 +190,7 @@ async fn handle_withdraw(
             "operation": if all { "withdraw_all" } else { "withdraw" },
             "recipient": recipient,
             "amount": amount_str,
-            "account": client.account_address().to_string(),
+            "account": client.account_address(),
             "dry_run": true,
             "status": "simulated"
         });
@@ -197,13 +201,13 @@ async fn handle_withdraw(
 
     let tx_result = if all {
         info!("💸 Withdrawing all funds from vault to: {}", recipient);
-        client.withdraw_all().await?
+        client.withdraw_all(recipient.clone()).await?
     } else {
         info!(
-            "💸 Withdrawing {} USDC from vault to: {}",
+            "💸 Withdrawing {} units from vault to: {}",
             amount, recipient
         );
-        client.withdraw(amount).await?
+        client.withdraw(amount, recipient.clone()).await?
     };
 
     let amount_str = if all {
@@ -216,7 +220,7 @@ async fn handle_withdraw(
         "recipient": recipient,
         "amount": amount_str,
         "transaction_hash": tx_result.hash,
-        "account": client.account_address().to_string(),
+        "account": client.account_address(),
         "status": "success"
     });
 
@@ -226,7 +230,7 @@ async fn handle_withdraw(
         println!("✅ Withdrawal successful!");
         println!("📤 Recipient: {recipient}");
         if !all {
-            println!("💎 Amount: {amount} USDC");
+            println!("💎 Amount: {amount} units");
         } else {
             println!("💎 Amount: All available funds");
         }
@@ -242,10 +246,12 @@ async fn handle_info(
     output_format: OutputFormat,
 ) -> Result<()> {
     let client = VaultClient::new(
-        config.network.node_url.clone(),
+        config.network.rpc_url.clone(),
         config.account.private_key.clone(),
-        config.vault.contract_address.clone(),
-        config.network.chain_id,
+        config.vault.package_id.clone(),
+        config.vault.vault_object_id.clone(),
+        config.vault.usdc_type.clone(),
+        config.transaction.gas_budget,
     )?;
 
     info!("📊 Fetching vault information...");
@@ -262,15 +268,13 @@ async fn handle_info(
     });
 
     if include_account {
-        let account_address = &config
-            .account
-            .address
-            .clone()
-            .unwrap_or_else(|| "0x123abc...".to_string());
-        let account_balance = client.get_balance(account_address).await?;
+        let account_address = client.account_address();
+        let account_balance = client.get_balance(&account_address).await?;
+        let sui_balance = client.get_sui_balance(&account_address).await?;
         result["account"] = json!({
             "address": account_address,
-            "balance": account_balance
+            "usdc_balance": account_balance,
+            "sui_balance": sui_balance
         });
     }
 
@@ -280,21 +284,19 @@ async fn handle_info(
         println!("📊 Vault Information");
         println!("━━━━━━━━━━━━━━━━━━━━");
         println!("🏦 Vault Address: {}", vault_info["vault_address"]);
-        println!("💰 Balance: {} USDC", vault_info["total_deposit"]);
+        println!("💰 Balance: {} units", vault_info["total_deposit"]);
         println!("👑 Owner: {}", vault_info["owner"]);
         println!("📅 Created At: {}", vault_info["created_at"]);
 
         if include_account {
-            let account_address = &config
-                .account
-                .address
-                .clone()
-                .unwrap_or_else(|| "0x123abc...".to_string());
-            let account_balance = client.get_balance(account_address).await?;
+            let account_address = client.account_address();
+            let account_balance = client.get_balance(&account_address).await?;
+            let sui_balance = client.get_sui_balance(&account_address).await?;
             println!("\n👤 Account Information");
             println!("━━━━━━━━━━━━━━━━━━━━━");
             println!("📍 Address: {account_address}");
-            println!("💎 Balance: {account_balance} APT");
+            println!("💎 USDC Balance: {account_balance} units");
+            println!("⛽ SUI Balance: {sui_balance} MIST");
         }
     }
 
@@ -307,23 +309,24 @@ async fn handle_account(
     output_format: OutputFormat,
 ) -> Result<()> {
     let client = VaultClient::new(
-        config.network.node_url.clone(),
+        config.network.rpc_url.clone(),
         config.account.private_key.clone(),
-        config.vault.contract_address.clone(),
-        config.network.chain_id,
+        config.vault.package_id.clone(),
+        config.vault.vault_object_id.clone(),
+        config.vault.usdc_type.clone(),
+        config.transaction.gas_budget,
     )?;
 
     info!("👤 Fetching account information...");
 
-    let account_address = &config
-        .account
-        .address
-        .unwrap_or_else(|| "0x123abc...".to_string());
-    let account_balance = client.get_balance(account_address).await?;
+    let account_address = client.account_address();
+    let account_balance = client.get_balance(&account_address).await?;
+    let sui_balance = client.get_sui_balance(&account_address).await?;
 
     let mut result = json!({
         "address": account_address,
-        "balance": account_balance,
+        "usdc_balance": account_balance,
+        "sui_balance": sui_balance,
     });
 
     if show_private {
@@ -337,7 +340,8 @@ async fn handle_account(
         println!("👤 Account Information");
         println!("━━━━━━━━━━━━━━━━━━━━");
         println!("📍 Address: {account_address}");
-        println!("💎 Balance: {account_balance} APT");
+        println!("💎 USDC Balance: {account_balance} units");
+        println!("⛽ SUI Balance: {sui_balance} MIST");
 
         if show_private {
             println!("🔐 Private Key: {}", config.account.private_key);

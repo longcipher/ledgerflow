@@ -1,0 +1,31 @@
+[package]
+name = "ledgerflow-sui-cli"
+version = "0.1.0"
+edition = "2024"
+authors = ["LedgerFlow Team"]
+description = "Command-line interface for interacting with LedgerFlow Sui payment vault contracts"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/longcipher/ledgerflow"
+
+[dependencies]
+# Sui SDK for blockchain interaction
+sui-keys = { git = "https://github.com/mystenlabs/sui", package = "sui-keys" }
+sui-sdk = { git = "https://github.com/mystenlabs/sui", package = "sui-sdk" }
+
+# CLI framework
+clap = { workspace = true, features = ["derive"] }
+# Async runtime
+tokio = { workspace = true, features = ["full"] }
+# Error handling
+color-eyre = { workspace = true }
+eyre = { workspace = true }
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+# Utilities
+config = { workspace = true }
+hex = { workspace = true }

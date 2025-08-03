@@ -7,6 +7,7 @@ members = [
     "ledgerflow-indexer-aptos",
     "ledgerflow-migrations",
     "ledgerflow-aptos-cli",
+    "ledgerflow-sui-cli",
 ]
 resolver = "2"
 
