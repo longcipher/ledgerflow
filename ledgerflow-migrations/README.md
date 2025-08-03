@@ -2,6 +2,44 @@
 
 This crate provides unified database migration management for the entire LedgerFlow system.
 
+## 📋 Project Status
+
+**✅ COMPLETE** - Unified migration system ready for production use.
+
+### Key Achievements
+- ✅ **Unified Schema**: Consolidated migrations from all services (balancer, bot, indexer)
+- ✅ **Production Ready**: Complete tooling with Docker, CI/CD, and shell scripts
+- ✅ **Configuration Management**: YAML-based configuration with environment support
+- ✅ **Testing**: Unit tests and integration validation
+- ✅ **Documentation**: Comprehensive guides and integration instructions
+
+### Architecture
+```
+ledgerflow-migrations/
+├── src/
+│   ├── lib.rs          # Core MigrationManager library
+│   ├── main.rs         # CLI binary for running migrations
+│   └── tests.rs        # Unit tests
+├── migrations/
+│   └── 20250709000001_initial_schema.sql  # Unified schema
+├── config.yaml         # Configuration file
+├── migrate.sh          # Shell script for operations
+├── Makefile           # Build and operation commands
+├── Dockerfile         # Container support
+└── INTEGRATION.md     # Service integration guide
+```
+
+### Database Schema
+The unified schema consolidates:
+- **accounts** (from ledgerflow-balancer)
+- **users** (from ledgerflow-bot)  
+- **orders** (unified from all services)
+- **chain_states** (from ledgerflow-indexer)
+- **deposit_events** (from ledgerflow-indexer)
+- **Optimized indexes** for common queries
+- **Automatic triggers** for timestamp updates
+- **ENUM types** for order status
+
 ## Overview
 
 This crate consolidates all database migrations from the individual services:
@@ -117,7 +155,104 @@ The unified schema includes:
 - `order_status` - ENUM for order statuses
 
 ### Triggers
-- Automatic `updated_at` timestamp updates for all tables
+- - Automatic `updated_at` timestamp updates for all tables
+
+## Service Integration Guide
+
+This migration system replaces individual service migrations. Services should use this unified system instead of managing their own migrations.
+
+### Migration Strategy
+
+Services should run migrations via:
+1. **Direct binary execution**: Run the migration binary before service startup
+2. **Shell scripts**: Use provided migration scripts in startup sequences  
+3. **Docker containers**: Include migration step in container orchestration
+
+### Updating Services
+
+**Remove individual migration directories:**
+- `ledgerflow-balancer/migrations/` ❌
+- `ledgerflow-bot/migrations/` ❌ 
+- `ledgerflow-indexer/migrations/` ❌
+
+**Update service startup to run migrations first:**
+
+#### Option 1: Using Migration Script
+```bash
+# In service startup script or Dockerfile
+cd ../ledgerflow-migrations
+./migrate.sh migrate
+```
+
+#### Option 2: Direct Binary Execution  
+```bash
+export DATABASE_URL="postgresql://postgres:password@localhost/ledgerflow"
+cd ../ledgerflow-migrations
+cargo run --bin ledgerflow-migrations
+```
+
+#### Option 3: Pre-built Binary
+```bash
+# Build once
+cd ../ledgerflow-migrations
+cargo build --release
+
+# Run migrations
+./target/release/ledgerflow-migrations
+```
+
+### Docker Compose Integration
+
+```yaml
+version: '3.8'
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: ledgerflow
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+
+  migrations:
+    build:
+      context: .
+      dockerfile: ledgerflow-migrations/Dockerfile
+    depends_on:
+      - postgres
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/ledgerflow
+    command: ["./migrate.sh", "migrate"]
+
+  balancer:
+    build:
+      context: .
+      dockerfile: ledgerflow-balancer/Dockerfile
+    depends_on:
+      - migrations
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/ledgerflow
+```
+
+### Development Workflow
+
+```bash
+# Add new migrations
+cd ledgerflow-migrations
+make add NAME="add_new_feature"
+
+# Run migrations
+make migrate
+
+# Check status
+make info
+
+# Reset (development only)
+make reset
+```
+
+## Integration with Services
 
 ## Development
 

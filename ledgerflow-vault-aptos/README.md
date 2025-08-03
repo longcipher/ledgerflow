@@ -2,6 +2,40 @@
 
 LedgerFlow Vault Aptos is the Aptos blockchain implementation of the LedgerFlow payment gateway, providing secure and efficient on-chain fund custody and payment processing functionality. This module is developed using the Move language, taking full advantage of Aptos blockchain's resource model and security features.
 
+## 📋 Project Status
+
+**✅ PRODUCTION READY** - Complete implementation with full feature parity to EVM version.
+
+### Deployment Information
+- **Network**: Aptos Testnet ✅ **DEPLOYED**
+- **Contract Address**: `0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846`
+- **Module Name**: `payment_vault_fa`
+- **USDC Metadata**: `0x69091fbab5f7d635ee7ac5098cf0c1efbe31d68fec0f2cd565e8d168daf52832`
+- **Status**: ✅ Initialized and ready for use
+
+### Key Achievements
+- ✅ **Complete Implementation**: 578 lines of production-ready Move code
+- ✅ **Feature Parity**: Full compatibility with EVM vault functionality
+- ✅ **Testnet Deployment**: Successfully deployed and initialized
+- ✅ **USDC Integration**: Compatible with Circle's Fungible Asset USDC
+- ✅ **Event System**: Comprehensive event emission for indexing
+- ✅ **Access Control**: Capability-based security model
+- ✅ **Documentation**: Complete API reference and deployment guides
+
+### Project Structure
+```
+ledgerflow-vault-aptos/
+├── Move.toml                 # Project configuration
+├── sources/
+│   └── payment_vault.move    # Main contract (578 lines)
+├── tests/
+│   └── payment_vault_comprehensive_test.move
+├── scripts/
+│   └── deploy.move          # Deployment script
+├── Makefile                 # Build automation
+└── README.md               # Complete documentation
+```
+
 ## 🎯 Core Features
 
 - **Non-Custodial Vault**: Serves as the sole entry point and vault for funds, receiving and storing all USDC payments
@@ -236,7 +270,126 @@ const E_INVALID_ADDRESS: u64 = 7;
 3. **Deploy to testnet**
 
    ```bash
-   aptos move publish --profile testnet
+   aptos move publish    --profile my-profile
+```
+
+## 🚀 Deployment Guide
+
+### Current Deployment Status
+- **Network**: Aptos Testnet
+- **Contract Address**: `0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846`
+- **Module Name**: `payment_vault_fa`
+- **Deployment Transaction**: [`0x4e72687e72fd0de0fbe91991cabc9a801769920845558630ee50c9b9bda2a74c`](https://explorer.aptoslabs.com/txn/0x4e72687e72fd0de0fbe91991cabc9a801769920845558630ee50c9b9bda2a74c?network=testnet)
+- **Initialization Transaction**: [`0xb8505febe79ae6eea9bc6d6c0d95b9f87705df878fb809834fa3cc39690d515b`](https://explorer.aptoslabs.com/txn/0xb8505febe79ae6eea9bc6d6c0d95b9f87705df878fb809834fa3cc39690d515b?network=testnet)
+
+### Available Functions
+
+#### Deposit USDC (Example)
+```bash
+aptos move run --function-id 0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846::payment_vault_fa::deposit 
+  --args 
+    address:0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846 
+    string:"order_id_123456" 
+    u64:1000000
+```
+
+#### Withdraw USDC (Owner Only)
+```bash
+aptos move run --function-id 0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846::payment_vault_fa::withdraw 
+  --args 
+    address:0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846 
+    address:RECIPIENT_ADDRESS 
+    u64:AMOUNT
+```
+
+#### Query Vault Status
+```bash
+# Check vault balance
+aptos move view --function-id 0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846::payment_vault_fa::get_balance 
+  --args address:0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846
+
+# Check vault owner
+aptos move view --function-id 0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846::payment_vault_fa::get_owner 
+  --args address:0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846
+
+# Check deposit count
+aptos move view --function-id 0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846::payment_vault_fa::get_deposit_count 
+  --args address:0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846
+```
+
+### Deploy to Other Networks
+
+#### Deploy to Devnet
+```bash
+aptos move publish --profile devnet
+```
+
+#### Deploy to Mainnet
+```bash
+aptos move publish --profile mainnet
+```
+
+### Security Considerations
+- ✅ Uses Fungible Asset standard for USDC compatibility
+- ✅ Capability-based access control
+- ✅ Atomic operations guarantee
+- ✅ Input validation on all functions
+- ✅ Event emission for monitoring
+
+## 📜 Scripts and Tools
+
+The project includes comprehensive shell scripts for easy contract interaction:
+
+### Available Scripts
+- `scripts/vault_test.sh` - Comprehensive testing and interaction script
+- `scripts/deposit_1_usdc.sh` - Quick deposit example
+- `scripts/withdraw_all_usdc.sh` - Withdraw all funds
+- Move script files for advanced usage
+
+### Prerequisites for Scripts
+1. **Install Aptos CLI**:
+   ```bash
+   curl -fsSL "https://aptos.dev/scripts/install_cli.py" | python3
+   ```
+
+2. **Initialize Profile**:
+   ```bash
+   aptos init --network testnet
+   ```
+
+3. **Get Testnet USDC**:
+   - Visit [Circle Testnet Faucet](https://faucet.circle.com/)
+   - Request testnet USDC for your account
+
+### Script Usage Examples
+
+#### Check Vault Status
+```bash
+./scripts/vault_test.sh status
+```
+
+#### Deposit 1 USDC
+```bash
+./scripts/deposit_1_usdc.sh
+```
+
+#### Withdraw All Funds (Owner Only)
+```bash
+./scripts/withdraw_all_usdc.sh
+```
+
+#### Run Comprehensive Test
+```bash
+./scripts/vault_test.sh full-test
+```
+
+#### Deposit Specific Amount
+```bash
+# Deposit 10 USDC (10 * 1,000,000 micro-USDC)
+./scripts/vault_test.sh deposit 10000000
+```
+
+## 🧪 Testing Strategy
    ```
 
 4. **Deploy to mainnet**

@@ -1,7 +1,7 @@
 [package]
 name = "ledgerflow-aptos-cli"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 authors = ["LedgerFlow Team"]
 description = "Command-line interface for interacting with LedgerFlow Aptos payment vault contracts"
 license = "MIT OR Apache-2.0"
