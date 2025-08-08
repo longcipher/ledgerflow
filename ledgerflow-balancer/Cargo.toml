@@ -40,5 +40,6 @@ chrono = { workspace = true, features = ["serde"] }
 
 # Crypto
 alloy = { workspace = true, features = ["signer-local", "k256"] }
+base64 = { workspace = true }
 hex = { workspace = true }
 sha3 = { workspace = true }

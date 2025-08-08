@@ -8,6 +8,7 @@ pub struct Config {
     pub database_url: String,
     pub server: ServerConfig,
     pub business: BusinessConfig,
+    pub x402: Option<X402Config>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,6 +21,27 @@ pub struct ServerConfig {
 pub struct BusinessConfig {
     pub max_pending_orders_per_account: u32,
     pub broker_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct X402Config {
+    pub kinds: Vec<X402Kind>,
+    pub evm: Option<EvmX402Config>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct X402Kind {
+    pub scheme: String,
+    pub network: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvmX402Config {
+    pub rpc_http: String,
+    pub chain_id: u64,
+    pub vault_address: String,
+    pub usdc_address: String,
+    pub facilitator_private_key: String,
 }
 
 impl Config {
@@ -42,6 +64,7 @@ impl Default for Config {
                 max_pending_orders_per_account: 2,
                 broker_id: "ledgerflow-vault".to_string(),
             },
+            x402: None,
         }
     }
 }

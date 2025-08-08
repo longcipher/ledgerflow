@@ -9,9 +9,6 @@ target/
 /broadcast/**/dry-run/
 broadcast/
 
-# Docs
-docs/
-
 # Dotenv file
 .env
 .envrc

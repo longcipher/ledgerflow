@@ -21,6 +21,17 @@ sol! {
             bytes32 r,
             bytes32 s
         ) external;
+        function depositWithAuthorization(
+            bytes32 orderId,
+            address from,
+            uint256 value,
+            uint256 validAfter,
+            uint256 validBefore,
+            bytes32 nonce,
+            uint8 v,
+            bytes32 r,
+            bytes32 s
+        ) external;
         function withdraw() external;
         function getBalance() external view returns (uint256);
         function owner() external view returns (address);

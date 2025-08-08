@@ -108,6 +108,14 @@ Where:
 - `GET /admin/orders` - List pending orders (admin only)
 - `GET /health` - Health check
 
+### x402 Facilitator Endpoints
+
+- `GET /x402/supported` - List supported kinds (scheme/network)
+- `POST /x402/verify` - Verify an x402 payment header against requirements
+- `POST /x402/settle` - Settle an x402 payment (EVM exact via EIP-3009 wrapper)
+
+Enable these by adding the `x402` section to `config.yaml` (see `config.yaml.example`).
+
 ### Request/Response Examples
 
 #### Register Account

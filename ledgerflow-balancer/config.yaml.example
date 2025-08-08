@@ -13,3 +13,21 @@ business:
   
   # Broker ID used for order ID generation
   broker_id: "ledgerflow-vault"
+
+# Optional: x402 configuration
+# Enable x402 facilitator endpoints and EVM settlement via PaymentVault::depositWithAuthorization
+x402:
+  kinds:
+    - scheme: "exact"
+      network: "evm"
+  evm:
+    # EVM RPC HTTP endpoint
+    rpc_http: "https://base-sepolia.g.alchemy.com/v2/your-key"
+    # EVM chain id (e.g., 84532 for Base Sepolia)
+    chain_id: 84532
+    # PaymentVault contract address
+    vault_address: "0xYourVaultAddress"
+    # USDC token address supporting EIP-3009 transferWithAuthorization
+    usdc_address: "0xYourUSDCAddress"
+    # Private key used to submit settlement transactions (hex string with 0x prefix)
+    facilitator_private_key: "0xyourfacilitatorprivatekey"

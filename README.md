@@ -174,3 +174,7 @@ For detailed usage instructions, please refer to the README.md files in each mod
 ---
 
 **Let's build a more open, transparent, and efficient global payment network together!**
+
+## x402 Protocol Integration (EVM)
+
+LedgerFlow supports the x402 V1 `exact` scheme on EVM via USDC EIP-3009. The `PaymentVault` exposes `depositWithAuthorization` so a facilitator can settle x402 payments while the vault emits `DepositReceived(payer, orderId, amount)` to preserve our on-chain order linkage. Clients generate `orderId` locally and set the EIP-3009 `nonce` to this `orderId`. See `docs/x402_integration.md` for details.

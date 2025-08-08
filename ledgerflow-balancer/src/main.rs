@@ -18,6 +18,7 @@ mod handlers;
 mod models;
 mod services;
 mod utils;
+mod x402;
 
 use config::Config;
 use database::Database;
@@ -78,6 +79,10 @@ async fn main() -> Result<()> {
     info!("🏗️ Building application routes...");
     let app = Router::new()
         .route("/health", get(health_check))
+        // x402 endpoints
+        .route("/x402/supported", get(x402::supported))
+        .route("/x402/verify", post(x402::verify))
+        .route("/x402/settle", post(x402::settle))
         .route("/register", post(handlers::register_account))
         .route(
             "/accounts/username/{username}",

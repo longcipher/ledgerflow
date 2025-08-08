@@ -7654,6 +7654,7 @@ version = "0.1.0"
 dependencies = [
  "alloy",
  "axum 0.8.4",
+ "base64 0.22.1",
  "chrono",
  "clap 4.5.41",
  "config",

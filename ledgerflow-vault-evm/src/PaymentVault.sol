@@ -9,6 +9,23 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 /**
+ * @dev Minimal interface for EIP-3009 transferWithAuthorization
+ */
+interface IERC3009 {
+    function transferWithAuthorization(
+        address from,
+        address to,
+        uint256 value,
+        uint256 validAfter,
+        uint256 validBefore,
+        bytes32 nonce,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external;
+}
+
+/**
  * @title PaymentVault
  * @notice A secure upgradeable vault contract for handling USDC token deposits and withdrawals
  * @dev This contract implements the LedgerFlow Vault that accepts USDC deposits with order IDs
@@ -25,6 +42,9 @@ contract PaymentVault is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice The ERC20Permit interface for the USDC token to support permit functionality
     IERC20Permit public usdcPermitToken;
+
+    /// @notice The EIP-3009 interface for the USDC token
+    IERC3009 internal usdc3009Token;
 
     /**
      * @notice Event emitted when a new deposit is successfully made.
@@ -66,8 +86,9 @@ contract PaymentVault is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         __UUPSUpgradeable_init();
 
         // Set storage variables
-        usdcToken = IERC20(_usdcTokenAddress);
-        usdcPermitToken = IERC20Permit(_usdcTokenAddress);
+    usdcToken = IERC20(_usdcTokenAddress);
+    usdcPermitToken = IERC20Permit(_usdcTokenAddress);
+    usdc3009Token = IERC3009(_usdcTokenAddress);
     }
 
     // ============ DEPOSIT FUNCTIONS ============
@@ -130,6 +151,60 @@ contract PaymentVault is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         // Emit an event for the off-chain indexer
         emit DepositReceived(msg.sender, orderId, receivedAmount);
+    }
+
+    /**
+     * @notice Deposits USDC using an EIP-3009 authorization and binds the authorization nonce to the orderId.
+     * @dev This function wraps the token's transferWithAuthorization call, enforcing that:
+     *      - funds are transferred into this vault (to == address(this))
+     *      - the provided nonce equals the orderId, creating a 1:1 binding on-chain
+     *      On success, it emits DepositReceived(payer=from, orderId, amount).
+     * @param orderId The unique identifier for the order; must equal `nonce` from the authorization
+     * @param from The payer address authorizing the transfer
+     * @param value The amount of tokens to transfer
+     * @param validAfter Authorization valid after this timestamp
+     * @param validBefore Authorization valid before this timestamp
+     * @param nonce The EIP-3009 authorization nonce; must equal `orderId`
+     * @param v ECDSA v
+     * @param r ECDSA r
+     * @param s ECDSA s
+     */
+    function depositWithAuthorization(
+        bytes32 orderId,
+        address from,
+        uint256 value,
+        uint256 validAfter,
+        uint256 validBefore,
+        bytes32 nonce,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external {
+        require(value > 0, "Deposit amount must be greater than zero");
+        require(nonce == orderId, "Authorization nonce must match orderId");
+
+        uint256 beforeBalance = usdcToken.balanceOf(address(this));
+
+        // Submit the EIP-3009 authorization to the token contract.
+        usdc3009Token.transferWithAuthorization(
+            from,
+            address(this),
+            value,
+            validAfter,
+            validBefore,
+            nonce,
+            v,
+            r,
+            s
+        );
+
+        uint256 afterBalance = usdcToken.balanceOf(address(this));
+        uint256 receivedAmount = afterBalance - beforeBalance;
+
+        // For standard USDC, receivedAmount should equal `value` (no fee-on-transfer)
+        require(receivedAmount == value, "Unexpected received amount");
+
+        emit DepositReceived(from, orderId, receivedAmount);
     }
 
     // ============ WITHDRAWAL FUNCTIONS ============
