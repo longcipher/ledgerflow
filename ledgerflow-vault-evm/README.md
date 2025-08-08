@@ -138,8 +138,8 @@ export ETHERSCAN_API_KEY=your_etherscan_api_key_here
 # Deploy using convenience script
 ./deploy_unichain_sepolia.sh deploy
 
-# Or deploy using Make
-make deploy-unichain-sepolia
+# Or deploy using just
+just deploy-unichain-sepolia
 ```
 
 For detailed deployment instructions, see [UNICHAIN_DEPLOYMENT.md](UNICHAIN_DEPLOYMENT.md).
@@ -242,13 +242,13 @@ For detailed upgrade information, see [UUPS_UPGRADE.md](UUPS_UPGRADE.md).
 
 ```bash
 # Build contracts
-make build
+just build
 
 # Run tests
-make test
+just test
 
 # Deploy standard version to Unichain Sepolia
-make deploy-unichain-sepolia
+just deploy-unichain-sepolia
 
 # Deploy upgradeable version with proxy
 forge script script/DeployUpgradeable.s.sol --rpc-url https://sepolia.unichain.org --private-key $PRIVATE_KEY --broadcast
@@ -257,10 +257,10 @@ forge script script/DeployUpgradeable.s.sol --rpc-url https://sepolia.unichain.o
 forge test --match-contract PaymentVaultUpgradeTest
 
 # Verify contract
-make verify-unichain-sepolia
+just verify-unichain-sepolia
 
 # See all available commands
-make help
+just --list
 ```
 
 ```
@@ -292,7 +292,7 @@ ledgerflow-vault/
 ├── remappings.txt              # Import path mappings
 ├── soldeer.lock               # Dependency lock file
 ├── chain_config.env            # Chain configuration
-├── Makefile                    # Build automation
+├── Justfile                    # Build automation
 ├── Justfile                    # Just build automation
 └── *.sh                        # Deployment scripts
 ```

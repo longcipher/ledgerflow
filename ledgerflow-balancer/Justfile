@@ -1,0 +1,62 @@
+# Development commands for ledgerflow-balancer
+
+# Build the project (release)
+build:
+  cargo build --release
+
+# Run the service with default config
+run:
+  cargo run
+
+# Run with specific config file
+run-config config="config.yaml":
+  cargo run -- --config {{config}}
+
+# Development mode with auto-reload (requires cargo-watch)
+dev:
+  cargo watch -x run
+
+# Tests
+test:
+  cargo test
+
+# Lints and formatting
+lint:
+  cargo clippy -- -D warnings
+  cargo fmt --check
+
+format:
+  cargo fmt
+
+check:
+  cargo check
+
+# Clean
+clean:
+  cargo clean
+
+# Database
+install-sqlx:
+  cargo install sqlx-cli --no-default-features --features postgres
+
+migrate:
+  sqlx migrate run
+
+# Local DB helpers (PostgreSQL)
+db-create name="ledgerflow":
+  createdb {{name}}
+
+db-drop name="ledgerflow":
+  dropdb {{name}}
+
+db-reset name="ledgerflow":
+  just db-drop name={{name}} || true
+  just db-create name={{name}}
+  just migrate
+
+# Docker
+docker-build:
+  docker build -t ledgerflow-balancer .
+
+docker-run:
+  docker run -p 3000:3000 ledgerflow-balancer

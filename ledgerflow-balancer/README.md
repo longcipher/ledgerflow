@@ -64,7 +64,7 @@ ledgerflow-balancer/
 │   └── 001_initial.sql   # Database schema with proper indexes
 ├── config.yaml           # Runtime configuration
 ├── Cargo.toml            # Dependencies and project configuration
-├── Makefile              # Development workflow commands
+├── Justfile              # Development workflow commands
 └── example.sh            # API usage examples script
 ```
 

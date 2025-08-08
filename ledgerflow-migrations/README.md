@@ -24,7 +24,7 @@ ledgerflow-migrations/
 │   └── 20250709000001_initial_schema.sql  # Unified schema
 ├── config.yaml         # Configuration file
 ├── migrate.sh          # Shell script for operations
-├── Makefile           # Build and operation commands
+├── Justfile           # Build and operation commands
 ├── Dockerfile         # Container support
 └── INTEGRATION.md     # Service integration guide
 ```
@@ -240,16 +240,16 @@ services:
 ```bash
 # Add new migrations
 cd ledgerflow-migrations
-make add NAME="add_new_feature"
+just add name="add_new_feature"
 
 # Run migrations
-make migrate
+just migrate
 
 # Check status
-make info
+just info
 
 # Reset (development only)
-make reset
+just reset
 ```
 
 ## Integration with Services

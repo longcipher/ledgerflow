@@ -1,0 +1,39 @@
+# Commands for ledgerflow-vault-sui
+
+help:
+  @echo "Targets: build test clean format lint deploy demo check config check-deps install-deps dev"
+
+check-deps:
+  command -v sui >/dev/null 2>&1 || { echo "Sui CLI not installed"; exit 1; }
+
+install-deps:
+  @echo "Install Sui CLI from official docs: https://docs.sui.io/guides/developer/getting-started/sui-install"
+
+build: check-deps
+  sui move build
+
+test: check-deps
+  sui move test
+
+clean:
+  rm -rf build/ .sui/
+
+format:
+  @echo "Format manually for now"
+
+lint: build
+  @echo "Syntax validated via build"
+
+deploy: check-deps build
+  ./scripts/deploy.sh
+
+demo: check-deps
+  ./scripts/demo.sh
+
+check: build test
+
+config:
+  @echo "Use sui client to view active env and address"
+
+dev:
+  just clean build test

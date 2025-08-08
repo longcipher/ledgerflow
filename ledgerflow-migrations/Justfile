@@ -1,0 +1,37 @@
+# Commands for ledgerflow-migrations
+
+# Environment
+set dotenv-load := true
+
+# Install sqlx-cli
+install:
+  cargo install sqlx-cli --no-default-features --features postgres
+
+# Scripted operations (DATABASE_URL must be set)
+setup:
+  DATABASE_URL=${DATABASE_URL} ./migrate.sh setup
+
+migrate:
+  DATABASE_URL=${DATABASE_URL} ./migrate.sh migrate
+
+revert steps="":
+  DATABASE_URL=${DATABASE_URL} ./migrate.sh revert {{steps}}
+
+add name:
+  DATABASE_URL=${DATABASE_URL} ./migrate.sh add "{{name}}"
+
+info:
+  DATABASE_URL=${DATABASE_URL} ./migrate.sh info
+
+reset:
+  DATABASE_URL=${DATABASE_URL} ./migrate.sh reset
+
+# Build/Run the binary
+build:
+  cargo build --release
+
+run:
+  DATABASE_URL=${DATABASE_URL} cargo run --release
+
+clean:
+  cargo clean

@@ -1,0 +1,22 @@
+# Commands for ledgerflow-vault-evm
+
+help:
+  @echo "Targets: build test clean deploy-unichain-sepolia verify-unichain-sepolia deploy-unichain-sepolia-no-verify"
+
+build:
+  forge build
+
+test:
+  forge test -vvv
+
+clean:
+  forge clean
+
+deploy-unichain-sepolia:
+  forge script script/PaymentVault.s.sol:PaymentVaultScript --rpc-url unichain_sepolia --private-key ${PRIVATE_KEY} --broadcast --verify --etherscan-api-key ${ETHERSCAN_API_KEY} -vvvv
+
+verify-unichain-sepolia:
+  forge verify-contract --rpc-url unichain_sepolia --etherscan-api-key ${ETHERSCAN_API_KEY} ${CONTRACT_ADDRESS} src/PaymentVault.sol:PaymentVault
+
+deploy-unichain-sepolia-no-verify:
+  forge script script/PaymentVault.s.sol:PaymentVaultScript --rpc-url unichain_sepolia --private-key ${PRIVATE_KEY} --broadcast -vvvv

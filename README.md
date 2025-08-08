@@ -15,7 +15,7 @@ By leveraging blockchain's transparency, security, and composability, LedgerFlow
 - Standards-based paywalls using x402 V1 "exact" with USDC EIP-3009.
 - Settlement via PaymentVault.depositWithAuthorization preserves on-chain `DepositReceived(payer, orderId, amount)` linkage.
 - Distributed `orderId` equals the EIP-3009 `nonce` (no central issuance).
-- See details: [docs/x402_integration.md](./docs/x402_integration.md)
+- See details: [Exact scheme notes](./docs/scheme_exact_evm.md)
 
 ## Testnet(Unichain Sepolia) Demo
 
@@ -137,7 +137,7 @@ ledgerflow/                         # Project root directory
 - Settlement via PaymentVault.depositWithAuthorization preserves on-chain `DepositReceived(payer, orderId, amount)` linkage
 - Distributed `orderId` equals EIP-3009 `nonce` (no central issuance); verifiable client-side
 - Backend provides `/x402/verify` and `/x402/settle` endpoints for facilitators and agents
-- Learn more: [x402 Integration (EVM)](./docs/x402_integration.md) · [Exact scheme notes](./docs/scheme_exact_evm.md)
+- Learn more: [Exact scheme notes](./docs/scheme_exact_evm.md)
 
 ### 1. Non-Custodial Vault
 
@@ -192,4 +192,4 @@ For detailed usage instructions, please refer to the README.md files in each mod
 
 ## x402 Protocol Integration (EVM)
 
-LedgerFlow supports the x402 V1 `exact` scheme on EVM via USDC EIP-3009. The `PaymentVault` exposes `depositWithAuthorization` so a facilitator can settle x402 payments while the vault emits `DepositReceived(payer, orderId, amount)` to preserve our on-chain order linkage. Clients generate `orderId` locally and set the EIP-3009 `nonce` to this `orderId`. See `docs/x402_integration.md` for details.
+LedgerFlow supports the x402 V1 `exact` scheme on EVM via USDC EIP-3009. The `PaymentVault` exposes `depositWithAuthorization` so a facilitator can settle x402 payments while the vault emits `DepositReceived(payer, orderId, amount)` to preserve our on-chain order linkage. Clients generate `orderId` locally and set the EIP-3009 `nonce` to this `orderId`. See `docs/scheme_exact_evm.md` for details.

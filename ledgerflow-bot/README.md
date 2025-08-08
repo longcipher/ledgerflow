@@ -37,7 +37,7 @@ ledgerflow-bot/
 ├── migrations/
 │   └── 001_initial.sql   # Database schema
 ├── config.yaml           # Configuration file
-└── Makefile              # Development tools
+└── Justfile              # Development tools
 ```
 
 ### Completed Features
@@ -122,9 +122,9 @@ cargo run -- --help
 cargo run -- --version
 
 # Development tools
-make setup    # Setup development environment
-make test     # Run tests (when implemented)
-make docs     # Generate documentation
+just setup    # Setup development environment
+just test     # Run tests (when implemented)
+just docs     # Generate documentation
 ```
 
 ## Architecture

@@ -1,0 +1,59 @@
+# Commands for ledgerflow-vault-aptos
+
+help:
+  @echo "Targets: build build-dev test test-dev clean deploy-dev deploy-test deploy-main fmt docs dev dev-setup init-profiles account-info fund-devnet fund-testnet module-info security-check"
+
+build:
+  aptos move compile --named-addresses ledgerflow_vault=0x1 --skip-fetch-latest-git-deps
+
+build-dev:
+  aptos move compile --dev --skip-fetch-latest-git-deps
+
+test-dev:
+  aptos move test --dev
+
+test:
+  aptos move test --dev --skip-fetch-latest-git-deps || (echo "Tests failed (known Move test limitations)" && exit 1)
+
+clean:
+  rm -rf build/ .aptos/
+
+deploy-dev:
+  aptos move publish --profile devnet --assume-yes
+
+deploy-test:
+  aptos move publish --profile testnet --assume-yes
+
+deploy-main:
+  bash -lc 'read -p "Are you sure to deploy to MAINNET? [y/N] " c; [[ "$c" =~ ^[Yy]$ ]] || exit 1; aptos move publish --profile mainnet --assume-yes'
+
+fmt:
+  aptos move fmt || true
+
+docs:
+  @echo "See README.md for docs"
+
+dev-setup:
+  which aptos >/dev/null || (echo "Install Aptos CLI first" && exit 1)
+
+init-profiles:
+  aptos init --profile devnet --network devnet || true
+  aptos init --profile testnet --network testnet || true
+  aptos init --profile mainnet --network mainnet || true
+
+account-info:
+  aptos account show --profile devnet || true
+  aptos account show --profile testnet || true
+  aptos account show --profile mainnet || true
+
+fund-devnet:
+  aptos account fund-with-faucet --profile devnet
+
+fund-testnet:
+  aptos account fund-with-faucet --profile testnet
+
+module-info:
+  @echo "Module Name: payment_vault_fa"
+
+security-check:
+  @echo "Review public functions, errors, access controls, and edge cases"

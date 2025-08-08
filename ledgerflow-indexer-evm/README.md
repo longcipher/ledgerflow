@@ -127,8 +127,8 @@ cargo build --release
 chmod +x setup.sh
 ./setup.sh
 
-# Or use make
-make setup
+# Or use just
+just setup
 ```
 
 ## Configuration
@@ -186,29 +186,29 @@ The indexer automatically creates and manages the required database tables:
 - **chain_states**: Tracks the last scanned block for each chain/contract
 - **deposit_events**: Stores parsed deposit events with deduplication
 
-### Make Commands
+### Just Commands
 
 ```bash
 # Build the project
-make build
+just build
 
 # Run with default config
-make run
+just run
 
 # Run in development mode with logging
-make dev
+just dev
 
 # Run tests
-make test
+just test
 
 # Format code
-make fmt
+just fmt
 
 # Check with clippy
-make check
+just check
 
 # Setup development environment
-make setup
+just setup
 ```
 
 ## Database Schema
@@ -320,7 +320,7 @@ cargo test --features integration-tests
 2. Create a feature branch
 3. Make your changes
 4. Add tests
-5. Run `make check` and `make fmt`
+5. Run `just check` and `just fmt`
 6. Submit a pull request
 
 ## Production Deployment

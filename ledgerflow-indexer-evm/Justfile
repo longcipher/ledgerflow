@@ -1,0 +1,43 @@
+# Development commands for ledgerflow-indexer-evm
+
+# Default
+default:
+  just build
+
+# Build
+build:
+  cargo build --release
+
+# Run
+run:
+  cargo run --release -- --config config.yaml
+
+dev:
+  RUST_LOG=info cargo run -- --config config.yaml
+
+# Test
+test:
+  cargo test
+
+# Clean
+clean:
+  cargo clean
+
+# Setup
+setup:
+  ./setup.sh
+
+# Format/Lint
+fmt:
+  cargo fmt
+
+check:
+  cargo clippy -- -D warnings
+
+# Migrate (manual)
+migrate:
+  sqlx migrate run --database-url "postgres://ledgerflow:ledgerflow123@localhost:5432/ledgerflow"
+
+# Tools
+install-sqlx:
+  cargo install sqlx-cli --no-default-features --features postgres

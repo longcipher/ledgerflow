@@ -1,0 +1,113 @@
+# Development commands for ledgerflow-bot
+
+# Help
+help:
+  @echo "Available commands: build build-release run run-release test test-verbose clean setup migration-create migration-run migration-revert check fmt fmt-check watch generate-wallet version docker-build docker-run dev-setup dev-db-reset logs ci-test ci-build install uninstall docs docs-deps serve-docs audit update-deps"
+
+# Build
+build:
+  cargo build
+
+build-release:
+  cargo build --release
+
+# Run
+run:
+  cargo run -- start
+
+run-release:
+  cargo run --release -- start
+
+# Test
+test:
+  cargo test
+
+test-verbose:
+  cargo test -- --nocapture
+
+# Clean
+clean:
+  cargo clean
+
+# Setup
+setup:
+  bash -lc '[[ -f config.yaml ]] || cp config.yaml.example config.yaml; echo "Created config.yaml from example (if missing)"; echo "Please edit config.yaml with your settings"'
+
+# Migrations
+migration-create name:
+  sqlx migrate add {{name}}
+
+migration-run:
+  sqlx migrate run
+
+migration-revert:
+  sqlx migrate revert
+
+# Lint/Format
+check:
+  cargo clippy -- -D warnings
+
+fmt:
+  cargo fmt
+
+fmt-check:
+  cargo fmt --check
+
+# Watch
+auto-watch:
+  cargo watch -x 'run -- start'
+
+# Utilities
+generate-wallet:
+  cargo run -- generate-wallet
+
+version:
+  cargo run -- version
+
+# Docker
+docker-build:
+  docker build -t ledgerflow-bot .
+
+docker-run:
+  docker run --rm -it -v $PWD/config.yaml:/etc/ledgerflow/config.yaml -e RUST_LOG=info ledgerflow-bot
+
+# Dev DB
+dev-setup:
+  bash -lc 'read -p "Enter PostgreSQL username: " username; read -p "Enter database name (default: ledgerflow): " dbname; dbname=${dbname:-ledgerflow}; createdb -U ${username} ${dbname} || echo "Database might already exist"'
+
+dev-db-reset:
+  bash -lc 'read -p "Enter PostgreSQL username: " username; read -p "Enter database name (default: ledgerflow): " dbname; dbname=${dbname:-ledgerflow}; dropdb -U ${username} ${dbname} --if-exists; createdb -U ${username} ${dbname}; just migration-run; echo "Database reset complete"'
+
+logs:
+  tail -f /tmp/ledgerflow-bot.log
+
+# CI
+ci-test:
+  cargo test --release
+
+ci-build:
+  cargo build --release --locked
+
+# Install
+install:
+  cargo install --path .
+
+uninstall:
+  cargo uninstall ledgerflow-bot
+
+# Docs
+docs:
+  cargo doc --open
+
+docs-deps:
+  cargo install mdbook
+
+serve-docs:
+  mdbook serve docs/
+
+# Security
+audit:
+  cargo audit
+
+update-deps:
+  cargo update

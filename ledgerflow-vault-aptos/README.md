@@ -32,7 +32,7 @@ ledgerflow-vault-aptos/
 │   └── payment_vault_comprehensive_test.move
 ├── scripts/
 │   └── deploy.move          # Deployment script
-├── Makefile                 # Build automation
+├── Justfile                 # Build automation
 └── README.md               # Complete documentation
 ```
 

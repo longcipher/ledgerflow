@@ -1,0 +1,41 @@
+# Commands for ledgerflow-eth-cli
+
+# Build
+build:
+  cargo build --release
+
+dev:
+  cargo build
+
+# Test
+test:
+  cargo test
+
+# Clean
+clean:
+  cargo clean
+
+# Install
+install:
+  cargo install --path .
+
+# Lint/Format
+lint:
+  cargo clippy -- -D warnings
+
+fmt:
+  cargo fmt
+
+check:
+  cargo fmt --check
+  cargo clippy -- -D warnings
+
+# Examples (require env vars)
+example-deposit:
+  ./target/release/ledgerflow-eth-cli deposit --rpc-url "${RPC_URL}" --private-key "${PRIVATE_KEY}" --contract-address "${VAULT_ADDRESS}" --order-id "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef" --amount 1000000
+
+example-permit:
+  ./target/release/ledgerflow-eth-cli deposit-with-permit --rpc-url "${RPC_URL}" --private-key "${PRIVATE_KEY}" --contract-address "${VAULT_ADDRESS}" --order-id "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef" --amount 1000000 --deadline $(date -v+1H +%s)
+
+example-withdraw:
+  ./target/release/ledgerflow-eth-cli withdraw --rpc-url "${RPC_URL}" --private-key "${PRIVATE_KEY}" --contract-address "${VAULT_ADDRESS}"
