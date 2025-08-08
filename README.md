@@ -10,6 +10,13 @@ LedgerFlow is a modern payment gateway built on blockchain technology, centered 
 
 By leveraging blockchain's transparency, security, and composability, LedgerFlow provides SaaS service providers, developers, and independent creators worldwide with a **low-barrier, low-cost, high-efficiency, censorship-resistant** payment solution.
 
+## 🔥 First-class x402 Protocol Support (EVM)
+
+- Standards-based paywalls using x402 V1 "exact" with USDC EIP-3009.
+- Settlement via PaymentVault.depositWithAuthorization preserves on-chain `DepositReceived(payer, orderId, amount)` linkage.
+- Distributed `orderId` equals the EIP-3009 `nonce` (no central issuance).
+- See details: [docs/x402_integration.md](./docs/x402_integration.md)
+
 ## Testnet(Unichain Sepolia) Demo
 
 * PaymentVault Contract: [0x8b6f22009ae835795b9b33d75ad218c730db039b](https://sepolia.uniscan.xyz/address/0x8b6f22009ae835795b9b33d75ad218c730db039b)
@@ -123,6 +130,14 @@ ledgerflow/                         # Project root directory
 7. **Confirmation notification**: Merchant receives payment success notification
 
 ## 🌟 Core Features
+
+### x402 Protocol (EVM) — Standards-based Paywalls
+
+- Supports x402 V1 "exact" with USDC EIP-3009 for seamless, standards-based paywalls
+- Settlement via PaymentVault.depositWithAuthorization preserves on-chain `DepositReceived(payer, orderId, amount)` linkage
+- Distributed `orderId` equals EIP-3009 `nonce` (no central issuance); verifiable client-side
+- Backend provides `/x402/verify` and `/x402/settle` endpoints for facilitators and agents
+- Learn more: [x402 Integration (EVM)](./docs/x402_integration.md) · [Exact scheme notes](./docs/scheme_exact_evm.md)
 
 ### 1. Non-Custodial Vault
 
