@@ -15,7 +15,7 @@ resolver = "2"
 [workspace.dependencies]
 # Web framework
 axum = "0.8.4"
-tokio = "1.46"
+tokio = "1.47.1"
 tokio-test = "0.4.4"
 tower-http = "0.6.6"
 
@@ -23,12 +23,12 @@ tower-http = "0.6.6"
 sqlx = "0.8.6"
 
 # CLI
-clap = "4.5.41"
+clap = "4.5.45"
 
 # Configuration
-config = "0.15.13"
+config = "0.15.14"
 serde = "1.0.219"
-serde_json = "1.0.141"
+serde_json = "1.0.143"
 serde_yaml = "0.9.33"
 
 # Logging and tracing
@@ -38,18 +38,18 @@ tracing-subscriber = "0.3.19"
 # Error handling
 color-eyre = "0.6.5"
 eyre = "0.6.12"
-thiserror = "2.0.12"
+thiserror = "2.0.15"
 
 # Utilities
 chrono = "0.4.41"
 
 # Crypto
 hex = "0.4.3"
-rand = "0.9.1"
+rand = "0.9.2"
 sha3 = "0.10.8"
 
 # Ethereum/EVM interaction
-alloy = "1.0.22"
+alloy = "1.0.24"
 
 # Diesel (for Aptos indexer compatibility)
 aptos-indexer-processor-sdk = { git = "https://github.com/aptos-labs/aptos-indexer-processor-sdk.git", tag = "aptos-indexer-processor-sdk-v2.1.1" }
@@ -61,14 +61,14 @@ diesel_migrations = "=2.2.0"
 teloxide = "0.17.0"
 
 # HTTP client
-reqwest = "0.12.22"
+reqwest = "0.12.23"
 
 # QR code generation
 image = "0.25.6"
 qrcode = "0.14.1"
 
 # UUID generation
-uuid = "1.17.0"
+uuid = "1.18.0"
 
 # Base64 encoding
 base64 = "0.22.1"
