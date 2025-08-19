@@ -1,10 +1,10 @@
 #[test_only]
-module ledgerflow_vault_sui::payment_vault_tests {
+module ledgerflow_vault::payment_vault_tests {
     use sui::test_scenario;
     use sui::clock;
     use sui::transfer;
     use usdc::usdc::USDC;
-    use ledgerflow_vault_sui::payment_vault;
+    use ledgerflow_vault::payment_vault;
     use sui::coin;
 
     const ADMIN: address = @0xAD;

@@ -22,7 +22,7 @@
 /// - Input validation on all public functions
 /// - Linear type safety prevents double-spending
 
-module ledgerflow_vault::payment_vault_fa {
+module ledgerflow_vault::payment_vault {
     use std::error;
     use std::signer;
     use std::vector;

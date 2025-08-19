@@ -29,7 +29,7 @@ echo ""
 # Check if current account is the vault owner
 echo "Checking vault ownership..."
 OWNER_RESULT=$(aptos move view \
-    --function-id ${VAULT_ADDRESS}::payment_vault_fa::get_owner \
+    --function-id ${VAULT_ADDRESS}::payment_vault::get_owner \
     --args address:$VAULT_ADDRESS \
     --url https://api.testnet.aptoslabs.com/v1 2>/dev/null || echo "ERROR")
 
@@ -57,7 +57,7 @@ echo ""
 # Check vault balance
 echo "Checking vault balance..."
 BALANCE_RESULT=$(aptos move view \
-    --function-id ${VAULT_ADDRESS}::payment_vault_fa::get_balance \
+    --function-id ${VAULT_ADDRESS}::payment_vault::get_balance \
     --args address:$VAULT_ADDRESS \
     --url https://api.testnet.aptoslabs.com/v1 2>/dev/null || echo "ERROR")
 

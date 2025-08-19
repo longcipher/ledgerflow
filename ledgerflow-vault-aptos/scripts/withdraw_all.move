@@ -2,7 +2,7 @@
 // This script handles withdrawing all funds from the vault (owner only)
 
 script {
-    use ledgerflow_vault::payment_vault_fa;
+    use ledgerflow_vault::payment_vault;
 
     /// Withdraw all USDC from the payment vault
     /// Only the vault owner can call this function
@@ -16,6 +16,6 @@ script {
         vault_address: address,
         recipient: address
     ) {
-        payment_vault_fa::withdraw_all(owner, vault_address, recipient);
+        payment_vault::withdraw_all(owner, vault_address, recipient);
     }
 }

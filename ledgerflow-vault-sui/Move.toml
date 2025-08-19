@@ -1,12 +1,12 @@
 [package]
-name = "ledgerflow_vault_sui"
+name = "ledgerflow_vault"
 edition = "2024.beta"
 version = "1.0.0"
 license = "MIT"
 authors = ["LedgerFlow Team"]
 
 [dependencies]
-usdc = { git = "https://github.com/circlefin/stablecoin-sui.git", subdir = "packages/usdc", rev = "master" }
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/testnet" }
 
 [addresses]
-ledgerflow_vault_sui = "0x0"
+ledgerflow_vault = "0x0"

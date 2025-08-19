@@ -2,7 +2,7 @@
 // This script handles depositing USDC tokens to the vault with an order ID
 
 script {
-    use ledgerflow_vault::payment_vault_fa;
+    use ledgerflow_vault::payment_vault;
 
     /// Deposit USDC to the payment vault
     /// 
@@ -17,6 +17,6 @@ script {
         order_id: vector<u8>,
         amount: u64
     ) {
-        payment_vault_fa::deposit(payer, vault_address, order_id, amount);
+        payment_vault::deposit(payer, vault_address, order_id, amount);
     }
 }

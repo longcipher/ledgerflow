@@ -9,7 +9,7 @@ LedgerFlow Vault Aptos is the Aptos blockchain implementation of the LedgerFlow 
 ### Deployment Information
 - **Network**: Aptos Testnet ✅ **DEPLOYED**
 - **Contract Address**: `0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846`
-- **Module Name**: `payment_vault_fa`
+- **Module Name**: `payment_vault`
 - **USDC Metadata**: `0x69091fbab5f7d635ee7ac5098cf0c1efbe31d68fec0f2cd565e8d168daf52832`
 - **Status**: ✅ Initialized and ready for use
 
@@ -278,7 +278,7 @@ const E_INVALID_ADDRESS: u64 = 7;
 ### Current Deployment Status
 - **Network**: Aptos Testnet
 - **Contract Address**: `0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846`
-- **Module Name**: `payment_vault_fa`
+- **Module Name**: `payment_vault`
 - **Deployment Transaction**: [`0x4e72687e72fd0de0fbe91991cabc9a801769920845558630ee50c9b9bda2a74c`](https://explorer.aptoslabs.com/txn/0x4e72687e72fd0de0fbe91991cabc9a801769920845558630ee50c9b9bda2a74c?network=testnet)
 - **Initialization Transaction**: [`0xb8505febe79ae6eea9bc6d6c0d95b9f87705df878fb809834fa3cc39690d515b`](https://explorer.aptoslabs.com/txn/0xb8505febe79ae6eea9bc6d6c0d95b9f87705df878fb809834fa3cc39690d515b?network=testnet)
 
@@ -286,7 +286,7 @@ const E_INVALID_ADDRESS: u64 = 7;
 
 #### Deposit USDC (Example)
 ```bash
-aptos move run --function-id 0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846::payment_vault_fa::deposit 
+aptos move run --function-id 0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846::payment_vault::deposit 
   --args 
     address:0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846 
     string:"order_id_123456" 
@@ -295,7 +295,7 @@ aptos move run --function-id 0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc231
 
 #### Withdraw USDC (Owner Only)
 ```bash
-aptos move run --function-id 0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846::payment_vault_fa::withdraw 
+aptos move run --function-id 0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846::payment_vault::withdraw 
   --args 
     address:0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846 
     address:RECIPIENT_ADDRESS 
@@ -305,15 +305,15 @@ aptos move run --function-id 0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc231
 #### Query Vault Status
 ```bash
 # Check vault balance
-aptos move view --function-id 0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846::payment_vault_fa::get_balance 
+aptos move view --function-id 0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846::payment_vault::get_balance 
   --args address:0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846
 
 # Check vault owner
-aptos move view --function-id 0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846::payment_vault_fa::get_owner 
+aptos move view --function-id 0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846::payment_vault::get_owner 
   --args address:0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846
 
 # Check deposit count
-aptos move view --function-id 0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846::payment_vault_fa::get_deposit_count 
+aptos move view --function-id 0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846::payment_vault::get_deposit_count 
   --args address:0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846
 ```
 

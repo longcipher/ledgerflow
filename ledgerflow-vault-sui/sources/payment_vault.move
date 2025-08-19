@@ -22,7 +22,7 @@
 /// - Input validation on all public functions
 /// - Object-based linear type safety prevents double-spending
 
-module ledgerflow_vault_sui::payment_vault {
+module ledgerflow_vault::payment_vault {
     use sui::coin::{Self, Coin};
     use sui::balance::{Self, Balance};
     use sui::object;
@@ -30,7 +30,6 @@ module ledgerflow_vault_sui::payment_vault {
     use sui::tx_context;
     use sui::event;
     use sui::clock;
-    use usdc::usdc::USDC;
 
     // ==================== Error Codes ====================
 
@@ -52,11 +51,11 @@ module ledgerflow_vault_sui::payment_vault {
     // ==================== Objects ====================
 
     /// Main vault object that stores USDC coins and manages deposits/withdrawals
-    public struct PaymentVault has key, store {
+    public struct PaymentVault<phantom T> has key, store {
         /// Unique identifier for the vault
         id: object::UID,
         /// USDC balance held by the vault (more efficient than Coin)
-        usdc_balance: Balance<USDC>,
+        usdc_balance: Balance<T>,
         /// Total number of deposits made (for tracking and event indexing)
         deposit_count: u64,
         /// Vault creation timestamp
@@ -136,7 +135,7 @@ module ledgerflow_vault_sui::payment_vault {
     /// transfer::share_object(vault);
     /// transfer::transfer(owner_cap, tx_context::sender(ctx));
     /// ```
-    public fun init_vault(clock: &clock::Clock, ctx: &mut tx_context::TxContext): (PaymentVault, OwnerCap) {
+    public fun init_vault<T>(clock: &clock::Clock, ctx: &mut tx_context::TxContext): (PaymentVault<T>, OwnerCap) {
         let vault_uid = object::new(ctx);
         let vault_id = object::uid_to_inner(&vault_uid);
         let owner_addr = tx_context::sender(ctx);
@@ -144,7 +143,7 @@ module ledgerflow_vault_sui::payment_vault {
         // Create vault with zero USDC balance
         let vault = PaymentVault {
             id: vault_uid,
-            usdc_balance: balance::zero<USDC>(),
+            usdc_balance: balance::zero<T>(),
             deposit_count: 0,
             created_at: clock::timestamp_ms(clock),
             owner: owner_addr
@@ -157,6 +156,18 @@ module ledgerflow_vault_sui::payment_vault {
         };
 
         (vault, owner_cap)
+    }
+
+    /// Initialize a payment vault and immediately share it
+    /// This is a convenience function that creates and shares a vault in one transaction
+    ///
+    /// # Parameters
+    /// * `clock` - Clock object for timestamping
+    /// * `ctx` - Transaction context
+    public entry fun create_shared_vault<T>(clock: &clock::Clock, ctx: &mut tx_context::TxContext) {
+        let (vault, owner_cap) = init_vault<T>(clock, ctx);
+        transfer::share_object(vault);
+        transfer::transfer(owner_cap, tx_context::sender(ctx));
     }
 
     /// Deposit USDC tokens to the vault with an associated order ID
@@ -179,9 +190,9 @@ module ledgerflow_vault_sui::payment_vault {
     /// let order_id = b"unique_order_id_12345678901234567890";
     /// deposit(&mut vault, usdc_coin, order_id, &clock, ctx);
     /// ```
-    public entry fun deposit(
-        vault: &mut PaymentVault,
-        payment: Coin<USDC>,
+    public entry fun deposit<T>(
+        vault: &mut PaymentVault<T>,
+        payment: Coin<T>,
         order_id: vector<u8>,
         clock: &clock::Clock,
         ctx: &mut tx_context::TxContext
@@ -236,8 +247,8 @@ module ledgerflow_vault_sui::payment_vault {
     /// // Withdraw 50 USDC to a specific address
     /// withdraw(&mut vault, &owner_cap, 50000000, @recipient, &clock, ctx);
     /// ```
-    public entry fun withdraw(
-        vault: &mut PaymentVault,
+    public entry fun withdraw<T>(
+        vault: &mut PaymentVault<T>,
         owner_cap: &OwnerCap,
         amount: u64,
         recipient: address,
@@ -291,8 +302,8 @@ module ledgerflow_vault_sui::payment_vault {
     /// * `E_WRONG_VAULT` - If capability is for a different vault
     /// * `E_INVALID_ADDRESS` - If recipient address is invalid
     /// * `E_INSUFFICIENT_BALANCE` - If vault has zero balance
-    public entry fun withdraw_all(
-        vault: &mut PaymentVault,
+    public entry fun withdraw_all<T>(
+        vault: &mut PaymentVault<T>,
         owner_cap: &OwnerCap,
         recipient: address,
         clock: &clock::Clock,
@@ -320,8 +331,8 @@ module ledgerflow_vault_sui::payment_vault {
     /// * `E_WRONG_VAULT` - If capability is for a different vault
     /// * `E_INVALID_ADDRESS` - If new_owner is zero address
     /// * `E_SELF_OPERATION` - If trying to transfer to self
-    public entry fun transfer_ownership(
-        vault: &mut PaymentVault,
+    public entry fun transfer_ownership<T>(
+        vault: &mut PaymentVault<T>,
         owner_cap: &OwnerCap,
         new_owner: address,
         clock: &clock::Clock,
@@ -354,27 +365,27 @@ module ledgerflow_vault_sui::payment_vault {
     // ==================== View Functions ====================
 
     /// Get the current USDC balance in the vault
-    public fun get_balance(vault: &PaymentVault): u64 {
+    public fun get_balance<T>(vault: &PaymentVault<T>): u64 {
         balance::value(&vault.usdc_balance)
     }
 
     /// Get the current owner address of the vault
-    public fun get_owner(vault: &PaymentVault): address {
+    public fun get_owner<T>(vault: &PaymentVault<T>): address {
         vault.owner
     }
 
     /// Get the total number of deposits made to the vault
-    public fun get_deposit_count(vault: &PaymentVault): u64 {
+    public fun get_deposit_count<T>(vault: &PaymentVault<T>): u64 {
         vault.deposit_count
     }
 
     /// Get vault creation timestamp
-    public fun get_created_at(vault: &PaymentVault): u64 {
+    public fun get_created_at<T>(vault: &PaymentVault<T>): u64 {
         vault.created_at
     }
 
     /// Get the vault ID
-    public fun get_vault_id(vault: &PaymentVault): object::ID {
+    public fun get_vault_id<T>(vault: &PaymentVault<T>): object::ID {
         object::uid_to_inner(&vault.id)
     }
 
@@ -396,7 +407,7 @@ module ledgerflow_vault_sui::payment_vault {
     /// # Aborts
     /// * `E_NOT_OWNER` - If caller is not the vault owner
     /// * `E_WRONG_VAULT` - If capability is for a different vault
-    fun verify_owner(vault: &PaymentVault, owner_cap: &OwnerCap, ctx: &tx_context::TxContext) {
+    fun verify_owner<T>(vault: &PaymentVault<T>, owner_cap: &OwnerCap, ctx: &tx_context::TxContext) {
         let caller_addr = tx_context::sender(ctx);
         let vault_id = object::uid_to_inner(&vault.id);
 
@@ -411,14 +422,14 @@ module ledgerflow_vault_sui::payment_vault {
 
     #[test_only]
     /// Create a vault for testing purposes
-    public fun create_vault_for_testing(ctx: &mut tx_context::TxContext): (PaymentVault, OwnerCap) {
+    public fun create_vault_for_testing<T>(ctx: &mut tx_context::TxContext): (PaymentVault<T>, OwnerCap) {
         let vault_uid = object::new(ctx);
         let vault_id = object::uid_to_inner(&vault_uid);
         let owner_addr = tx_context::sender(ctx);
 
         let vault = PaymentVault {
             id: vault_uid,
-            usdc_balance: balance::zero<USDC>(),
+            usdc_balance: balance::zero<T>(),
             deposit_count: 0,
             created_at: 0, // Use 0 for testing
             owner: owner_addr
@@ -434,7 +445,7 @@ module ledgerflow_vault_sui::payment_vault {
 
     #[test_only]
     /// Destroy a vault for testing purposes
-    public fun destroy_vault_for_testing(vault: PaymentVault) {
+    public fun destroy_vault_for_testing<T>(vault: PaymentVault<T>) {
         let PaymentVault {
             id,
             usdc_balance,

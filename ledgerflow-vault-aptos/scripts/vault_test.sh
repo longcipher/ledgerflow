@@ -43,7 +43,7 @@ check_vault_status() {
     # Check if vault exists
     echo "Checking if vault exists..."
     EXISTS_RESULT=$(aptos move view \
-        --function-id ${VAULT_ADDRESS}::payment_vault_fa::vault_exists \
+        --function-id ${VAULT_ADDRESS}::payment_vault::vault_exists \
         --args address:$VAULT_ADDRESS \
         --url $API_URL 2>/dev/null || echo "ERROR")
 
@@ -62,7 +62,7 @@ check_vault_status() {
     # Get vault owner
     echo "Getting vault owner..."
     OWNER_RESULT=$(aptos move view \
-        --function-id ${VAULT_ADDRESS}::payment_vault_fa::get_owner \
+        --function-id ${VAULT_ADDRESS}::payment_vault::get_owner \
         --args address:$VAULT_ADDRESS \
         --url $API_URL 2>/dev/null || echo "ERROR")
 
@@ -76,7 +76,7 @@ check_vault_status() {
     # Get vault balance
     echo "Getting vault balance..."
     BALANCE_RESULT=$(aptos move view \
-        --function-id ${VAULT_ADDRESS}::payment_vault_fa::get_balance \
+        --function-id ${VAULT_ADDRESS}::payment_vault::get_balance \
         --args address:$VAULT_ADDRESS \
         --url $API_URL 2>/dev/null || echo "ERROR")
 
@@ -91,7 +91,7 @@ check_vault_status() {
     # Get deposit count
     echo "Getting deposit count..."
     COUNT_RESULT=$(aptos move view \
-        --function-id ${VAULT_ADDRESS}::payment_vault_fa::get_deposit_count \
+        --function-id ${VAULT_ADDRESS}::payment_vault::get_deposit_count \
         --args address:$VAULT_ADDRESS \
         --url $API_URL 2>/dev/null || echo "ERROR")
 
@@ -141,7 +141,7 @@ deposit_usdc() {
     # Execute deposit
     echo "Executing deposit transaction..."
     aptos move run \
-        --function-id ${VAULT_ADDRESS}::payment_vault_fa::deposit \
+        --function-id ${VAULT_ADDRESS}::payment_vault::deposit \
         --args address:$VAULT_ADDRESS \
         --args hex:$ORDER_ID \
         --args u64:$amount \
@@ -176,7 +176,7 @@ withdraw_all() {
     # Execute withdrawal
     echo "Executing withdraw_all transaction..."
     aptos move run \
-        --function-id ${VAULT_ADDRESS}::payment_vault_fa::withdraw_all \
+        --function-id ${VAULT_ADDRESS}::payment_vault::withdraw_all \
         --args address:$VAULT_ADDRESS \
         --args address:$recipient \
         --url $API_URL \
