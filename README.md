@@ -17,6 +17,35 @@ By leveraging blockchain's transparency, security, and composability, LedgerFlow
 - Distributed `orderId` equals the EIP-3009 `nonce` (no central issuance).
 - See details: [Exact scheme notes](./docs/scheme_exact_evm.md)
 
+x402 workflow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Server
+    participant Facilitator
+    participant Blockchain
+
+    %% Step 1 & 2: Initial Request and Payment Challenge
+    Client->>Server: GET /premium-resource
+    Server-->>Client: 402 Payment Required <br> WWW-Authenticate: X402 (price, token, facilitator...)
+
+    %% Step 3: Client-side Signing
+    Note over Client: User signs payment authorization <br> in their wallet to generate authToken.
+
+    %% Step 4: Second Request with Payment Proof
+    Client->>Server: GET /premium-resource <br> Authorization: X402 authToken="..."
+
+    %% Step 5-8: Server-side Verification via Facilitator
+    Server->>Facilitator: POST /verify (authToken, price, token...)
+    Facilitator->>Blockchain: Submits signed transaction
+    Blockchain-->>Facilitator: Transaction Confirmed
+    Facilitator-->>Server: Verification OK
+
+    %% Step 9: Success and Resource Delivery
+    Server-->>Client: 200 OK <br> { "data": "..." }
+```
+
 ## Testnet(Unichain Sepolia) Demo
 
 * PaymentVault Contract: [0x8b6f22009ae835795b9b33d75ad218c730db039b](https://sepolia.uniscan.xyz/address/0x8b6f22009ae835795b9b33d75ad218c730db039b)
