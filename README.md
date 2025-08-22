@@ -208,12 +208,16 @@ For detailed usage instructions, please refer to the README.md files in each mod
 * [Aptos CLI Tools](./ledgerflow-aptos-cli/README.md)
 * [TypeScript Aptos CLI](./ledgerflow-aptos-cli-ts/README.md)
 
+- [x402 Facilitator Server](./ledgerflow-facilitator/README.md)
+
 ## 🔮 Future Vision
 
 * **SaaS Merchant Dashboard**: Develop Web frontend for merchants to manage orders and data more intuitively
 * **One-Click Plugin Integration**: Develop payment plugins for mainstream e-commerce platforms
-* **Subscription & Recurring Payments**: Implement authorization and time-lock logic at the contract level
-* **Business Model**: Free usage initially, future minimal service fees (0.1% - 0.25%) on withdrawals
+ 
+- **Subscription & Recurring Payments**: Implement authorization and time-lock logic at the contract level
+
+- **Business Model**: Free usage initially, future minimal service fees (0.1% - 0.25%) on withdrawals
 
 ---
 

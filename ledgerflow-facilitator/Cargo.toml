@@ -1,0 +1,42 @@
+[package]
+name = "ledgerflow-facilitator"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/longcipher/ledgerflow"
+description = "LedgerFlow facilitator server implementing the x402 spec (verify/settle)"
+
+[dependencies]
+# Workspace-pinned deps
+axum = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tower-http = { workspace = true, features = ["trace", "cors"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+config = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+eyre = { workspace = true }
+color-eyre = { workspace = true }
+
+# x402 implementation crate (git dependency)
+x402-rs = { git = "https://github.com/x402-rs/x402-rs", package = "x402-rs" }
+
+# misc
+dotenvy = "0.15"
+
+[features]
+telemetry = []
+
+[lib]
+name = "ledgerflow_facilitator"
+path = "src/lib.rs"
+
+[dev-dependencies]
+axum-test = "18.0.0"
+serde_json = { workspace = true }
+eyre = { workspace = true }
+
+[package.metadata.docs.rs]
+all-features = true
