@@ -1,7 +1,7 @@
-#[path = "handlers.rs"]
-pub mod handlers;
 #[path = "config.rs"]
 pub mod config;
+#[path = "handlers.rs"]
+pub mod handlers;
 use axum::{
     http::Method,
     routing::{get, post},

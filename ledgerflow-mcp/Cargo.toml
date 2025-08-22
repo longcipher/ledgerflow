@@ -1,0 +1,31 @@
+[package]
+name = "ledgerflow-mcp"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/longcipher/ledgerflow"
+description = "MCP server exposing x402 verify/settle/supported tools for LedgerFlow"
+
+[dependencies]
+ultrafast-mcp = { version = "202506018.1.0", features = ["full"] }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+clap = { workspace = true, features = ["derive"] }
+eyre = { workspace = true }
+color-eyre = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+async-trait = "0.1"
+
+# Use the facilitator crate we just built to reuse ProviderCache + handlers
+x402-rs = { git = "https://github.com/x402-rs/x402-rs", package = "x402-rs" }
+
+dotenvy = "0.15"
+
+[features]
+default = []
+# Enable HTTP transport by enabling ultrafast-mcp's HTTP feature set
+http = ["ultrafast-mcp/http-with-auth"]
+
+[package.metadata.docs.rs]
+all-features = true

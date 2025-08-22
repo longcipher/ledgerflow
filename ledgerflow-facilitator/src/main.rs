@@ -9,19 +9,14 @@
 
 use std::net::SocketAddr;
 
-use axum::Router;
 use clap::Parser;
 use color_eyre::Result;
 use dotenvy::dotenv;
+use ledgerflow_facilitator::config::{load_config, ServerConfig};
 use tower_http::trace::TraceLayer;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::EnvFilter;
 use x402_rs::{facilitator_local::FacilitatorLocal, provider_cache::ProviderCache};
-
-mod config;
-mod handlers;
-
-use crate::config::{load_config, ServerConfig};
 
 #[tokio::main]
 async fn main() -> Result<()> {

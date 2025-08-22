@@ -1,4 +1,5 @@
 //! Axum handlers wrapping x402-rs facilitator logic.
+#![allow(dead_code)]
 
 use axum::{http::StatusCode, response::IntoResponse, Extension, Json};
 use tracing::instrument;

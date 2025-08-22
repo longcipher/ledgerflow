@@ -1,7 +1,5 @@
-use axum::http::StatusCode;
-use axum::Router;
-use x402_rs::facilitator_local::FacilitatorLocal;
-use x402_rs::provider_cache::ProviderCache;
+use axum::{http::StatusCode, Router};
+use x402_rs::{facilitator_local::FacilitatorLocal, provider_cache::ProviderCache};
 
 // Tiny helper to build app with a ProviderCache that may read env; for CI we allow missing RPCs
 async fn test_app() -> eyre::Result<Router> {
@@ -78,7 +76,10 @@ async fn post_verify_rejects_invalid_payload() -> eyre::Result<()> {
         .await;
 
     // Either BAD_REQUEST for parse errors or 200 with invalid schema mapping; both are acceptable minimal checks
-    assert!(matches!(res.status_code(), StatusCode::OK | StatusCode::BAD_REQUEST));
+    assert!(matches!(
+        res.status_code(),
+        StatusCode::OK | StatusCode::BAD_REQUEST
+    ));
     Ok(())
 }
 
@@ -97,6 +98,9 @@ async fn post_settle_rejects_invalid_payload() -> eyre::Result<()> {
         .post("/settle")
         .json(&serde_json::json!({"foo":"bar"}))
         .await;
-    assert!(matches!(res.status_code(), StatusCode::OK | StatusCode::BAD_REQUEST));
+    assert!(matches!(
+        res.status_code(),
+        StatusCode::OK | StatusCode::BAD_REQUEST
+    ));
     Ok(())
 }
