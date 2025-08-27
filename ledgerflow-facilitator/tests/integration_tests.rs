@@ -14,9 +14,9 @@ use ledgerflow_facilitator::{
         sui_facilitator::{SuiFacilitator, SuiNetworkConfig},
     },
     types::{
-        ExactPaymentPayload, HexEncodedNonce, Network, PaymentPayload, PaymentRequirements, Scheme,
-        SettleRequest, SuiPayload, SuiPayloadAuthorization, TokenAmount, VerifyRequest,
-        X402Version, PayToAddress, AssetId,
+        AssetId, ExactPaymentPayload, HexEncodedNonce, Network, PayToAddress, PaymentPayload,
+        PaymentRequirements, Scheme, SettleRequest, SuiPayload, SuiPayloadAuthorization,
+        TokenAmount, VerifyRequest, X402Version,
     },
 };
 use sui_types::base_types::{ObjectID, SuiAddress};
@@ -519,7 +519,10 @@ async fn test_intent_signing_and_verification() -> Result<()> {
     println!("✓ Verify request structure validated");
     println!("  Payment scheme: {:?}", request.payment_payload.scheme);
     println!("  Network: {:?}", request.payment_payload.network);
-    println!("  Required amount: {}", request.payment_requirements.max_amount_required);
+    println!(
+        "  Required amount: {}",
+        request.payment_requirements.max_amount_required
+    );
 
     // In a real scenario, this is where the facilitator would:
     // 1. Reconstruct the intent message from the authorization
@@ -534,7 +537,7 @@ async fn test_intent_signing_and_verification() -> Result<()> {
 async fn test_facilitator_verify_with_intent_message() -> Result<()> {
     // Create a facilitator instance for testing
     let facilitator = create_test_facilitator().await?;
-    
+
     // Create a well-formed intent message and payload
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -596,17 +599,23 @@ async fn test_facilitator_verify_with_intent_message() -> Result<()> {
     };
 
     println!("✓ Created facilitator verify request with intent message structure");
-    println!("  Authorization message: {}", serde_json::to_string_pretty(&authorization_data)?);
+    println!(
+        "  Authorization message: {}",
+        serde_json::to_string_pretty(&authorization_data)?
+    );
     println!("  From: {}", from_address);
     println!("  To: {}", to_address);
     println!("  Amount: {} micro-USDC", payload.authorization.value.0);
-    println!("  Valid window: {} to {}", payload.authorization.valid_after, payload.authorization.valid_before);
+    println!(
+        "  Valid window: {} to {}",
+        payload.authorization.valid_after, payload.authorization.valid_before
+    );
     println!("  Nonce: 0x{}", hex::encode(nonce.0));
 
     // Attempt verification - this will fail in our test environment because we don't have
     // real network connections, but it tests the request structure and parameter validation
     let verification_result = facilitator.verify(&verify_request).await;
-    
+
     // In our test environment, we expect this to fail due to network/signature issues
     // but the important thing is that the request structure is valid
     match verification_result {
@@ -615,15 +624,18 @@ async fn test_facilitator_verify_with_intent_message() -> Result<()> {
         }
         Err(e) => {
             // Expected to fail in test environment - log the error for debugging
-            println!("✓ Verification failed as expected in test environment: {}", e);
+            println!(
+                "✓ Verification failed as expected in test environment: {}",
+                e
+            );
             // Verify it's a meaningful error related to network/signature, not structure
             let error_msg = e.to_string();
             assert!(
-                error_msg.contains("network") || 
-                error_msg.contains("signature") ||
-                error_msg.contains("client") ||
-                error_msg.contains("rpc") ||
-                !error_msg.contains("parse") // Should not be a parsing error
+                error_msg.contains("network")
+                    || error_msg.contains("signature")
+                    || error_msg.contains("client")
+                    || error_msg.contains("rpc")
+                    || !error_msg.contains("parse") // Should not be a parsing error
             );
         }
     }
@@ -632,8 +644,11 @@ async fn test_facilitator_verify_with_intent_message() -> Result<()> {
     assert_eq!(verify_request.payment_payload.scheme, Scheme::Exact);
     assert_eq!(verify_request.payment_payload.network, Network::SuiTestnet);
     assert_eq!(verify_request.payment_requirements.scheme, Scheme::Exact);
-    assert_eq!(verify_request.payment_requirements.max_amount_required.0, 1000000);
-    
+    assert_eq!(
+        verify_request.payment_requirements.max_amount_required.0,
+        1000000
+    );
+
     match &verify_request.payment_requirements.pay_to {
         PayToAddress::Sui(addr) => assert_eq!(*addr, to_address),
         PayToAddress::Evm(_) => panic!("Expected Sui address"),
@@ -642,7 +657,7 @@ async fn test_facilitator_verify_with_intent_message() -> Result<()> {
     println!("✓ Facilitator verification test with intent message completed");
     println!("  Request structure validated successfully");
     println!("  All payment parameters match authorization data");
-    
+
     Ok(())
 }
 
@@ -695,7 +710,11 @@ async fn test_complete_intent_verification_flow() -> Result<()> {
     // Step 3: Create the signature (mock for testing)
     let signature = generate_test_signature();
     println!("\n✍️  Step 3: Signature Created");
-    println!("  Signature: {}... ({} chars)", &signature[..20], signature.len());
+    println!(
+        "  Signature: {}... ({} chars)",
+        &signature[..20],
+        signature.len()
+    );
 
     // Step 4: Create the payment payload
     let payload = SuiPayload {
@@ -743,7 +762,10 @@ async fn test_complete_intent_verification_flow() -> Result<()> {
     println!("\n🔍 Step 5: Verification Request Created");
     println!("  Scheme: {:?}", verify_request.payment_payload.scheme);
     println!("  Network: {:?}", verify_request.payment_payload.network);
-    println!("  Resource: {}", verify_request.payment_requirements.resource);
+    println!(
+        "  Resource: {}",
+        verify_request.payment_requirements.resource
+    );
 
     // Step 6: Validate the request structure
     match &verify_request.payment_payload.payload {
@@ -753,7 +775,7 @@ async fn test_complete_intent_verification_flow() -> Result<()> {
             assert_eq!(p.authorization.to, to_address);
             assert_eq!(p.authorization.value.0, amount);
             assert!(!p.signature.is_empty());
-            
+
             // Verify we can reconstruct the authorization message
             let reconstructed = serde_json::json!({
                 "from": p.authorization.from.to_string(),
@@ -764,7 +786,7 @@ async fn test_complete_intent_verification_flow() -> Result<()> {
                 "nonce": format!("0x{}", hex::encode(p.authorization.nonce.0)),
                 "coinType": p.authorization.coin_type
             });
-            
+
             assert_eq!(authorization_message, reconstructed);
             println!("  ✓ Authorization message reconstruction: PASSED");
         }
@@ -774,7 +796,7 @@ async fn test_complete_intent_verification_flow() -> Result<()> {
     // Step 7: Attempt verification with facilitator
     let facilitator = create_test_facilitator().await?;
     println!("\n⚡ Step 6: Facilitator Verification");
-    
+
     match facilitator.verify(&verify_request).await {
         Ok(result) => {
             println!("  ✓ Verification succeeded: {:?}", result);
@@ -796,7 +818,7 @@ async fn test_complete_intent_verification_flow() -> Result<()> {
     println!("✅ Verification request structured correctly");
     println!("✅ Facilitator API tested");
     println!("✅ All data consistency checks passed");
-    
+
     Ok(())
 }
 
