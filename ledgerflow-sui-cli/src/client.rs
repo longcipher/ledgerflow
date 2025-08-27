@@ -19,6 +19,19 @@ pub struct TransactionResult {
     pub timestamp: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IntentSignedTransaction {
+    pub transaction_bytes: String,
+    pub intent_signature: String,
+    pub public_key: String,
+    pub sender_address: String,
+    pub recipient: String,
+    pub amount_str: String,
+    pub order_id: String,
+    pub valid_after: u64,
+    pub valid_before: u64,
+}
+
 #[allow(dead_code)]
 pub struct VaultClient {
     client: SuiClient,
@@ -31,24 +44,32 @@ pub struct VaultClient {
 }
 
 impl VaultClient {
-    pub fn new(
+    pub async fn new(
         rpc_url: String,
         private_key: String,
         package_id: String,
         vault_object_id: String,
         usdc_type: String,
         gas_budget: u64,
+        address: Option<String>,
     ) -> Result<Self> {
-        let rt = tokio::runtime::Runtime::new().context("Failed to create runtime")?;
-        let client = rt
-            .block_on(async { SuiClientBuilder::default().build(&rpc_url).await })
+        let client = SuiClientBuilder::default()
+            .build(&rpc_url)
+            .await
             .context("Failed to build Sui client")?;
 
         // Create a dummy keystore for now
         let keystore = InMemKeystore::default();
 
-        // Parse the private key (simplified - in practice you'd properly handle key creation)
-        let active_address = if private_key.starts_with("0x") && private_key.len() == 66 {
+        // Parse the active address - prefer configured address, fallback to derivation from key
+        let active_address = if let Some(addr_str) = address {
+            SuiAddress::from_str(&addr_str)
+                .map_err(|e| eyre::eyre!("Failed to parse configured address: {}", e))?
+        } else if private_key.starts_with("suiprivkey1") {
+            // Sui private key format - for now, we'll need proper key derivation
+            // This is a simplified implementation
+            SuiAddress::random_for_testing_only()
+        } else if private_key.starts_with("0x") && private_key.len() == 66 {
             // Try to parse as a 32-byte hex string and convert to SuiAddress
             let bytes = hex::decode(&private_key[2..]).context("Failed to decode private key")?;
             if bytes.len() == 32 {
@@ -187,5 +208,74 @@ impl VaultClient {
             .context("Failed to get SUI balance")?;
 
         Ok(balance.total_balance.try_into().unwrap_or(0))
+    }
+
+    /// Create an intent-signed transfer transaction
+    pub async fn create_intent_transfer(
+        &mut self,
+        recipient: String,
+        amount: u64,
+        order_id: String,
+    ) -> Result<IntentSignedTransaction> {
+        use base64::{Engine as _, engine::general_purpose};
+        use sha3::{Digest, Keccak256};
+
+        // Convert recipient to SuiAddress
+        let _recipient_addr = SuiAddress::from_str(&recipient)
+            .map_err(|e| eyre::eyre!("Invalid recipient address: {}", e))?;
+
+        // Create the transaction data (simplified version)
+        // In practice, you'd build a proper PTB (Programmable Transaction Block)
+        let current_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Failed to get current time")
+            .as_secs();
+
+        let valid_after = current_time;
+        let valid_before = current_time + 3600; // 1 hour validity
+
+        // Create a mock transaction bytes (in practice, build actual PTB)
+        let tx_data = serde_json::json!({
+            "sender": self.active_address.to_string(),
+            "recipient": recipient,
+            "amount": amount,
+            "order_id": order_id,
+            "valid_after": valid_after,
+            "valid_before": valid_before
+        });
+
+        let transaction_bytes = general_purpose::STANDARD.encode(tx_data.to_string());
+
+        // Create intent message for signature
+        let intent_scope = b"\x00\x00\x00"; // TransactionData intent scope
+        let intent_version = b"\x00"; // Version 0
+        let intent_app_id = b"\x00"; // Sui app ID
+
+        let mut intent_message = Vec::new();
+        intent_message.extend_from_slice(intent_scope);
+        intent_message.extend_from_slice(intent_version);
+        intent_message.extend_from_slice(intent_app_id);
+        intent_message.extend_from_slice(transaction_bytes.as_bytes());
+
+        // Create signature (mock implementation)
+        let mut hasher = Keccak256::new();
+        hasher.update(&intent_message);
+        let intent_hash = hasher.finalize();
+
+        // In practice, you'd sign with actual private key
+        let mock_signature = format!("intent_sig_{}", hex::encode(&intent_hash[..16]));
+        let mock_public_key = format!("pubkey_{}", hex::encode(&intent_hash[16..32]));
+
+        Ok(IntentSignedTransaction {
+            transaction_bytes,
+            intent_signature: mock_signature,
+            public_key: mock_public_key,
+            sender_address: self.active_address.to_string(),
+            recipient,
+            amount_str: amount.to_string(),
+            order_id,
+            valid_after,
+            valid_before,
+        })
     }
 }

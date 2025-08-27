@@ -1,0 +1,88 @@
+# LedgerFlow Facilitator Configuration Example
+# 
+# This file shows all available configuration options.
+# Copy this to config.toml and modify as needed.
+
+# Server configuration
+host = "0.0.0.0"           # Interface to bind to (0.0.0.0 for all interfaces, 127.0.0.1 for localhost only)
+port = 3402                # Port to listen on
+
+# ============================================================================
+# Sui Network Configuration
+# ============================================================================
+
+# Sui gRPC URLs for different networks
+# At least one network should be configured for the facilitator to work
+sui_mainnet_grpc_url = "https://fullnode.mainnet.sui.io:443"
+sui_testnet_grpc_url = "https://fullnode.testnet.sui.io:443"
+sui_devnet_grpc_url = "https://fullnode.devnet.sui.io:443"
+
+# Sui package IDs for USDC contracts on different networks
+# These are examples - replace with actual package IDs after deployment
+sui_mainnet_usdc_package_id = "0x1234567890abcdef1234567890abcdef12345678"
+sui_testnet_usdc_package_id = "0x1234567890abcdef1234567890abcdef12345678"
+sui_devnet_usdc_package_id = "0x1234567890abcdef1234567890abcdef12345678"
+
+# Sui package IDs for LedgerFlow PaymentVault contracts
+sui_mainnet_vault_package_id = "0xabcdef1234567890abcdef1234567890abcdef12"
+sui_testnet_vault_package_id = "0xabcdef1234567890abcdef1234567890abcdef12"
+sui_devnet_vault_package_id = "0xabcdef1234567890abcdef1234567890abcdef12"
+
+# ============================================================================
+# EVM Network Configuration
+# ============================================================================
+
+# EVM RPC URLs for different networks
+# These will be used by the EVM facilitator for blockchain interactions
+base_sepolia_rpc_url = "https://sepolia.base.org"
+base_mainnet_rpc_url = "https://mainnet.base.org"
+xdc_mainnet_rpc_url = "https://rpc.xinfin.network"
+avalanche_fuji_rpc_url = "https://api.avax-test.network/ext/bc/C/rpc"
+avalanche_mainnet_rpc_url = "https://api.avax.network/ext/bc/C/rpc"
+
+# EVM contract addresses for USDC on different networks
+base_sepolia_usdc_address = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+base_mainnet_usdc_address = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+xdc_mainnet_usdc_address = "0x4d4f43a49bf20b24be0f6c0bb3a3a0f2e2f65c0c"
+avalanche_fuji_usdc_address = "0x5425890298aed601595a70AB815c96711a31Bc65"
+avalanche_mainnet_usdc_address = "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E"
+
+# EVM PaymentVault contract addresses (deployed using CREATE2 for deterministic addresses)
+base_sepolia_vault_address = "0x1234567890123456789012345678901234567890"
+base_mainnet_vault_address = "0x1234567890123456789012345678901234567890"
+xdc_mainnet_vault_address = "0x1234567890123456789012345678901234567890"
+avalanche_fuji_vault_address = "0x1234567890123456789012345678901234567890"
+avalanche_mainnet_vault_address = "0x1234567890123456789012345678901234567890"
+
+# ============================================================================
+# Transaction and Signing Configuration
+# ============================================================================
+
+# Signing configuration for settlement transactions
+signer_type = "private-key"    # Currently only "private-key" is supported
+
+# Private key for transaction signing
+# SECURITY: DO NOT commit private keys to version control!
+# Use environment variables instead:
+# - Set SUI_PRIVATE_KEY for Sui transactions
+# - Set EVM_PRIVATE_KEY for EVM transactions
+# private_key = "your-private-key-here"  # Uncomment and set if not using env vars
+
+# Transaction settings
+gas_budget = 100_000_000       # Gas budget for Sui transactions (in MIST)
+evm_gas_limit = 200_000        # Gas limit for EVM transactions
+evm_gas_price = 20_000_000_000 # Gas price for EVM transactions (in wei, 20 Gwei)
+
+# ============================================================================
+# Environment Variable Overrides
+# ============================================================================
+
+# Configuration can be overridden by environment variables with the prefix LEDGERFLOW_FAC__
+# Examples:
+# - LEDGERFLOW_FAC__HOST=127.0.0.1
+# - LEDGERFLOW_FAC__PORT=8080
+# - LEDGERFLOW_FAC__SUI_TESTNET_GRPC_URL=https://custom-sui-node.example.com
+#
+# Private keys should ALWAYS be set via environment variables:
+# - SUI_PRIVATE_KEY=your-sui-private-key
+# - EVM_PRIVATE_KEY=your-evm-private-key

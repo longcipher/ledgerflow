@@ -1,0 +1,98 @@
+# LedgerFlow Sui CLI Configuration Example
+#
+# This file shows all available configuration options.
+# Copy this to config.toml and modify as needed.
+
+# Network configuration for Sui blockchain
+[network]
+# RPC URL for the Sui Full node
+# Available networks:
+# - Devnet: https://fullnode.devnet.sui.io:443
+# - Testnet: https://fullnode.testnet.sui.io:443
+# - Mainnet: https://fullnode.mainnet.sui.io:443
+# - Local: http://127.0.0.1:9000 (for local Sui network)
+rpc_url = "https://fullnode.devnet.sui.io:443"
+
+# WebSocket URL for event subscription (optional)
+# Used for real-time event monitoring
+ws_url = "wss://fullnode.devnet.sui.io:443"
+
+# Network name (devnet, testnet, mainnet, or localnet)
+# This should match the RPC URL network
+network = "devnet"
+
+# Account configuration
+[account]
+# SECURITY NOTE: For production use, set SUI_PRIVATE_KEY environment variable instead!
+# export SUI_PRIVATE_KEY="your_private_key_here"
+# 
+# Private key in hex format (with or without 0x prefix)
+# This is used for signing transactions
+private_key = "REMOVED_FOR_SECURITY"
+
+# Optional account address override (derived from private key if not provided)
+# Leave empty to auto-derive from private key
+address = ""
+
+# Key scheme (ed25519, secp256k1, secp256r1)
+# Most Sui accounts use ed25519
+key_scheme = "ed25519"
+
+# Transaction configuration
+[transaction]
+# Gas budget for transactions (in MIST)
+# 1 SUI = 1,000,000,000 MIST
+# Default: 10,000,000 MIST = 0.01 SUI
+gas_budget = 10_000_000
+
+# Gas price (if not specified, will be estimated automatically)
+# Set to 0 to use network reference gas price
+gas_price = 0
+
+# Transaction expiration timeout in seconds
+# How long a transaction is valid before it expires
+expiration_secs = 600
+
+# Whether to wait for transaction confirmation
+# If true, commands will wait for transaction to be confirmed on-chain
+wait_for_transaction = true
+
+# Vault contract configuration
+[vault]
+# Package ID where the payment vault contract is deployed
+# Replace with your actual deployed package ID after deployment
+# Example: "0x1234567890abcdef1234567890abcdef12345678"
+package_id = "0x0000000000000000000000000000000000000000000000000000000000000000"
+
+# Module name (usually "payment_vault")
+# This is the Move module name containing the vault functions
+module_name = "payment_vault"
+
+# Vault object ID (the shared object containing the vault)
+# Replace with your actual vault object ID after creating the vault
+# This is the specific vault instance you want to interact with
+vault_object_id = "0x0000000000000000000000000000000000000000000000000000000000000000"
+
+# USDC coin type (e.g., "0x2::sui::SUI" for SUI or custom USDC type)
+# Replace with the actual USDC coin type on Sui
+# For testing, you can use SUI itself: "0x2::sui::SUI"
+# For production, use the actual USDC package: "0x{package_id}::usdc::USDC"
+usdc_type = "0x2::sui::SUI"
+
+# ============================================================================
+# Environment Variable Overrides
+# ============================================================================
+#
+# Configuration can be overridden by environment variables with the prefix:
+# LEDGERFLOW_SUI_CLI__
+#
+# Examples:
+# - LEDGERFLOW_SUI_CLI__NETWORK__RPC_URL="https://custom-sui-node.example.com"
+# - LEDGERFLOW_SUI_CLI__ACCOUNT__KEY_SCHEME="secp256k1"
+# - LEDGERFLOW_SUI_CLI__TRANSACTION__GAS_BUDGET=20000000
+# - LEDGERFLOW_SUI_CLI__VAULT__PACKAGE_ID="0x123..."
+#
+# Private key should ALWAYS be set via environment variable for security:
+# - SUI_PRIVATE_KEY="your-private-key-here"
+#
+# This ensures sensitive data is not stored in configuration files.

@@ -56,6 +56,7 @@ impl ToolHandler for X402ToolHandler {
                         x402_version: X402Version::V1,
                         scheme: Scheme::Exact,
                         network: n,
+                        extra: None,
                     })
                     .collect();
                 let payload = serde_json::json!({ "supported": kinds });

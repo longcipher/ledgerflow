@@ -1,4 +1,4 @@
-//! LedgerFlow x402 Facilitator server
+//! LedgerFlow x402 Facilitator server for Sui blockchain
 //!
 //! Exposes HTTP endpoints compatible with the x402 spec:
 //! - GET  /verify   (info)
@@ -12,11 +12,14 @@ use std::net::SocketAddr;
 use clap::Parser;
 use color_eyre::Result;
 use dotenvy::dotenv;
-use ledgerflow_facilitator::config::{load_config, ServerConfig};
+use ledgerflow_facilitator::{
+    build_app,
+    config::{ServerConfig, load_config},
+    facilitators::{self, Facilitator},
+};
 use tower_http::trace::TraceLayer;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::EnvFilter;
-use x402_rs::{facilitator_local::FacilitatorLocal, provider_cache::ProviderCache};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -28,7 +31,7 @@ async fn main() -> Result<()> {
     #[command(
         name = "ledgerflow-facilitator",
         version,
-        about = "x402 Facilitator for LedgerFlow"
+        about = "x402 Facilitator for LedgerFlow on Sui blockchain"
     )]
     struct Args {
         /// Path to config YAML
@@ -46,13 +49,24 @@ async fn main() -> Result<()> {
     // Apply env from config after logging setup
     cfg.apply_env();
 
-    // Build provider cache from env (expects per-network RPC URLs)
-    let provider_cache = ProviderCache::from_env()
+    // Build Sui facilitator from environment
+    let facilitator = facilitators::sui_facilitator::SuiFacilitator::from_env()
         .await
-        .map_err(|e| eyre::eyre!(format!("{e}")))?;
-    let facilitator = FacilitatorLocal::new(provider_cache);
+        .map_err(|e| eyre::eyre!("Failed to create Sui facilitator: {}", e))?;
 
-    let app = ledgerflow_facilitator::build_app(facilitator).layer(TraceLayer::new_for_http());
+    let supported_networks = facilitator.supported_networks();
+    tracing::info!(
+        networks = ?supported_networks,
+        "Sui facilitator initialized with networks"
+    );
+
+    if supported_networks.is_empty() {
+        return Err(eyre::eyre!(
+            "No Sui networks configured. Please set at least one SUI_*_RPC_URL environment variable."
+        ));
+    }
+
+    let app = build_app(facilitator).layer(TraceLayer::new_for_http());
 
     // Listen host/port
     let host = std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
@@ -68,7 +82,7 @@ async fn main() -> Result<()> {
         }
     };
     let addr: SocketAddr = (ip, port).into();
-    tracing::info!(%addr, "Starting ledgerflow-facilitator");
+    tracing::info!(%addr, "Starting ledgerflow-facilitator for Sui");
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;

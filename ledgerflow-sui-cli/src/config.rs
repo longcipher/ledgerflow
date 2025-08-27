@@ -31,7 +31,7 @@ pub struct NetworkConfig {
 /// Account configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccountConfig {
-    /// Private key in hex format (with or without 0x prefix)
+    /// Private key in hex format (with or without 0x prefix) - can be overridden by SUI_PRIVATE_KEY env var
     pub private_key: String,
     /// Optional account address override (derived from private key if not provided)
     pub address: Option<String>,
@@ -153,39 +153,127 @@ fn default_usdc_type() -> String {
 }
 
 impl Config {
-    /// Save configuration to file
-    pub fn to_file(&self, path: &PathBuf) -> eyre::Result<()> {
-        let content = serde_yaml::to_string(self)?;
-        std::fs::write(path, content)?;
-        Ok(())
-    }
-
-    /// Load configuration using config crate with environment variable support
+    /// Load configuration using config-rs crate with environment variable support
+    /// Supports both YAML and TOML formats, with TOML preferred
     pub fn load(config_path: Option<PathBuf>) -> eyre::Result<Self> {
         let mut builder = config::Config::builder();
 
         // Add file source if provided
         if let Some(path) = config_path {
             builder = builder.add_source(config::File::from(path).required(false));
+        } else {
+            // Try default config files in order of preference: TOML first, then YAML
+            if std::path::Path::new("config.toml").exists() {
+                builder =
+                    builder.add_source(config::File::with_name("config.toml").required(false));
+            } else if std::path::Path::new("config.yaml").exists() {
+                builder =
+                    builder.add_source(config::File::with_name("config.yaml").required(false));
+            } else if std::path::Path::new("config.yml").exists() {
+                builder = builder.add_source(config::File::with_name("config.yml").required(false));
+            }
         }
 
-        // Add environment variables with prefix "LEDGERFLOW_"
+        // Add environment variables with prefix "LEDGERFLOW_SUI_CLI"
         builder = builder.add_source(
-            config::Environment::with_prefix("LEDGERFLOW")
-                .separator("_")
+            config::Environment::with_prefix("LEDGERFLOW_SUI_CLI")
+                .separator("__")
                 .list_separator(","),
         );
 
-        let settings = builder.build()?;
-        let config: Config = settings.try_deserialize()?;
+        let settings = builder
+            .build()
+            .map_err(|e| eyre::eyre!("Failed to build configuration: {}", e))?;
+
+        let mut config: Config = settings
+            .try_deserialize()
+            .map_err(|e| eyre::eyre!("Failed to deserialize configuration: {}", e))?;
+
+        // Override private key from environment variable if set
+        if let Ok(env_private_key) = std::env::var("SUI_PRIVATE_KEY") {
+            config.account.private_key = env_private_key;
+        }
+
         Ok(config)
     }
 
-    /// Create a sample configuration file
+    /// Create a sample configuration file (TOML format preferred)
     pub fn create_sample(path: &PathBuf) -> eyre::Result<()> {
+        // Determine format based on file extension
+        let is_toml = path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext.eq_ignore_ascii_case("toml"))
+            .unwrap_or(false);
+
+        if is_toml {
+            Self::create_toml_sample(path)
+        } else {
+            Self::create_yaml_sample(path)
+        }
+    }
+
+    /// Create a TOML configuration sample
+    fn create_toml_sample(path: &PathBuf) -> eyre::Result<()> {
+        let content = r#"# LedgerFlow Sui CLI Configuration
+
+# Network configuration for Sui blockchain
+[network]
+# RPC URL for the Sui Full node
+rpc_url = "https://fullnode.devnet.sui.io:443"
+# WebSocket URL for event subscription (optional)
+ws_url = "wss://fullnode.devnet.sui.io:443"
+# Network name (devnet, testnet, mainnet, or localnet)
+network = "devnet"
+
+# Account configuration
+[account]
+# SECURITY NOTE: For production use, set SUI_PRIVATE_KEY environment variable instead!
+# export SUI_PRIVATE_KEY="your_private_key_here"
+private_key = "REMOVED_FOR_SECURITY"
+# Optional account address override (derived from private key if not provided)
+address = ""
+# Key scheme (ed25519, secp256k1, secp256r1)
+key_scheme = "ed25519"
+
+# Transaction configuration
+[transaction]
+# Gas budget for transactions (in MIST)
+gas_budget = 10_000_000
+# Gas price (if not specified, will be estimated)
+gas_price = 0
+# Transaction expiration timeout in seconds
+expiration_secs = 600
+# Whether to wait for transaction confirmation
+wait_for_transaction = true
+
+# Vault contract configuration
+[vault]
+# Package ID where the payment vault contract is deployed
+# Replace with your actual deployed package ID
+package_id = "0x0000000000000000000000000000000000000000000000000000000000000000"
+# Module name (usually "payment_vault")
+module_name = "payment_vault"
+# Vault object ID (the shared object containing the vault)
+# Replace with your actual vault object ID
+vault_object_id = "0x0000000000000000000000000000000000000000000000000000000000000000"
+# USDC coin type (e.g., "0x2::sui::SUI" for SUI or custom USDC type)
+# Replace with the actual USDC coin type on Sui
+usdc_type = "0x2::sui::SUI"
+"#;
+
+        std::fs::write(path, content)?;
+        println!("Created TOML configuration file at: {}", path.display());
+        println!("Please edit the file to configure your account and vault settings.");
+        Ok(())
+    }
+
+    /// Create a YAML configuration sample (legacy support)
+    fn create_yaml_sample(path: &PathBuf) -> eyre::Result<()> {
         let config = Config::default();
-        config.to_file(path)?;
-        println!("Created sample configuration file at: {}", path.display());
+        let content = serde_yaml::to_string(&config)?;
+        std::fs::write(path, content)?;
+        println!("Created YAML configuration file at: {}", path.display());
         println!("Please edit the file to configure your account and vault settings.");
         Ok(())
     }

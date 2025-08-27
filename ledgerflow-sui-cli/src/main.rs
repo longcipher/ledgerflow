@@ -11,7 +11,7 @@ mod client;
 mod config;
 
 use cli::{Cli, Commands, OutputFormat};
-use client::VaultClient;
+use client::{IntentSignedTransaction, VaultClient};
 use config::Config;
 
 #[tokio::main]
@@ -56,6 +56,25 @@ async fn main() -> Result<()> {
             let config = load_config(args.config)?;
             handle_account(config, show_private, args.output).await
         }
+        Commands::IntentTransfer {
+            recipient,
+            amount,
+            order_id,
+            facilitator_url,
+            dry_run,
+        } => {
+            let config = load_config(args.config)?;
+            handle_intent_transfer(
+                config,
+                recipient,
+                amount,
+                order_id,
+                facilitator_url,
+                dry_run,
+                args.output,
+            )
+            .await
+        }
     }
 }
 
@@ -75,10 +94,25 @@ async fn handle_init(path: PathBuf, force: bool) -> Result<()> {
         "📝 Please edit {} to configure your settings:",
         path.display()
     );
-    println!("   - Set your private key in account.private_key");
-    println!("   - Set the vault package ID in vault.package_id");
-    println!("   - Set the vault object ID in vault.vault_object_id");
-    println!("   - Adjust network settings if needed");
+
+    if path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.eq_ignore_ascii_case("toml"))
+        .unwrap_or(false)
+    {
+        println!(
+            "   - Set your private key in [account].private_key or use SUI_PRIVATE_KEY env var"
+        );
+        println!("   - Set the vault package ID in [vault].package_id");
+        println!("   - Set the vault object ID in [vault].vault_object_id");
+        println!("   - Adjust network settings in [network] if needed");
+    } else {
+        println!("   - Set your private key in account.private_key");
+        println!("   - Set the vault package ID in vault.package_id");
+        println!("   - Set the vault object ID in vault.vault_object_id");
+        println!("   - Adjust network settings if needed");
+    }
 
     Ok(())
 }
@@ -97,7 +131,9 @@ async fn handle_deposit(
         config.vault.vault_object_id.clone(),
         config.vault.usdc_type.clone(),
         config.transaction.gas_budget,
-    )?;
+        config.account.address.clone(),
+    )
+    .await?;
 
     if dry_run {
         info!("🔍 Dry run mode - transaction will not be submitted");
@@ -176,7 +212,9 @@ async fn handle_withdraw(
         config.vault.vault_object_id.clone(),
         config.vault.usdc_type.clone(),
         config.transaction.gas_budget,
-    )?;
+        config.account.address.clone(),
+    )
+    .await?;
 
     if dry_run {
         info!("🔍 Dry run mode - transaction will not be submitted");
@@ -252,7 +290,9 @@ async fn handle_info(
         config.vault.vault_object_id.clone(),
         config.vault.usdc_type.clone(),
         config.transaction.gas_budget,
-    )?;
+        config.account.address.clone(),
+    )
+    .await?;
 
     info!("📊 Fetching vault information...");
 
@@ -315,7 +355,9 @@ async fn handle_account(
         config.vault.vault_object_id.clone(),
         config.vault.usdc_type.clone(),
         config.transaction.gas_budget,
-    )?;
+        config.account.address.clone(),
+    )
+    .await?;
 
     info!("👤 Fetching account information...");
 
@@ -374,4 +416,179 @@ fn print_output(value: &serde_json::Value, format: &OutputFormat) {
             );
         }
     }
+}
+
+async fn handle_intent_transfer(
+    config: Config,
+    recipient: String,
+    amount: u64,
+    order_id: String,
+    facilitator_url: String,
+    dry_run: bool,
+    output_format: OutputFormat,
+) -> Result<()> {
+    let mut client = VaultClient::new(
+        config.network.rpc_url.clone(),
+        config.account.private_key.clone(),
+        config.vault.package_id.clone(),
+        config.vault.vault_object_id.clone(),
+        config.vault.usdc_type.clone(),
+        config.transaction.gas_budget,
+        config.account.address.clone(),
+    )
+    .await?;
+
+    info!(
+        "🔐 Creating intent-signed transfer: {} units to {} (order: {})",
+        amount, recipient, order_id
+    );
+
+    // Create the intent-signed transaction
+    let intent_tx = client
+        .create_intent_transfer(recipient.clone(), amount, order_id.clone())
+        .await?;
+
+    // Always print the complete intent signature for verification
+    info!("🔐 Intent Signature Generated:");
+    println!(
+        "📋 Complete Intent Signature: {}",
+        intent_tx.intent_signature
+    );
+    println!("🔑 Public Key: {}", intent_tx.public_key);
+    println!("📍 Sender Address: {}", intent_tx.sender_address);
+    println!("📤 Recipient: {recipient}");
+    println!("💎 Amount: {amount} units");
+    println!("📦 Order ID: {order_id}");
+
+    if dry_run {
+        info!("� Dry run mode - transaction will not be sent to facilitator");
+        println!("✅ Intent-signed transaction created successfully (dry-run)!");
+        return Ok(());
+    }
+
+    // Send to facilitator for verification
+    info!(
+        "🚀 Sending transaction to facilitator for verification: {}",
+        facilitator_url
+    );
+
+    let facilitator_result = send_to_facilitator(&intent_tx, &facilitator_url).await?;
+
+    let result = json!({
+        "operation": "intent_transfer",
+        "recipient": recipient,
+        "amount": amount,
+        "order_id": order_id,
+        "transaction": {
+            "signature": intent_tx.intent_signature,
+            "public_key": intent_tx.public_key,
+            "address": intent_tx.sender_address
+        },
+        "facilitator": {
+            "url": facilitator_url,
+            "response": facilitator_result
+        },
+        "status": "verified_and_submitted"
+    });
+
+    print_output(&result, &output_format);
+
+    if matches!(output_format, OutputFormat::Pretty) {
+        println!("✅ Intent-signed transaction verified and submitted successfully!");
+        println!("🔗 Facilitator: {facilitator_url}");
+
+        if let Some(tx_hash) = facilitator_result.get("transaction_hash") {
+            println!("📋 Transaction Hash: {tx_hash}");
+        }
+    }
+
+    Ok(())
+}
+
+async fn send_to_facilitator(
+    intent_tx: &IntentSignedTransaction,
+    facilitator_url: &str,
+) -> Result<serde_json::Value> {
+    let client = reqwest::Client::new();
+
+    // Create the facilitator payload
+    let payload = json!({
+        "x402Version": 1,
+        "paymentPayload": {
+            "network": "sui-testnet",
+            "scheme": "exact",
+            "payload": {
+                "signature": intent_tx.intent_signature,
+                "authorization": {
+                    "from": intent_tx.sender_address,
+                    "to": intent_tx.recipient,
+                    "value": intent_tx.amount_str.clone(),
+                    "validAfter": intent_tx.valid_after,
+                    "validBefore": intent_tx.valid_before,
+                    "nonce": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "coinType": "0x2::sui::SUI"
+                },
+                "gasBudget": 10000000
+            }
+        },
+        "paymentRequirements": {
+            "amount": intent_tx.amount_str.clone(),
+            "recipient": intent_tx.recipient
+        }
+    });
+
+    info!("📤 Sending payload to facilitator:");
+    println!(
+        "🔍 Facilitator Payload:\n{}",
+        serde_json::to_string_pretty(&payload)?
+    );
+
+    // Send verify request to facilitator
+    let verify_url = format!("{facilitator_url}/verify");
+    info!("🔗 Verify URL: {}", verify_url);
+
+    let verify_response = client
+        .post(&verify_url)
+        .json(&payload)
+        .send()
+        .await
+        .context("Failed to send verify request to facilitator")?;
+
+    let status = verify_response.status();
+    info!("📡 Facilitator verify response status: {}", status);
+
+    if !status.is_success() {
+        let error_text = verify_response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Unknown error".to_string());
+        println!("❌ Facilitator verify failed with status {status}: {error_text}");
+        eyre::bail!("Facilitator verify failed: {}", error_text);
+    }
+
+    let verify_result: serde_json::Value = verify_response
+        .json()
+        .await
+        .context("Failed to parse verify response")?;
+
+    info!("📋 Facilitator verify response:");
+    println!(
+        "✅ Verify Response:\n{}",
+        serde_json::to_string_pretty(&verify_result)?
+    );
+
+    let is_valid = verify_result
+        .get("valid")
+        .unwrap_or(&json!(false))
+        .as_bool()
+        .unwrap_or(false);
+
+    if !is_valid {
+        println!("❌ Transaction verification failed!");
+        eyre::bail!("Transaction verification failed: {:?}", verify_result);
+    }
+
+    println!("✅ Intent signature successfully verified by facilitator!");
+
+    Ok(verify_result)
 }

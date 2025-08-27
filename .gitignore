@@ -1,3 +1,17 @@
 target/
+
+# Environment variables (contain sensitive information)
 .env
 .envrc
+
+# Temporary files
+*.tmp
+*.log
+
+# IDE files
+.vscode/settings.json
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

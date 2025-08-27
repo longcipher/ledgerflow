@@ -11,7 +11,7 @@ use clap::{Parser, Subcommand};
     author = "LedgerFlow Team"
 )]
 pub struct Cli {
-    /// Path to configuration file
+    /// Path to configuration file (supports both TOML and YAML formats)
     #[arg(short, long, global = true)]
     pub config: Option<PathBuf>,
 
@@ -32,7 +32,7 @@ pub enum Commands {
     /// Initialize configuration file
     Init {
         /// Path to create configuration file
-        #[arg(short, long, default_value = "config.yaml")]
+        #[arg(short, long, default_value = "config.toml")]
         path: PathBuf,
         /// Overwrite existing configuration file
         #[arg(short, long)]
@@ -76,6 +76,24 @@ pub enum Commands {
         /// Show private account information (private key, etc.)
         #[arg(long)]
         show_private: bool,
+    },
+    /// Create and send intent-signed transfer transaction via facilitator
+    IntentTransfer {
+        /// Recipient address
+        #[arg(short, long)]
+        recipient: String,
+        /// Amount to transfer (in USDC smallest units)
+        #[arg(short, long)]
+        amount: u64,
+        /// Order ID for tracking the payment
+        #[arg(short, long)]
+        order_id: String,
+        /// Facilitator API endpoint URL
+        #[arg(short, long, default_value = "http://localhost:3000")]
+        facilitator_url: String,
+        /// Dry run - create transaction but don't send to facilitator
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 

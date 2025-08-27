@@ -51,7 +51,7 @@ rand = "0.9.2"
 sha3 = "0.10.8"
 
 # Ethereum/EVM interaction
-alloy = "1.0.25"
+alloy = "1.0.26"
 
 # Diesel (for Aptos indexer compatibility)
 aptos-indexer-processor-sdk = { git = "https://github.com/aptos-labs/aptos-indexer-processor-sdk.git", tag = "aptos-indexer-processor-sdk-v2.1.1" }
@@ -75,6 +75,22 @@ uuid = "1.18.0"
 # Base64 encoding
 base64 = "0.22.1"
 bcs = "0.1.6"
+
+# Sui SDK and related dependencies
+sui-json-rpc-types = { git = "https://github.com/MystenLabs/sui", package = "sui-json-rpc-types" }
+sui-keys = { git = "https://github.com/MystenLabs/sui", package = "sui-keys" }
+sui-rpc-api = { git = "https://github.com/MystenLabs/sui", package = "sui-rpc-api" }
+sui-sdk = { git = "https://github.com/MystenLabs/sui", package = "sui-sdk" }
+sui-types = { git = "https://github.com/MystenLabs/sui", package = "sui-types" }
+
+# URL handling
+url = "2.5"
+
+# Decimal arithmetic
+rust_decimal = "1.37"
+
+# Numeric traits
+num-traits = "0.2"
 
 [patch.crates-io]
 merlin = { git = "https://github.com/aptos-labs/merlin" }

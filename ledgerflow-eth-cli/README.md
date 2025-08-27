@@ -175,7 +175,6 @@ cargo fmt
 - [Alloy](https://alloy.rs/) - Ethereum library for Rust
 - [Clap](https://clap.rs/) - Command line argument parser
 - [Tokio](https://tokio.rs/) - Async runtime
-- [Anyhow](https://docs.rs/anyhow/) - Error handling
 
 ## License
 

@@ -4,7 +4,7 @@ Command-line interface for interacting with LedgerFlow Sui payment vault contrac
 
 ## Overview
 
-The LedgerFlow Sui CLI provides a simple command-line interface to interact with payment vault contracts deployed on the Sui blockchain. It supports deposit, withdrawal, and account management operations.
+The LedgerFlow Sui CLI provides a simple command-line interface to interact with payment vault contracts deployed on the Sui blockchain. It supports deposit, withdrawal, and account management operations with modern TOML configuration.
 
 ## Features
 
@@ -14,6 +14,8 @@ The LedgerFlow Sui CLI provides a simple command-line interface to interact with
 - **Vault Information**: Query vault state and balances
 - **Multiple Output Formats**: Pretty, JSON, and compact output
 - **Dry Run Mode**: Test transactions without executing them
+- **TOML Configuration**: Modern configuration format with YAML fallback support
+- **Environment Variable Support**: Override config via environment variables
 
 ## Installation
 
@@ -37,61 +39,103 @@ cargo build --release
 
 ### Initial Setup
 
-1. Create a configuration file:
+1. Create a configuration file (TOML format recommended):
+```bash
+ledgerflow-sui-cli init --path config.toml
+```
+
+Or create a YAML configuration (legacy format):
 ```bash
 ledgerflow-sui-cli init --path config.yaml
 ```
 
-2. Edit the configuration file with your settings:
-```yaml
-network:
-  rpc_url: "https://fullnode.devnet.sui.io:443"
-  network: "devnet"
+Create a configuration file (TOML format recommended):
 
-account:
-  private_key: "0x1234...your_private_key"
-  key_scheme: "ed25519"
+```bash
+ledgerflow-sui-cli init --path config.toml
+```
 
-vault:
-  package_id: "0xabc123...your_package_id"
-  vault_object_id: "0xdef456...your_vault_object_id"
-  usdc_type: "0x2::sui::SUI"  # or your USDC coin type
+Or create a YAML configuration (legacy format):
+
+```bash
+ledgerflow-sui-cli init --path config.yaml
+```
+
+Edit the configuration file with your settings:
+
+**TOML Configuration (`config.toml`):**
+
+```toml
+# Network configuration
+[network]
+rpc_url = "https://fullnode.devnet.sui.io:443"
+network = "devnet"
+
+[account]
+private_key = "0x1234...your_private_key"
+key_scheme = "ed25519"
+
+[vault]
+package_id = "0xabc123...your_package_id"
+vault_object_id = "0xdef456...your_vault_object_id"
+usdc_type = "0x2::sui::SUI"  # or your USDC coin type
 ```
 
 ### Configuration Options
 
 #### Network Settings
+
 - `rpc_url`: Sui Full node RPC endpoint
 - `ws_url`: WebSocket URL for event subscription (optional)
 - `network`: Network name (devnet, testnet, mainnet, localnet)
 
 #### Account Settings
+
 - `private_key`: Your account's private key (hex format)
 - `address`: Account address (auto-derived if not specified)
 - `key_scheme`: Cryptographic key scheme (ed25519, secp256k1, secp256r1)
 
 #### Transaction Settings
+
 - `gas_budget`: Maximum gas to spend per transaction (in MIST)
 - `gas_price`: Gas price override (auto-estimated if not set)
 - `expiration_secs`: Transaction expiration timeout
 - `wait_for_transaction`: Whether to wait for transaction confirmation
 
 #### Vault Settings
+
 - `package_id`: Address of the deployed payment vault package
 - `module_name`: Module name (typically "payment_vault")
 - `vault_object_id`: Object ID of the vault shared object
 - `usdc_type`: Type identifier for USDC coins
+
+### Environment Variables
+
+You can override configuration using environment variables with the prefix `LEDGERFLOW_SUI_CLI__`:
+
+```bash
+# Override network RPC URL
+export LEDGERFLOW_SUI_CLI__NETWORK__RPC_URL="https://custom-sui-node.example.com"
+
+# Override gas budget
+export LEDGERFLOW_SUI_CLI__TRANSACTION__GAS_BUDGET=20000000
+
+# Set private key securely (recommended)
+export SUI_PRIVATE_KEY="your_private_key_here"
+```
 
 ## Usage
 
 ### Basic Commands
 
 #### Initialize Configuration
+
 ```bash
-ledgerflow-sui-cli init --path config.yaml
+ledgerflow-sui-cli init --path config.toml
 ```
 
 #### Make a Deposit
+
 ```bash
 # Deposit 100 USDC units with order ID
 ledgerflow-sui-cli deposit --order-id "order_12345" --amount 100000000
@@ -101,6 +145,7 @@ ledgerflow-sui-cli deposit --order-id "order_12345" --amount 100000000 --dry-run
 ```
 
 #### Withdraw Funds (Owner Only)
+
 ```bash
 # Withdraw specific amount
 ledgerflow-sui-cli withdraw --recipient 0x123abc... --amount 50000000
@@ -113,6 +158,7 @@ ledgerflow-sui-cli withdraw --recipient 0x123abc... --amount 50000000 --dry-run
 ```
 
 #### Get Vault Information
+
 ```bash
 # Basic vault info
 ledgerflow-sui-cli info
@@ -122,6 +168,7 @@ ledgerflow-sui-cli info --include-account
 ```
 
 #### Get Account Information
+
 ```bash
 # Account balances and address
 ledgerflow-sui-cli account
@@ -133,6 +180,7 @@ ledgerflow-sui-cli account --show-private
 ### Advanced Options
 
 #### Output Formats
+
 ```bash
 # Pretty formatted output (default)
 ledgerflow-sui-cli info --output pretty
