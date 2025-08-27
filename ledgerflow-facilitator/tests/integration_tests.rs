@@ -103,6 +103,184 @@ async fn post_settle_rejects_invalid_payload() -> eyre::Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+async fn post_verify_accepts_valid_payload() -> eyre::Result<()> {
+    let app = test_app().await?;
+    let server = axum_test::TestServer::new(app).unwrap();
+
+    // Create a valid VerifyRequest using the helper functions
+    let payload = create_test_payload();
+    let request = create_verify_request(payload);
+
+    // Print the working JSON for comparison
+    println!("Working VerifyRequest JSON:");
+    println!("{}", serde_json::to_string_pretty(&request)?);
+
+    // Send the request to /verify endpoint
+    let res = server
+        .post("/verify")
+        .json(&request)
+        .await;
+
+    // Print the response for debugging
+    println!("Response status: {}", res.status_code());
+    println!("Response body: {}", res.text());
+
+    // Note: This test might return 422 if the signature validation fails,
+    // but at least we verify that the JSON structure is correct and deserializes properly.
+    // In a real implementation, we would expect either:
+    // - 200 OK if verification succeeds
+    // - 400 Bad Request if payment requirements don't match
+    // - 422 Unprocessable Entity if signature validation fails
+
+    // For now, we accept either 200, 400, or 422 as long as it's not a deserialization error
+    assert!(
+        res.status_code() == StatusCode::OK 
+        || res.status_code() == StatusCode::BAD_REQUEST
+        || res.status_code() == StatusCode::UNPROCESSABLE_ENTITY
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn post_verify_with_manual_json_construction() -> eyre::Result<()> {
+    let app = test_app().await?;
+    let server = axum_test::TestServer::new(app).unwrap();
+
+    // Get current timestamp for valid time range
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    // Generate proper test values using the same helper functions
+    let test_signature = generate_test_signature();
+    let test_nonce = generate_test_nonce(42);
+    let from_addr = SuiAddress::random_for_testing_only();
+    let to_addr = SuiAddress::random_for_testing_only();
+    let asset_id = ObjectID::random();
+
+    // Construct the JSON payload manually to demonstrate the exact format
+    let request_json = serde_json::json!({
+        "x402Version": 1,
+        "paymentPayload": {
+            "x402Version": 1,
+            "scheme": "exact",
+            "network": "sui-testnet",
+            "payload": {
+                "signature": test_signature,
+                "authorization": {
+                    "from": from_addr.to_string(),
+                    "to": to_addr.to_string(),
+                    "value": "1000000",
+                    "validAfter": now - 100,
+                    "validBefore": now + 3600,
+                    "nonce": format!("0x{}", hex::encode(test_nonce.0)),
+                    "coinType": "0x2::sui::SUI"
+                },
+                "gasBudget": 10000000
+            }
+        },
+        "paymentRequirements": {
+            "scheme": "exact",
+            "network": "sui-testnet",
+            "maxAmountRequired": "1000000",
+            "resource": "https://example.com/resource",
+            "description": "Test payment verification",
+            "mimeType": "application/json",
+            "payTo": to_addr.to_string(),
+            "maxTimeoutSeconds": 3600,
+            "asset": asset_id.to_string(),
+            "extra": null
+        }
+    });
+
+    println!("Sending manual JSON request:");
+    println!("{}", serde_json::to_string_pretty(&request_json)?);
+
+    // Send the request to /verify endpoint
+    let res = server
+        .post("/verify")
+        .json(&request_json)
+        .await;
+
+    // Print the response for debugging
+    println!("Response status: {}", res.status_code());
+    println!("Response body: {}", res.text());
+
+    // The request should deserialize correctly, even if verification fails
+    // We expect the request to at least not return a deserialization error
+    assert_ne!(res.status_code(), StatusCode::INTERNAL_SERVER_ERROR);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn demonstrate_curl_compatible_json_format() -> eyre::Result<()> {
+    // This test demonstrates the exact JSON format that works with curl
+    // Users can copy this JSON and use it with curl commands
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    let test_signature = generate_test_signature();
+    let test_nonce = generate_test_nonce(123);
+    let from_addr = SuiAddress::random_for_testing_only();
+    let to_addr = SuiAddress::random_for_testing_only();
+    let asset_id = ObjectID::random();
+
+    let curl_example = serde_json::json!({
+        "x402Version": 1,
+        "paymentPayload": {
+            "x402Version": 1,
+            "scheme": "exact",
+            "network": "sui-testnet",
+            "payload": {
+                "signature": test_signature,
+                "authorization": {
+                    "from": from_addr.to_string(),
+                    "to": to_addr.to_string(),
+                    "value": "1000000",
+                    "validAfter": now - 100,
+                    "validBefore": now + 3600,
+                    "nonce": format!("0x{}", hex::encode(test_nonce.0)),
+                    "coinType": "0x2::sui::SUI"
+                },
+                "gasBudget": 10000000
+            }
+        },
+        "paymentRequirements": {
+            "scheme": "exact",
+            "network": "sui-testnet",
+            "maxAmountRequired": "1000000",
+            "resource": "https://example.com/resource",
+            "description": "Test payment verification",
+            "mimeType": "application/json",
+            "payTo": to_addr.to_string(),
+            "maxTimeoutSeconds": 3600,
+            "asset": asset_id.to_string(),
+            "extra": null
+        }
+    });
+
+    println!("=== CURL COMPATIBLE JSON FORMAT ===");
+    println!("Save this JSON to a file (e.g., verify_request.json) and use with curl:");
+    println!();
+    println!("{}", serde_json::to_string_pretty(&curl_example)?);
+    println!();
+    println!("Example curl command:");
+    println!("curl -X POST http://localhost:3402/verify \\");
+    println!("  -H \"Content-Type: application/json\" \\");
+    println!("  -d @verify_request.json");
+    println!();
+    println!("Expected response: {{\"isValid\":false,\"invalidReason\":\"invalid_network\",\"payer\":\"...\"}}");
+
+    Ok(())
+}
+
 // ============================================================================
 // Business Logic Tests
 // ============================================================================

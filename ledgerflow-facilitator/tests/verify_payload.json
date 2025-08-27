@@ -1,0 +1,33 @@
+{
+  "x402Version": 1,
+  "paymentPayload": {
+    "x402Version": 1,
+    "scheme": "exact",
+    "network": "sui-testnet",
+    "payload": {
+      "signature": "KjdEUV5reIWSn6y5xtPg7foHFCEuO0hVYm98iZajsL3K1+Tx/gsYJTI/TFlmc4CNmqe0wc7b6PUCDxwpNkNQXWp3hJGeq7jF0t/s+QYTIC06R1RhbnuIlaKvvMnW4/AA",
+      "authorization": {
+        "from": "0xe177a31a74980f9f9b3811101a73eee83a64caa66b1279ec5b497e1e3e0401a6",
+        "to": "0x96b8a9672dfd8f254fb60c4951d8ca097eecb399107d985837d7da879cb97934",
+        "value": "1000000",
+        "validAfter": 1756291322,
+        "validBefore": 1756295022,
+        "nonce": "0x2b3c4d5e6f8091a2b3c4d5e6f708192a3b4c5d6e7f90a1b2c3d4e5f60718293a",
+        "coinType": "0x2::sui::SUI"
+      },
+      "gasBudget": 10000000
+    }
+  },
+  "paymentRequirements": {
+    "scheme": "exact",
+    "network": "sui-testnet",
+    "maxAmountRequired": "1000000",
+    "resource": "https://example.com/resource",
+    "description": "Test payment verification",
+    "mimeType": "application/json",
+    "payTo": "0x96b8a9672dfd8f254fb60c4951d8ca097eecb399107d985837d7da879cb97934",
+    "maxTimeoutSeconds": 3600,
+    "asset": "0xca66c8d82ed90bd31190db432124459e210cdec15cdd6aff20f3e6cb6decdf49",
+    "extra": null
+  }
+}
