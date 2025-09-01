@@ -1,0 +1,33 @@
+{
+  "x402Version": 1,
+  "paymentPayload": {
+    "x402Version": 1,
+    "scheme": "exact",
+    "network": "sui-testnet",
+    "payload": {
+      "signature": "AH9tf3C6XfJVXuGixhM0Y1B9l6X8mtoLJOntiqSPnbO4AKjdEUV5reIWSn6y5xtPg7foHFCEuO0hVYm98iZajsL3K1+Tx/gsYJTI/TFlmc4CNmqe0wc7b6PUCDxwpNkNQXWp3hJGeq7jF0t/s+QYTIC06R1RhbnuIlaKvvMnW4/AAAA==",
+      "authorization": {
+        "from": "0xa11cea3bbf6889be9d49991757cb0b676d644e24acec54225d64c97a1d81acc1",
+        "to": "0xb0be0b86d3fa8ad7484d88821c78c035fa819702a0cc06cf2a4fc4924036a885",
+        "value": "2000000",
+        "validAfter": 1756713400,
+        "validBefore": 1756717000,
+        "nonce": "0xa11ce15ad8e5f3b1c2d4e6f7081927a3b4c5d6e7f90a1b2c3d4e5f607182941c",
+        "coinType": "0x2::sui::SUI"
+      },
+      "gasBudget": 10000000
+    }
+  },
+  "paymentRequirements": {
+    "scheme": "exact",
+    "network": "sui-testnet",
+    "maxAmountRequired": "2000000",
+    "resource": "https://example.com/alice-test-resource",
+    "description": "Alice to Bob test payment via facilitator",
+    "mimeType": "application/json",
+    "payTo": "0xb0be0b86d3fa8ad7484d88821c78c035fa819702a0cc06cf2a4fc4924036a885",
+    "maxTimeoutSeconds": 3600,
+    "asset": "0xca66c8d82ed90bd31190db432124459e210cdec15cdd6aff20f3e6cb6decdf49",
+    "extra": null
+  }
+}

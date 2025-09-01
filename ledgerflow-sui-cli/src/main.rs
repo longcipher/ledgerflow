@@ -1,4 +1,7 @@
-use std::path::PathBuf;
+use std::{
+    path::PathBuf,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use clap::Parser;
 use eyre::{Context, Result};
@@ -62,14 +65,16 @@ async fn main() -> Result<()> {
             order_id,
             facilitator_url,
             dry_run,
+            test_settle,
         } => {
             let config = load_config(args.config)?;
             handle_intent_transfer(
                 config,
                 recipient,
                 amount,
-                order_id,
-                facilitator_url,
+                Some(order_id),
+                Some(facilitator_url),
+                test_settle,
                 dry_run,
                 args.output,
             )
@@ -418,12 +423,14 @@ fn print_output(value: &serde_json::Value, format: &OutputFormat) {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_intent_transfer(
     config: Config,
     recipient: String,
     amount: u64,
-    order_id: String,
-    facilitator_url: String,
+    order_id: Option<String>,
+    facilitator_url: Option<String>,
+    test_settle: bool,
     dry_run: bool,
     output_format: OutputFormat,
 ) -> Result<()> {
@@ -438,14 +445,24 @@ async fn handle_intent_transfer(
     )
     .await?;
 
+    let final_order_id = order_id.unwrap_or_else(|| {
+        format!(
+            "order_{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("Failed to get current time")
+                .as_secs()
+        )
+    });
+
     info!(
         "🔐 Creating intent-signed transfer: {} units to {} (order: {})",
-        amount, recipient, order_id
+        amount, recipient, final_order_id
     );
 
     // Create the intent-signed transaction
     let intent_tx = client
-        .create_intent_transfer(recipient.clone(), amount, order_id.clone())
+        .create_intent_transfer(recipient.clone(), amount, final_order_id.clone())
         .await?;
 
     // Always print the complete intent signature for verification
@@ -458,7 +475,7 @@ async fn handle_intent_transfer(
     println!("📍 Sender Address: {}", intent_tx.sender_address);
     println!("📤 Recipient: {recipient}");
     println!("💎 Amount: {amount} units");
-    println!("📦 Order ID: {order_id}");
+    println!("📦 Order ID: {final_order_id}");
 
     if dry_run {
         info!("� Dry run mode - transaction will not be sent to facilitator");
@@ -466,19 +483,56 @@ async fn handle_intent_transfer(
         return Ok(());
     }
 
-    // Send to facilitator for verification
-    info!(
-        "🚀 Sending transaction to facilitator for verification: {}",
-        facilitator_url
-    );
+    // Send to facilitator for verification if URL is provided
+    let (verify_result, settle_result) = if let Some(ref facilitator_url_ref) = facilitator_url {
+        info!(
+            "🚀 Sending transaction to facilitator for verification: {}",
+            facilitator_url_ref
+        );
 
-    let facilitator_result = send_to_facilitator(&intent_tx, &facilitator_url).await?;
+        let verify_result = match send_to_facilitator(&intent_tx, facilitator_url_ref).await {
+            Ok(result) => {
+                println!("✅ Intent signature successfully verified by facilitator!");
+                Some(result)
+            }
+            Err(e) => {
+                if test_settle {
+                    println!("⚠️ Verification failed, but proceeding to test settle: {e}");
+                    None
+                } else {
+                    return Err(e);
+                }
+            }
+        };
+
+        // Test settle flow if requested
+        let settle_result = if test_settle || verify_result.is_some() {
+            info!("🔄 Testing settle flow...");
+            match send_to_settle(&intent_tx, facilitator_url_ref).await {
+                Ok(result) => {
+                    println!("✅ Settlement successful!");
+                    Some(result)
+                }
+                Err(e) => {
+                    println!("❌ Settlement failed: {e}");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        (verify_result, settle_result)
+    } else {
+        println!("✅ Intent-signed transaction created successfully!");
+        (None, None)
+    };
 
     let result = json!({
         "operation": "intent_transfer",
         "recipient": recipient,
         "amount": amount,
-        "order_id": order_id,
+        "order_id": final_order_id,
         "transaction": {
             "signature": intent_tx.intent_signature,
             "public_key": intent_tx.public_key,
@@ -486,7 +540,8 @@ async fn handle_intent_transfer(
         },
         "facilitator": {
             "url": facilitator_url,
-            "response": facilitator_result
+            "verify_response": verify_result,
+            "settle_response": settle_result
         },
         "status": "verified_and_submitted"
     });
@@ -494,10 +549,14 @@ async fn handle_intent_transfer(
     print_output(&result, &output_format);
 
     if matches!(output_format, OutputFormat::Pretty) {
-        println!("✅ Intent-signed transaction verified and submitted successfully!");
-        println!("🔗 Facilitator: {facilitator_url}");
+        println!("✅ Intent-signed transaction processed successfully!");
+        if let Some(ref facilitator_url_ref) = facilitator_url {
+            println!("🔗 Facilitator: {facilitator_url_ref}");
+        }
 
-        if let Some(tx_hash) = facilitator_result.get("transaction_hash") {
+        if let Some(settle_resp) = &settle_result
+            && let Some(tx_hash) = settle_resp.get("transaction")
+        {
             println!("📋 Transaction Hash: {tx_hash}");
         }
     }
@@ -511,12 +570,13 @@ async fn send_to_facilitator(
 ) -> Result<serde_json::Value> {
     let client = reqwest::Client::new();
 
-    // Create the facilitator payload
+    // Create the facilitator payload following the x402 protocol format
     let payload = json!({
         "x402Version": 1,
         "paymentPayload": {
-            "network": "sui-testnet",
+            "x402Version": 1,
             "scheme": "exact",
+            "network": "sui-testnet",
             "payload": {
                 "signature": intent_tx.intent_signature,
                 "authorization": {
@@ -532,8 +592,16 @@ async fn send_to_facilitator(
             }
         },
         "paymentRequirements": {
-            "amount": intent_tx.amount_str.clone(),
-            "recipient": intent_tx.recipient
+            "scheme": "exact",
+            "network": "sui-testnet",
+            "maxAmountRequired": intent_tx.amount_str.clone(),
+            "resource": "https://example.com/ledgerflow-cli-payment",
+            "description": format!("Payment from CLI: {} units to {}", intent_tx.amount_str, intent_tx.recipient),
+            "mimeType": "application/json",
+            "payTo": intent_tx.recipient,
+            "maxTimeoutSeconds": 3600,
+            "asset": "0xca66c8d82ed90bd31190db432124459e210cdec15cdd6aff20f3e6cb6decdf49",
+            "extra": null
         }
     });
 
@@ -578,7 +646,7 @@ async fn send_to_facilitator(
     );
 
     let is_valid = verify_result
-        .get("valid")
+        .get("isValid")
         .unwrap_or(&json!(false))
         .as_bool()
         .unwrap_or(false);
@@ -591,4 +659,101 @@ async fn send_to_facilitator(
     println!("✅ Intent signature successfully verified by facilitator!");
 
     Ok(verify_result)
+}
+
+async fn send_to_settle(
+    intent_tx: &IntentSignedTransaction,
+    facilitator_url: &str,
+) -> Result<serde_json::Value> {
+    let client = reqwest::Client::new();
+
+    // Create the same payload structure as for verify
+    let payload = json!({
+        "x402Version": 1,
+        "paymentPayload": {
+            "x402Version": 1,
+            "scheme": "exact",
+            "network": "sui-testnet",
+            "payload": {
+                "signature": intent_tx.intent_signature,
+                "authorization": {
+                    "from": intent_tx.sender_address,
+                    "to": intent_tx.recipient,
+                    "value": intent_tx.amount_str.clone(),
+                    "validAfter": intent_tx.valid_after,
+                    "validBefore": intent_tx.valid_before,
+                    "nonce": "0x0000000000000000000000000000000000000000000000000000000000000001",
+                    "coinType": "0x2::sui::SUI"
+                },
+                "gasBudget": 10000000
+            }
+        },
+        "paymentRequirements": {
+            "scheme": "exact",
+            "network": "sui-testnet",
+            "maxAmountRequired": intent_tx.amount_str.clone(),
+            "resource": "https://example.com/ledgerflow-cli-payment",
+            "description": format!("Settlement from CLI: {} units to {}", intent_tx.amount_str, intent_tx.recipient),
+            "mimeType": "application/json",
+            "payTo": intent_tx.recipient,
+            "maxTimeoutSeconds": 3600,
+            "asset": "0xca66c8d82ed90bd31190db432124459e210cdec15cdd6aff20f3e6cb6decdf49",
+            "extra": null
+        }
+    });
+
+    info!("🔄 Sending payload to facilitator settle endpoint:");
+    println!(
+        "🔄 Settle Payload:\n{}",
+        serde_json::to_string_pretty(&payload)?
+    );
+
+    // Send settle request to facilitator
+    let settle_url = format!("{facilitator_url}/settle");
+    info!("🔗 Settle URL: {}", settle_url);
+
+    let settle_response = client
+        .post(&settle_url)
+        .json(&payload)
+        .send()
+        .await
+        .context("Failed to send settle request to facilitator")?;
+
+    let status = settle_response.status();
+    info!("📡 Facilitator settle response status: {}", status);
+
+    if !status.is_success() {
+        let error_text = settle_response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Unknown error".to_string());
+        println!("❌ Facilitator settle failed with status {status}: {error_text}");
+        eyre::bail!("Facilitator settle failed: {}", error_text);
+    }
+
+    let settle_result: serde_json::Value = settle_response
+        .json()
+        .await
+        .context("Failed to parse settle response")?;
+
+    info!("📋 Facilitator settle response:");
+    println!(
+        "✅ Settle Response:\n{}",
+        serde_json::to_string_pretty(&settle_result)?
+    );
+
+    let success = settle_result
+        .get("success")
+        .unwrap_or(&json!(false))
+        .as_bool()
+        .unwrap_or(false);
+
+    if !success {
+        println!("❌ Transaction settlement failed!");
+        eyre::bail!("Transaction settlement failed: {:?}", settle_result);
+    }
+
+    println!("✅ Transaction successfully settled by facilitator!");
+
+    Ok(settle_result)
 }

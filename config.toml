@@ -1,0 +1,45 @@
+# LedgerFlow Sui CLI Configuration
+
+# Network configuration for Sui blockchain
+[network]
+# RPC URL for the Sui Full node
+rpc_url = "https://fullnode.testnet.sui.io:443"
+# WebSocket URL for event subscription (optional)
+ws_url = "wss://fullnode.testnet.sui.io:443"
+# Network name (devnet, testnet, mainnet, or localnet)
+network = "testnet"
+
+# Account configuration
+[account]
+# SECURITY NOTE: For production use, set SUI_PRIVATE_KEY environment variable instead!
+# export SUI_PRIVATE_KEY="your_private_key_here"
+private_key = "REMOVED_FOR_SECURITY"
+# Optional account address override (derived from private key if not provided)
+address = "0xa11cea3bbf6889be9d49991757cb0b676d644e24acec54225d64c97a1d81acc1"
+# Key scheme (ed25519, secp256k1, secp256r1)
+key_scheme = "ed25519"
+
+# Transaction configuration
+[transaction]
+# Gas budget for transactions (in MIST)
+gas_budget = 10_000_000
+# Gas price (if not specified, will be estimated)
+gas_price = 0
+# Transaction expiration timeout in seconds
+expiration_secs = 600
+# Whether to wait for transaction confirmation
+wait_for_transaction = true
+
+# Vault contract configuration
+[vault]
+# Package ID where the payment vault contract is deployed
+# Replace with your actual deployed package ID
+package_id = "0x0000000000000000000000000000000000000000000000000000000000000000"
+# Module name (usually "payment_vault")
+module_name = "payment_vault"
+# Vault object ID (the shared object containing the vault)
+# Replace with your actual vault object ID
+vault_object_id = "0x0000000000000000000000000000000000000000000000000000000000000000"
+# USDC coin type (e.g., "0x2::sui::SUI" for SUI or custom USDC type)
+# Replace with the actual USDC coin type on Sui
+usdc_type = "0x2::sui::SUI"

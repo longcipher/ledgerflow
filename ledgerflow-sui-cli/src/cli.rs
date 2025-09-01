@@ -94,6 +94,9 @@ pub enum Commands {
         /// Dry run - create transaction but don't send to facilitator
         #[arg(long)]
         dry_run: bool,
+        /// Test settle flow even if verify fails (for testing purposes)
+        #[arg(long)]
+        test_settle: bool,
     },
 }
 

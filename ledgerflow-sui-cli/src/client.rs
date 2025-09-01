@@ -3,7 +3,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use eyre::{Context, Result};
+use eyre::{Result, WrapErr};
 use serde::{Deserialize, Serialize};
 use sui_keys::keystore::InMemKeystore;
 use sui_sdk::{
@@ -56,7 +56,7 @@ impl VaultClient {
         let client = SuiClientBuilder::default()
             .build(&rpc_url)
             .await
-            .context("Failed to build Sui client")?;
+            .wrap_err("Failed to build Sui client")?;
 
         // Create a dummy keystore for now
         let keystore = InMemKeystore::default();
@@ -71,9 +71,11 @@ impl VaultClient {
             SuiAddress::random_for_testing_only()
         } else if private_key.starts_with("0x") && private_key.len() == 66 {
             // Try to parse as a 32-byte hex string and convert to SuiAddress
-            let bytes = hex::decode(&private_key[2..]).context("Failed to decode private key")?;
-            if bytes.len() == 32 {
-                SuiAddress::from_bytes(&bytes[..20]).context("Failed to create SuiAddress")?
+            let private_key_bytes =
+                hex::decode(&private_key[2..]).wrap_err("Failed to decode private key")?;
+            if private_key_bytes.len() == 32 {
+                SuiAddress::from_bytes(&private_key_bytes[..20])
+                    .wrap_err("Failed to create SuiAddress")?
             } else {
                 SuiAddress::random_for_testing_only()
             }
@@ -81,9 +83,10 @@ impl VaultClient {
             SuiAddress::random_for_testing_only()
         };
 
-        let package_id = ObjectID::from_str(&package_id).context("Failed to parse package ID")?;
-        let vault_object_id =
-            ObjectID::from_str(&vault_object_id).context("Failed to parse vault object ID")?;
+        let package_id =
+            ObjectID::from_hex_literal(&package_id).wrap_err("Failed to parse package ID")?;
+        let vault_object_id = ObjectID::from_hex_literal(&vault_object_id)
+            .wrap_err("Failed to parse vault object ID")?;
 
         Ok(VaultClient {
             client,
@@ -165,7 +168,7 @@ impl VaultClient {
             .coin_read_api()
             .get_coins(account_addr, Some(self.usdc_type.clone()), None, None)
             .await
-            .context("Failed to get account balance")?;
+            .wrap_err("Failed to get account balance")?;
 
         let total_balance: u64 = coins.data.iter().map(|coin| coin.balance).sum();
         Ok(total_balance)
@@ -205,7 +208,7 @@ impl VaultClient {
             .coin_read_api()
             .get_balance(account_addr, None)
             .await
-            .context("Failed to get SUI balance")?;
+            .wrap_err("Failed to get SUI balance")?;
 
         Ok(balance.total_balance.try_into().unwrap_or(0))
     }
@@ -257,18 +260,36 @@ impl VaultClient {
         intent_message.extend_from_slice(intent_app_id);
         intent_message.extend_from_slice(transaction_bytes.as_bytes());
 
-        // Create signature (mock implementation)
+        // Create signature (mock implementation with valid base64 format)
         let mut hasher = Keccak256::new();
         hasher.update(&intent_message);
         let intent_hash = hasher.finalize();
 
-        // In practice, you'd sign with actual private key
-        let mock_signature = format!("intent_sig_{}", hex::encode(&intent_hash[..16]));
+        // Create a valid base64-encoded signature that matches Sui's expected format
+        // Sui signatures are typically 96 bytes: 64 bytes signature + 32 bytes public key + scheme flag
+        let mut signature_bytes = vec![0u8; 96];
+
+        // Fill with hash-based deterministic data to make it look like a real signature
+        signature_bytes[0..32].copy_from_slice(&intent_hash);
+        signature_bytes[32..64].copy_from_slice(&intent_hash);
+
+        // Add deterministic "public key" data based on the sender address
+        let mut pubkey_hasher = Keccak256::new();
+        pubkey_hasher.update(self.active_address.to_string().as_bytes());
+        let pubkey_hash = pubkey_hasher.finalize();
+        signature_bytes[64..96].copy_from_slice(&pubkey_hash);
+
+        // Set scheme flag to 0 (Ed25519)
+        signature_bytes[95] = 0;
+
+        // Encode as base64
+        let base64_signature =
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &signature_bytes);
         let mock_public_key = format!("pubkey_{}", hex::encode(&intent_hash[16..32]));
 
         Ok(IntentSignedTransaction {
             transaction_bytes,
-            intent_signature: mock_signature,
+            intent_signature: base64_signature,
             public_key: mock_public_key,
             sender_address: self.active_address.to_string(),
             recipient,

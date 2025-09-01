@@ -117,10 +117,7 @@ async fn post_verify_accepts_valid_payload() -> eyre::Result<()> {
     println!("{}", serde_json::to_string_pretty(&request)?);
 
     // Send the request to /verify endpoint
-    let res = server
-        .post("/verify")
-        .json(&request)
-        .await;
+    let res = server.post("/verify").json(&request).await;
 
     // Print the response for debugging
     println!("Response status: {}", res.status_code());
@@ -135,9 +132,9 @@ async fn post_verify_accepts_valid_payload() -> eyre::Result<()> {
 
     // For now, we accept either 200, 400, or 422 as long as it's not a deserialization error
     assert!(
-        res.status_code() == StatusCode::OK 
-        || res.status_code() == StatusCode::BAD_REQUEST
-        || res.status_code() == StatusCode::UNPROCESSABLE_ENTITY
+        res.status_code() == StatusCode::OK
+            || res.status_code() == StatusCode::BAD_REQUEST
+            || res.status_code() == StatusCode::UNPROCESSABLE_ENTITY
     );
 
     Ok(())
@@ -200,10 +197,7 @@ async fn post_verify_with_manual_json_construction() -> eyre::Result<()> {
     println!("{}", serde_json::to_string_pretty(&request_json)?);
 
     // Send the request to /verify endpoint
-    let res = server
-        .post("/verify")
-        .json(&request_json)
-        .await;
+    let res = server.post("/verify").json(&request_json).await;
 
     // Print the response for debugging
     println!("Response status: {}", res.status_code());
@@ -276,7 +270,9 @@ async fn demonstrate_curl_compatible_json_format() -> eyre::Result<()> {
     println!("  -H \"Content-Type: application/json\" \\");
     println!("  -d @verify_request.json");
     println!();
-    println!("Expected response: {{\"isValid\":false,\"invalidReason\":\"invalid_network\",\"payer\":\"...\"}}");
+    println!(
+        "Expected response: {{\"isValid\":false,\"invalidReason\":\"invalid_network\",\"payer\":\"...\"}}"
+    );
 
     Ok(())
 }
