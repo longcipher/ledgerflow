@@ -61,23 +61,19 @@ async fn main() -> Result<()> {
     );
 
     if supported_networks.is_empty() {
-        return Err(eyre::eyre!(
-            "No Sui networks configured. Please set at least one SUI_*_RPC_URL environment variable."
-        ));
+        tracing::warn!("No Sui networks configured or connected. Running in offline mode.");
     }
 
     let app = build_app(facilitator).layer(TraceLayer::new_for_http());
 
-    // Listen host/port
-    let host = std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
-    let port: u16 = std::env::var("PORT")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(8080);
+    // Listen host/port from config with fallbacks
+    let host = cfg.host.unwrap_or_else(|| "0.0.0.0".to_string());
+    let port = cfg.port.unwrap_or(9001);
+
     let ip: std::net::IpAddr = match host.parse::<std::net::IpAddr>() {
         Ok(ip) => ip,
         Err(err) => {
-            tracing::error!(%host, %err, "Invalid HOST env var; expected an IP address");
+            tracing::error!(%host, %err, "Invalid HOST in config; expected an IP address");
             return Err(eyre::eyre!("invalid HOST: {}", host));
         }
     };
@@ -85,6 +81,8 @@ async fn main() -> Result<()> {
     tracing::info!(%addr, "Starting ledgerflow-facilitator for Sui");
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
+    tracing::info!("Successfully bound to {}, starting HTTP server", addr);
     axum::serve(listener, app).await?;
+    tracing::info!("Server shut down gracefully");
     Ok(())
 }

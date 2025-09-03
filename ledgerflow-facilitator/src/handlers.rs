@@ -39,6 +39,7 @@ pub async fn get_settle_info() -> impl IntoResponse {
 pub async fn get_supported<F: Facilitator>(
     Extension(facilitator): Extension<F>,
 ) -> impl IntoResponse {
+    tracing::info!("GET /supported endpoint called");
     let mut kinds = Vec::new();
 
     for network in facilitator.supported_networks() {
