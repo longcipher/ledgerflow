@@ -1,0 +1,33 @@
+{
+  "x402Version": 1,
+  "paymentPayload": {
+    "x402Version": 1,
+    "scheme": "exact",
+    "network": "sui-testnet",
+    "payload": {
+      "signature": "wOLj2CncGNg064kJZT2ous973NWE7b/jiQ5xYZ28gWrA4uPYKdwY2DTriQllPai6z3vc1YTtv+OJDnFhnbyBalPDAAAbu/f0LHqPkScvs7m8e/qjuzsC+ARoGepS5hUA",
+      "authorization": {
+        "from": "0xa11cea3bbf6889be9d49991757cb0b676d644e24acec54225d64c97a1d81acc1",
+        "to": "0xb0be0b86d3fa8ad7484d88821c78c035fa819702a0cc06cf2a4fc4924036a885",
+        "value": "1000000",
+        "validAfter": 1757343707,
+        "validBefore": 1757347307,
+        "nonce": "0x0000000000000000000000000000000000000000000000000000000000000001",
+        "coinType": "0x2::sui::SUI"
+      },
+      "gasBudget": 10000000
+    }
+  },
+  "paymentRequirements": {
+    "scheme": "exact",
+    "network": "sui-testnet",
+    "maxAmountRequired": "1000000",
+    "resource": "https://example.com/ledgerflow-cli-payment",
+    "description": "Settlement from CLI: 1000000 units to bob",
+    "mimeType": "application/json",
+    "payTo": "0xb0be0b86d3fa8ad7484d88821c78c035fa819702a0cc06cf2a4fc4924036a885",
+    "maxTimeoutSeconds": 3600,
+    "asset": "0xca66c8d82ed90bd31190db432124459e210cdec15cdd6aff20f3e6cb6decdf49",
+    "extra": null
+  }
+}

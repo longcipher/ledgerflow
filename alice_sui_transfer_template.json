@@ -1,0 +1,33 @@
+{
+  "x402Version": 1,
+  "paymentPayload": {
+    "x402Version": 1,
+    "scheme": "exact",
+    "network": "sui-testnet",
+    "payload": {
+      "signature": "placeholder_signature_will_be_generated",
+      "authorization": {
+        "from": "0xa11cea3bbf6889be9d49991757cb0b676d644e24acec54225d64c97a1d81acc1",
+        "to": "0xb0be0b86d3fa8ad7484d88821c78c035fa819702a0cc06cf2a4fc4924036a885",
+        "value": "100000000",
+        "validAfter": 1757343707,
+        "validBefore": 1757347307,
+        "nonce": "0x0000000000000000000000000000000000000000000000000000000000000002",
+        "coinType": "0x2::sui::SUI"
+      },
+      "gasBudget": 10000000
+    }
+  },
+  "paymentRequirements": {
+    "scheme": "exact",
+    "network": "sui-testnet",
+    "maxAmountRequired": "100000000",
+    "resource": "https://example.com/ledgerflow-cli-payment",
+    "description": "SUI transfer from Alice to Bob: 0.1 SUI",
+    "mimeType": "application/json",
+    "payTo": "0xb0be0b86d3fa8ad7484d88821c78c035fa819702a0cc06cf2a4fc4924036a885",
+    "maxTimeoutSeconds": 3600,
+    "asset": "0x2::sui::SUI",
+    "extra": null
+  }
+}

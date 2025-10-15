@@ -195,6 +195,26 @@ ledgerflow/                         # Project root directory
 
 ## 🎯 Quick Start
 
+### Building the Project
+
+To build all workspace members:
+
+```bash
+cargo build
+```
+
+**Note:** `ledgerflow-aptos-cli` is excluded from the workspace build due to a jemalloc library conflict with `ledgerflow-indexer-aptos`. Both packages depend on different branches/commits of the Aptos SDK that use incompatible jemalloc allocators, causing a native library linking conflict. 
+
+**Recommended alternative:** Use the TypeScript CLI `ledgerflow-aptos-cli-ts` which provides equivalent functionality with a better user experience:
+
+```bash
+cd ledgerflow-aptos-cli-ts
+npm install
+npm run build
+```
+
+### Module Documentation
+
 For detailed usage instructions, please refer to the README.md files in each module:
 
 * [EVM Smart Contract Deployment](./ledgerflow-vault-evm/README.md)

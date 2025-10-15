@@ -18,8 +18,7 @@ use sui_sdk::{SuiClient, SuiClientBuilder};
 use sui_types::{
     base_types::{ObjectID, SuiAddress},
     crypto::SuiKeyPair,
-    programmable_transaction_builder::ProgrammableTransactionBuilder,
-    transaction::{Command, ObjectArg, Transaction, TransactionData},
+    transaction::Transaction,
 };
 use tracing::{debug, error, info, warn};
 
@@ -447,7 +446,7 @@ impl Facilitator for SuiFacilitator {
                     "EVM payloads not supported by Sui facilitator".to_string(),
                 ));
             }
-        };
+        }; 
 
         // Get network configuration
         let _config = self.get_config(&payload.network)?;
@@ -476,30 +475,58 @@ impl Facilitator for SuiFacilitator {
 
 impl SuiFacilitator {
     /// Execute a real transfer transaction (for testing and settlement proof)
-    pub async fn execute_real_transfer(&self, _amount: u64) -> Result<String, PaymentError> {
+    pub async fn execute_real_transfer(&self, amount: u64) -> Result<String, PaymentError> {
+        use sui_types::crypto::Signer;
+
         let network = Network::SuiTestnet;
         let sui_client = self.sui_clients.get(&network).ok_or_else(|| {
             PaymentError::TransactionExecutionError("Sui client not available".to_string())
         })?;
 
         // Get keypair from environment
-        let keypair = std::env::var("SUI_PRIVATE_KEY")
+        let keypair_str = std::env::var("SUI_PRIVATE_KEY")
             .map_err(|_| {
                 PaymentError::TransactionExecutionError("SUI_PRIVATE_KEY not found".to_string())
-            })
-            .and_then(|raw| {
-                SuiKeyPair::decode(&raw).map_err(|e| {
-                    PaymentError::TransactionExecutionError(format!(
-                        "Failed to decode private key: {}",
-                        e
-                    ))
-                })
             })?;
+
+        info!("Attempting to decode private key format: {}", &keypair_str[..20]);
+
+        // For Sui, private keys in Bech32 format need special handling
+        let keypair = if keypair_str.starts_with("suiprivkey") {
+            info!("Detected Bech32 Sui private key format");
+            // This is a Bech32 encoded Sui private key
+            SuiKeyPair::decode(&keypair_str).map_err(|e| {
+                error!("Failed to decode Bech32 private key: {}", e);
+                PaymentError::TransactionExecutionError(format!(
+                    "Failed to decode Bech32 private key: {}",
+                    e
+                ))
+            })?
+        } else {
+            info!("Trying alternative private key format");
+            // Try as hex or other format
+            SuiKeyPair::decode(&keypair_str).map_err(|e| {
+                error!("Failed to decode private key: {}", e);
+                PaymentError::TransactionExecutionError(format!(
+                    "Failed to decode private key: {}",
+                    e
+                ))
+            })?
+        };
 
         let sender = SuiAddress::from(&keypair.public());
         info!("Executing real transaction from address: {}", sender);
 
-        // Get SUI coins
+        // Recipient for testing (Bob's address)
+        let recipient = SuiAddress::from_str("0xb0be0b86d3fa8ad7484d88821c78c035fa819702a0cc06cf2a4fc4924036a885")
+            .map_err(|e| {
+                PaymentError::TransactionExecutionError(format!("Invalid recipient address: {}", e))
+            })?;
+
+        // Use the simple pay API for basic transfers
+        info!("Transferring {} MIST from {} to {}", amount, sender, recipient);
+
+        // Get SUI coins and use transfer_object instead
         let sui_coins = sui_client
             .coin_read_api()
             .get_coins(sender, None, None, None)
@@ -510,57 +537,40 @@ impl SuiFacilitator {
 
         if sui_coins.data.is_empty() {
             return Err(PaymentError::TransactionExecutionError(
-                "No SUI coins available".to_string(),
+                "No SUI coins available - account needs funding from faucet".to_string(),
             ));
         }
 
-        let coin = &sui_coins.data[0];
-        info!(
-            "Using coin: {} with balance: {}",
-            coin.coin_object_id, coin.balance
-        );
-
-        // Build transfer transaction
-        let mut ptb = ProgrammableTransactionBuilder::new();
-
-        // Simple approach: use the coin object directly without split
-        let coin_arg = ptb.obj(ObjectArg::ImmOrOwnedObject((
-            coin.coin_object_id,
-            coin.version,
-            coin.digest,
-        )));
-
-        // Transfer the coin to the sender (self-transfer for testing)
-        if let (Ok(coin_arg), Ok(recipient_arg)) = (coin_arg, ptb.pure(sender)) {
-            let _ = ptb.command(Command::TransferObjects(vec![coin_arg], recipient_arg));
-        } else {
-            return Err(PaymentError::TransactionExecutionError(
-                "Failed to build transaction arguments".to_string(),
-            ));
-        }
-
-        // Get gas price
-        let reference_gas_price = sui_client
-            .governance_api()
-            .get_reference_gas_price()
-            .await
-            .map_err(|e| {
-                PaymentError::TransactionExecutionError(format!("Failed to get gas price: {}", e))
+        // Find the first coin with sufficient balance
+        let coin = sui_coins
+            .data
+            .iter()
+            .find(|c| c.balance >= amount + self.gas_budget)
+            .ok_or_else(|| {
+                PaymentError::TransactionExecutionError(format!(
+                    "No coin with sufficient balance. Need {} (transfer) + {} (gas) = {}. Available coins: {:?}",
+                    amount, 
+                    self.gas_budget,
+                    amount + self.gas_budget,
+                    sui_coins.data.iter().map(|c| c.balance).collect::<Vec<_>>()
+                ))
             })?;
 
-        // Build transaction
-        let tx_data = TransactionData::new_programmable(
-            sender,
-            vec![(coin.coin_object_id, coin.version, coin.digest)],
-            ptb.finish(),
-            self.gas_budget,
-            reference_gas_price,
-        );
+        info!("Using coin: {} with balance: {}", coin.coin_object_id, coin.balance);
 
-        // Sign and execute - Use simple signing
-        use sui_types::crypto::Signer;
+        // Use transfer_sui with specific coin
+        let tx_data = sui_client
+            .transaction_builder()
+            .transfer_sui(sender, coin.coin_object_id, amount, recipient, None)
+            .await
+            .map_err(|e| {
+                PaymentError::TransactionExecutionError(format!("Failed to build transaction: {}", e))
+            })?;
+
+        // Sign the transaction data directly
         let tx_digest = tx_data.digest();
         let signature = keypair.sign(tx_digest.inner().as_ref());
+        
         let signed_tx = Transaction::from_data(tx_data, vec![signature]);
 
         info!("Submitting real transaction to Sui network...");
@@ -569,21 +579,23 @@ impl SuiFacilitator {
             .execute_transaction_block(
                 signed_tx,
                 sui_json_rpc_types::SuiTransactionBlockResponseOptions::full_content(),
-                None, // Simplified - no execution type
+                None,
             )
             .await
             .map_err(|e| {
+                error!("Transaction execution failed: {:?}", e);
                 PaymentError::TransactionExecutionError(format!(
                     "Transaction execution failed: {}",
                     e
                 ))
             })?;
 
-        // Check result - Check execution status properly
+        // Check execution status
         if let Some(effects) = &response.effects {
             match effects.status() {
                 SuiExecutionStatus::Success => {
                     info!("Real transaction successful: {}", response.digest);
+                    info!("Transferred {} MIST from {} to {}", amount, sender, recipient);
                     Ok(response.digest.to_string())
                 }
                 SuiExecutionStatus::Failure { error } => {

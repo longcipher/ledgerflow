@@ -1,0 +1,33 @@
+{
+  "x402Version": 1,
+  "paymentPayload": {
+    "x402Version": 1,
+    "scheme": "exact",
+    "network": "sui-testnet",
+    "payload": {
+      "signature": "eBUwnqAk/PMwl+iHSA1iJwWXHOc5KGDyISFWTrGQGrN4FTCeoCT88zCX6IdIDWInBZcc5zkoYPIhIVZOsZAas1PDAAAbu/f0LHqPkScvs7m8e/qjuzsC+ARoGepS5hUA",
+      "authorization": {
+        "from": "0xab85f2d31f3c8dc3d168046410fd36cbc132470cfe05811fb99000f0151c6567",
+        "to": "0xb0be0b86d3fa8ad7484d88821c78c035fa819702a0cc06cf2a4fc4924036a885",
+        "value": "1000",
+        "validAfter": 1757343734,
+        "validBefore": 1757347334,
+        "nonce": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "coinType": "0x2::sui::SUI"
+      },
+      "gasBudget": 10000000
+    }
+  },
+  "paymentRequirements": {
+    "scheme": "exact",
+    "network": "sui-testnet",
+    "maxAmountRequired": "1000",
+    "resource": "https://example.com/ledgerflow-cli-payment",
+    "description": "SUI transfer from peaceful-axinite to Bob: 1000 MIST",
+    "mimeType": "application/json",
+    "payTo": "0xb0be0b86d3fa8ad7484d88821c78c035fa819702a0cc06cf2a4fc4924036a885",
+    "maxTimeoutSeconds": 3600,
+    "asset": "0x0000000000000000000000000000000000000000000000000000000000000002",
+    "extra": null
+  }
+}

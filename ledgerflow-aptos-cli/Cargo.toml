@@ -9,26 +9,24 @@ repository = "https://github.com/longcipher/ledgerflow"
 
 [dependencies]
 # Aptos SDK for blockchain interaction
-aptos-sdk = { git = "https://github.com/aptos-labs/aptos-core", branch = "devnet" }
-# bcs = { workspace = true }
+aptos-sdk = { git = "https://github.com/aptos-labs/aptos-core", branch = "devnet", default-features = false }
 
 # CLI framework
-clap = { workspace = true, features = ["derive"] }
+clap = { version = "4.5.49", features = ["derive"] }
 # Async runtime
-tokio = { workspace = true, features = ["full"] }
+tokio = { version = "1.48.0", features = ["full"] }
 # Error handling
-color-eyre = { workspace = true }
-eyre = { workspace = true }
+color-eyre = "0.6.5"
+eyre = "0.6.12"
 # Logging
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 # Serialization
-serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
-serde_yaml = { workspace = true }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+serde_yaml = "0.9.33"
 # Utilities
-config = { workspace = true }
-hex = { workspace = true }
+config = "0.15.18"
+hex = "0.4.3"
 # HTTP client for REST API
-reqwest = { workspace = true, features = ["json"] }
-# chrono = { workspace = true, features = ["serde"] }
+reqwest = { version = "0.12.24", features = ["json"] }

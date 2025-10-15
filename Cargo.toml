@@ -7,17 +7,19 @@ members = [
     "ledgerflow-indexer-aptos",
     "ledgerflow-indexer-sui",
     "ledgerflow-migrations",
-    "ledgerflow-aptos-cli",
     "ledgerflow-sui-cli",
     "ledgerflow-facilitator",
     "ledgerflow-mcp",
+]
+exclude = [
+    "ledgerflow-aptos-cli",  # Excluded due to jemalloc conflict with indexer-aptos
 ]
 resolver = "2"
 
 [workspace.dependencies]
 # Web framework
-axum = "0.8.4"
-tokio = "1.47.1"
+axum = "0.8.6"
+tokio = "1.48.0"
 tokio-test = "0.4.4"
 tower-http = "0.6.6"
 
@@ -25,25 +27,25 @@ tower-http = "0.6.6"
 sqlx = "0.8.6"
 
 # CLI
-clap = "4.5.45"
+clap = "4.5.49"
 
 # Configuration
-config = "0.15.14"
-serde = "1.0.219"
-serde_json = "1.0.143"
+config = "0.15.18"
+serde = "1.0.228"
+serde_json = "1.0.145"
 serde_yaml = "0.9.33"
 
 # Logging and tracing
 tracing = "0.1.41"
-tracing-subscriber = "0.3.19"
+tracing-subscriber = "0.3.20"
 
 # Error handling
 color-eyre = "0.6.5"
 eyre = "0.6.12"
-thiserror = "2.0.16"
+thiserror = "2.0.17"
 
 # Utilities
-chrono = "0.4.41"
+chrono = "0.4.42"
 
 # Crypto
 hex = "0.4.3"
@@ -51,7 +53,7 @@ rand = "0.9.2"
 sha3 = "0.10.8"
 
 # Ethereum/EVM interaction
-alloy = "1.0.26"
+alloy = "1.0.38"
 
 # Diesel (for Aptos indexer compatibility)
 aptos-indexer-processor-sdk = { git = "https://github.com/aptos-labs/aptos-indexer-processor-sdk.git", tag = "aptos-indexer-processor-sdk-v2.1.1" }
@@ -63,14 +65,14 @@ diesel_migrations = "=2.2.0"
 teloxide = "0.17.0"
 
 # HTTP client
-reqwest = "0.12.23"
+reqwest = "0.12.24"
 
 # QR code generation
-image = "0.25.6"
+image = "0.25.8"
 qrcode = "0.14.1"
 
 # UUID generation
-uuid = "1.18.0"
+uuid = "1.18.1"
 
 # Base64 encoding
 base64 = "0.22.1"
@@ -87,7 +89,7 @@ sui-types = { git = "https://github.com/MystenLabs/sui", package = "sui-types" }
 url = "2.5"
 
 # Decimal arithmetic
-rust_decimal = "1.37"
+rust_decimal = "1.39.0"
 
 # Numeric traits
 num-traits = "0.2"
