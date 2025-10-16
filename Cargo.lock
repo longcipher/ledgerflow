@@ -6780,6 +6780,7 @@ dependencies = [
  "axum-test",
  "base64 0.22.1",
  "bcs 0.1.6",
+ "blake2",
  "clap",
  "color-eyre",
  "config",

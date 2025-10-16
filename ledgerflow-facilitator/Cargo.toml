@@ -34,6 +34,7 @@ alloy = { workspace = true }
 # Cryptography and serialization
 hex = "0.4"
 base64 = "0.22"
+blake2 = "0.10"
 bcs = { workspace = true }
 url = { workspace = true }
 rust_decimal = "1.33"

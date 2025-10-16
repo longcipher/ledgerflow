@@ -12,7 +12,7 @@ members = [
     "ledgerflow-mcp",
 ]
 exclude = [
-    "ledgerflow-aptos-cli",  # Excluded due to jemalloc conflict with indexer-aptos
+    "ledgerflow-aptos-cli", # Excluded due to jemalloc conflict with indexer-aptos
 ]
 resolver = "2"
 
