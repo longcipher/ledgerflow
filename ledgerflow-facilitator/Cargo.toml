@@ -4,10 +4,9 @@ version = "0.1.0"
 edition = "2024"
 license = "Apache-2.0 OR MIT"
 repository = "https://github.com/longcipher/ledgerflow"
-description = "LedgerFlow facilitator server implementing the x402 spec (verify/settle)"
+description = "LedgerFlow chain-agnostic x402 v2 facilitator with offchain/CEX adapter support"
 
 [dependencies]
-# Workspace-pinned deps
 axum = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 tower-http = { workspace = true, features = ["trace", "cors"] }
@@ -20,31 +19,12 @@ clap = { workspace = true, features = ["derive"] }
 eyre = { workspace = true }
 color-eyre = { workspace = true }
 thiserror = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+uuid = { workspace = true, features = ["v4"] }
 
-# Sui SDK and related crates
-sui-types = { workspace = true }
-sui-rpc-api = { workspace = true }
-sui-keys = { workspace = true }
-sui-sdk = { workspace = true }
-sui-json-rpc-types = { workspace = true }
-
-# EVM/Ethereum interaction
-alloy = { workspace = true }
-
-# Cryptography and serialization
-hex = "0.4"
-base64 = "0.22"
-blake2 = "0.10"
-bcs = { workspace = true }
-url = { workspace = true }
-rust_decimal = "1.33"
-once_cell = "1.19"
-regex = "1.10"
 async-trait = "0.1"
-
-# misc
 dotenvy = "0.15"
-rand = "0.8"
+x402-types = { workspace = true }
 
 [features]
 telemetry = []
@@ -54,12 +34,10 @@ name = "ledgerflow_facilitator"
 path = "src/lib.rs"
 
 [dev-dependencies]
-axum-test = "18.0.0"
+axum-test = "18.7.0"
 serde_json = { workspace = true }
 eyre = { workspace = true }
-tokio-test = "0.4"
-proptest = "1.4"
-hex = "0.4"
+tokio-test = { workspace = true }
 
 [package.metadata.docs.rs]
 all-features = true

@@ -1,27 +1,27 @@
+pub mod adapters;
 pub mod config;
-pub mod facilitators;
 pub mod handlers;
-pub mod types;
+pub mod service;
 
 use axum::{
-    Extension, Router,
+    Router,
     http::Method,
     routing::{get, post},
 };
 use tower_http::{cors, trace::TraceLayer};
 
-use crate::facilitators::Facilitator;
+use crate::service::FacilitatorService;
 
-/// Build the Axum app with all routes and layers.
-pub fn build_app<F: Facilitator + Clone + 'static>(facilitator: F) -> Router {
+pub fn build_app(service: FacilitatorService) -> Router {
     Router::new()
         .route("/", get(|| async { "ledgerflow-facilitator ok" }))
         .route("/verify", get(handlers::get_verify_info))
-        .route("/verify", post(handlers::post_verify::<F>))
+        .route("/verify", post(handlers::post_verify))
         .route("/settle", get(handlers::get_settle_info))
-        .route("/settle", post(handlers::post_settle::<F>))
-        .route("/supported", get(handlers::get_supported::<F>))
-        .layer(Extension(facilitator))
+        .route("/settle", post(handlers::post_settle))
+        .route("/supported", get(handlers::get_supported))
+        .route("/health", get(handlers::get_health))
+        .with_state(service)
         .layer(TraceLayer::new_for_http())
         .layer(
             cors::CorsLayer::new()

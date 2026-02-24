@@ -20,17 +20,17 @@
   "author": "LongCipher",
   "license": "MIT",
   "dependencies": {
-    "@aptos-labs/ts-sdk": "^1.29.0",
-    "commander": "^12.0.0",
-    "chalk": "^5.3.0",
-    "ora": "^8.0.1",
-    "inquirer": "^10.2.2"
+    "@aptos-labs/ts-sdk": "^6.0.0",
+    "commander": "^14.0.3",
+    "chalk": "^5.6.2",
+    "ora": "^9.3.0",
+    "inquirer": "^13.3.0"
   },
   "devDependencies": {
-    "@types/node": "^22.7.9",
-    "@types/inquirer": "^9.0.7",
-    "@biomejs/biome": "^1.9.4",
-    "typescript": "^5.6.3"
+    "@types/node": "^25.3.0",
+    "@types/inquirer": "^9.0.9",
+    "@biomejs/biome": "^2.4.4",
+    "typescript": "^5.9.3"
   },
   "engines": {
     "node": ">=18.0.0",

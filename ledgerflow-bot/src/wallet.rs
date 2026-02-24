@@ -8,7 +8,7 @@ use alloy::{
     sol_types::SolEvent,
 };
 use eyre::{Result, eyre};
-use rand::Rng;
+use rand::RngExt;
 
 use crate::{
     contracts::{PaymentVault, USDC},

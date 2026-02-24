@@ -1,4 +1,7 @@
-# x402 Integration Design (EVM first)
+# x402 Integration Design (Legacy EVM v1 Notes)
+
+> NOTE: The active facilitator architecture is now x402 v2 chain-agnostic with adapter registry.
+> See: `docs/x402_v2_chain_agnostic_architecture.md`.
 
 This document explains how LedgerFlow integrates the x402 protocol starting on EVM networks, while preserving our minimal on-chain design: the vault only emits an event that binds `orderId` to the deposited `amount`.
 

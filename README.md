@@ -4,245 +4,169 @@
 
 # LedgerFlow
 
-**Making value flow as freely, efficiently, and borderlessly as information flow.**
+**A chain-agnostic x402 v2 facilitator for AI-native payments.**
 
-LedgerFlow is a modern payment gateway built on blockchain technology, centered around stablecoins (such as USDC). We aim to solve the pain points of current mainstream payment systems (such as Stripe), including high registration barriers, opaque fees, account freezing risks, and difficult appeals.
+## Executive Summary
 
-By leveraging blockchain's transparency, security, and composability, LedgerFlow provides SaaS service providers, developers, and independent creators worldwide with a **low-barrier, low-cost, high-efficiency, censorship-resistant** payment solution.
+LedgerFlow is open infrastructure that helps resource servers adopt **x402 v2** once and settle payments across **offchain and onchain rails** without changing their protocol-facing API.
 
-## 🔥 First-class x402 Protocol Support (EVM)
+### Problem
 
-- Standards-based paywalls using x402 V1 "exact" with USDC EIP-3009.
-- Settlement via PaymentVault.depositWithAuthorization preserves on-chain `DepositReceived(payer, orderId, amount)` linkage.
-- Distributed `orderId` equals the EIP-3009 `nonce` (no central issuance).
-- See details: [Exact scheme notes](./docs/scheme_exact_evm.md)
+x402 adoption is currently constrained by settlement fragmentation:
 
-x402 workflow
+- integrations are often chain-specific
+- offchain liquidity rails (CEX/PSP/internal ledgers) are poorly standardized
+- teams must rewrite logic per payment backend
 
-```mermaid
-sequenceDiagram
-    participant Client
-    participant Server
-    participant Facilitator
-    participant Blockchain
+### Our Solution
 
-    %% Step 1 & 2: Initial Request and Payment Challenge
-    Client->>Server: GET /premium-resource
-    Server-->>Client: 402 Payment Required <br> WWW-Authenticate: X402 (price, token, facilitator...)
+LedgerFlow introduces a minimal facilitator architecture:
 
-    %% Step 3: Client-side Signing
-    Note over Client: User signs payment authorization <br> in their wallet to generate authToken.
+- protocol layer: x402 v2 verification/settlement interface
+- dispatch layer: adapter registry keyed by `(x402Version, scheme, network pattern)`
+- settlement layer: pluggable adapters (`offchain:*` today, onchain adapters next)
 
-    %% Step 4: Second Request with Payment Proof
-    Client->>Server: GET /premium-resource <br> Authorization: X402 authToken="..."
+### Why This Is Grant-Worthy
 
-    %% Step 5-8: Server-side Verification via Facilitator
-    Server->>Facilitator: POST /verify (authToken, price, token...)
-    Facilitator->>Blockchain: Submits signed transaction
-    Blockchain-->>Facilitator: Transaction Confirmed
-    Facilitator-->>Server: Verification OK
+- unlocks practical x402 usage now (offchain rails are first-class)
+- reduces integration cost to config + two bridge endpoints
+- creates reusable public goods for AI agents and API marketplaces
 
-    %% Step 9: Success and Resource Delivery
-    Server-->>Client: 200 OK <br> { "data": "..." }
-```
+## Technical Innovation
 
-## Testnet(Unichain Sepolia) Demo
+1. **Chain-agnostic dispatch key**
+   A strict routing contract over `x402Version + scheme + network` decouples protocol handling from settlement implementation.
+2. **First-class offchain namespace**
+   Supports `offchain:*` and `offchain:<provider>` networks so CEX/PSP integrations are native to the flow.
+3. **Config-first expansion**
+   New systems are integrated via `[[adapters]]` config, not HTTP/API rewrites.
+4. **Stable facilitator surface**
+   Single interface for operators: `POST /verify`, `POST /settle`, `GET /supported`, `GET /health`.
 
-* PaymentVault Contract: [0x8b6f22009ae835795b9b33d75ad218c730db039b](https://sepolia.uniscan.xyz/address/0x8b6f22009ae835795b9b33d75ad218c730db039b)
-* Telegram Bot: [@LedgerFlowBot](https://t.me/LedgerFlowBot)
-* USDC Faucet: <https://faucet.circle.com/>
-* Unichain Faucet: <https://docs.unichain.org/docs/tools/faucets>
-* MVP Demo video: <https://youtu.be/YedfwqCenMQ>
-
-## Aptos Testnet Demo
-
-* PaymentVault Contract: [0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846](https://aptoscan.com/account/0xd2b5bb7d81b7fa4eeae1b5f6d6a8e1f9cdc738189a1dcc2315ba4bb846?network=testnet)
-* Deposit tx: [0x93e242a077c1424b1ff64e2dfafd7b965a77ed4f4f381e74615a76b1c14a7e58](https://aptoscan.com/transaction/6812053128?network=testnet)
-* Withdraw tx: [0x28a2e327961686fdaa0e3bf1ea5ef1a342019044fe161b7ea9d61417e4c1e38b](https://aptoscan.com/transaction/6812054574?network=testnet)
-
-## Arch
-
-<div align="center">
-  <img src="/assets/ledgerflow_arch.png" alt="LedgerFlow Arch" />
-</div>
-
-## 🎯 Problems We Solve
-
-Current centralized payment gateways, while powerful, have inherent flaws that create barriers for emerging digital economies and global collaboration:
-
-- **High Entry Barriers**: Must register a company entity to open an account, excluding many independent developers and small teams
-- **Account Freezing Risk**: Platforms have unilateral power to freeze accounts, lack of fund security guarantees, lengthy and low-success appeal processes
-- **Complexity & Learning Costs**: Integrating traditional payment systems requires significant learning costs and development resources
-- **Geographic & Banking Restrictions**: Business scope limited to supported countries and banking systems, cannot achieve true global coverage
-- **Opaque Fees**: Hidden currency conversion fees, cross-border transaction fees make final costs unpredictable
-
-## 🚀 Our Solution
-
-LedgerFlow fundamentally solves these problems through the Web3 technology stack:
-
-### Core Advantages
-
-- **Permissionless**: Anyone with an EVM address can start receiving payments immediately, no company registration required
-- **Self-Custody**: Funds go directly into on-chain Vault contracts you control, platform cannot freeze or misappropriate funds
-- **Truly Global**: Can receive payments anywhere in the world with internet connection, no geographic restrictions
-- **Transparent Fees**: Fees only include predictable blockchain network Gas fees, no hidden charges
-- **Simple & Decoupled**: Easy integration through simple APIs, business systems completely decoupled from on-chain funds
-
-## 🏗️ System Architecture
-
-LedgerFlow uses a lightweight decoupled architecture consisting of the following core components:
+## Latest Architecture (Only)
 
 ```text
-ledgerflow/                         # Project root directory
-├── ledgerflow-vault-evm/           # EVM smart contracts (PaymentVault)
-│   ├── src/                        # Solidity contract source code
-│   ├── test/                       # Contract tests (Foundry)
-│   ├── script/                     # Deployment scripts
-│   └── ...                         # EVM contract-related files
-├── ledgerflow-vault-aptos/         # Aptos smart contracts (PaymentVault)
-│   ├── sources/                    # Move contract source code
-│   ├── tests/                      # Contract tests
-│   ├── scripts/                    # Deployment scripts
-│   └── ...                         # Aptos contract-related files
-├── ledgerflow-balancer/            # Backend service (business logic core)
-├── ledgerflow-bot/                 # Telegram Bot (user frontend)
-├── ledgerflow-indexer-evm/         # EVM event indexer (on-chain monitoring)
-├── ledgerflow-indexer-aptos/       # Aptos event indexer (on-chain monitoring)
-├── ledgerflow-eth-cli/             # Command-line tool for Ethereum
-├── ledgerflow-aptos-cli/           # Command-line tool for Aptos (Rust)
-├── ledgerflow-aptos-cli-ts/        # Command-line tool for Aptos (TypeScript)
-├── ledgerflow-migrations/          # Database schema management
-└── ...                             # Workspace configuration
+Client / Resource Server
+        |
+        | x402 v2 (verify/settle)
+        v
++-------------------------------+
+| Protocol Layer (Axum)         |
+| - Parse x402 v2 requests      |
+| - Normalize/validate payloads |
++---------------+---------------+
+                |
+                v
++-------------------------------+
+| Adapter Registry              |
+| - Match by (v, scheme, net)   |
+| - Dispatch selected adapter    |
++---------------+---------------+
+                |
+      +---------+----------+
+      |                    |
+      v                    v
++-------------+    +------------------+
+| Offchain    |    | Onchain Adapters |
+| CEX/PSP     |    | (pluggable)      |
+| mock/http   |    | roadmap          |
++------+------+    +------------------+
+       |
+       v
++-------------------------------+
+| External Payment System       |
+| CEX / PSP / Internal Ledger   |
++-------------------------------+
 ```
 
-### Component Description
+Detailed design: [docs/x402_v2_chain_agnostic_architecture.md](./docs/x402_v2_chain_agnostic_architecture.md)
 
-1. **PaymentVault Contract (Smart Contract)**
-   * **EVM Implementation**: Solidity-based contracts for Ethereum, Polygon, Arbitrum, BSC, and other EVM-compatible chains
-   * **Aptos Implementation**: Move-based contracts for the Aptos blockchain ecosystem
-   * Serves as the sole entry point and vault for funds, receiving and storing all USDC payments
-   * Supports both standard `approve/deposit` and `permit/deposit` modes
-   * Triggers events for Indexer monitoring, enabling on-chain and off-chain data synchronization
+## Current Implementation Status
 
-2. **Event Indexers (Blockchain Monitoring)**
-   * **EVM Indexer**: Real-time monitoring of DepositReceived events from PaymentVault contracts on EVM-compatible chains
-   * **Aptos Indexer**: Dedicated indexer for monitoring events on the Aptos blockchain
-   * Supports multi-chain monitoring with separate instances for each blockchain
-   * Parses event data and updates order status to "completed"
+Implemented now:
 
-3. **Balancer (Backend Service)**
-   * Business logic core of the system, providing REST APIs
-   * Handles account management, order creation, status queries, balance calculations, and other business functions
-   * Connects user frontend with off-chain data
+- x402 v2 facilitator core
+- adapter registry and dispatch
+- offchain adapter with:
+  - `mock` backend (development)
+  - `http` backend (production bridge)
+- integration tests for v2 offchain verify/settle flow
 
-4. **Telegram Bot (User Frontend)**
-   * Primary interface for users to interact with the LedgerFlow system
-   * Handles user onboarding, payment initiation, status notifications, balance queries, and other functions
+## Integration Contract (CEX/PSP Bridge)
 
-5. **Command Line Tools**
-   * **ledgerflow-eth-cli**: Rust-based CLI for EVM blockchain interactions
-   * **ledgerflow-aptos-cli**: Rust-based CLI for Aptos blockchain interactions
-   * **ledgerflow-aptos-cli-ts**: TypeScript-based CLI for modern Aptos development experience
+Your bridge only needs two endpoints.
 
-6. **Database Migrations**
-   * **ledgerflow-migrations**: Unified database schema management across all services
-   * Supports PostgreSQL with proper migration versioning and rollback capabilities
+Input payload:
 
-## 🔄 Payment Flow
+```json
+{
+  "network": "offchain:binance",
+  "paymentPayload": {"...": "..."},
+  "paymentRequirements": {"...": "..."}
+}
+```
 
-1. **Merchant initiates payment request**: Input "I want to receive 10 USDC" through Telegram Bot
-2. **System generates order**: Bot calls Balancer API to generate unique `orderId`
-3. **Display payment details**: Bot shows payer the payment address, amount, and order information
-4. **On-chain payment**: Payer uses wallet to send USDC to PaymentVault contract
-5. **Event monitoring**: Indexer captures DepositReceived event
-6. **Status update**: Indexer updates order status to "completed" in database
-7. **Confirmation notification**: Merchant receives payment success notification
+Verify output:
 
-## 🌟 Core Features
+```json
+{
+  "valid": true,
+  "payer": "cex:user:alice",
+  "reason": null
+}
+```
 
-### x402 Protocol (EVM) — Standards-based Paywalls
+Settle output:
 
-- Supports x402 V1 "exact" with USDC EIP-3009 for seamless, standards-based paywalls
-- Settlement via PaymentVault.depositWithAuthorization preserves on-chain `DepositReceived(payer, orderId, amount)` linkage
-- Distributed `orderId` equals EIP-3009 `nonce` (no central issuance); verifiable client-side
-- Backend provides `/x402/verify` and `/x402/settle` endpoints for facilitators and agents
-- Learn more: [Exact scheme notes](./docs/scheme_exact_evm.md)
+```json
+{
+  "success": true,
+  "payer": "cex:user:alice",
+  "transaction": "cex-tx-123",
+  "reason": null
+}
+```
 
-### 1. Non-Custodial Vault
+## Grant Program Deliverables
 
-* Uses a single PaymentVault smart contract as the fund aggregation entry point
-* Eliminates complexity and security risks of server private key management
-* Supports secure storage of large amounts of funds
+### Milestone 1: Production Connector Pack
 
-### 2. Comprehensive Multi-Chain Support
+- hardened bridge templates for major offchain payment providers
+- reference auth/retry/idempotency patterns
+- operator runbooks
 
-* Can be deployed on any EVM-compatible chain (Ethereum, Polygon, Arbitrum, Optimism, Base, BNB Chain, etc.)
-* Supports non-EVM blockchains through dedicated implementations (Aptos with Move language)
-* Merchants can freely choose to enable payment collection on one or multiple chains based on needs
-* Specialized indexers support monitoring across different blockchain architectures
+### Milestone 2: Onchain Adapter Expansion
 
-### 3. Programmable & Composable
+- at least one audited onchain adapter under the same registry model
+- conformance tests aligned with x402 v2 semantics
 
-* **Subscription payments**: Support time-locked automatic deduction subscription models
-* **DeFi integration**: Idle funds can be combined with Staking, Lending and other protocols to generate additional yield
-* **Multi-currency support**: Can be combined with DEX aggregators to support payments in any token
+### Milestone 3: Reliability and Security Hardening
 
-### 4. User-Friendly Payment Experience
+- structured observability for verify/settle lifecycle
+- replay-safety and failure-mode test matrix
+- deployment profiles for resource-server operators
 
-* Supports EIP-2612 permit signatures for "user-side gasless" experience
-* One off-chain signature completes authorization and payment
-* Greatly improves conversion rates and user experience
+## Success Metrics (Program-Friendly)
 
-## 🎯 Quick Start
+- integration time from "days of custom code" to "hours of config + bridge"
+- number of production connectors shipped
+- number of external services adopting `/verify` + `/settle`
+- end-to-end settlement success rate and mean settlement latency
 
-### Building the Project
-
-To build all workspace members:
+## Quick Start
 
 ```bash
-cargo build
+cp ledgerflow-facilitator/config.example.toml ledgerflow-facilitator/config.toml
+cargo run -p ledgerflow-facilitator -- --config ledgerflow-facilitator/config.toml
+cargo test -p ledgerflow-facilitator --test v2_offchain_adapter_tests
 ```
 
-**Note:** `ledgerflow-aptos-cli` is excluded from the workspace build due to a jemalloc library conflict with `ledgerflow-indexer-aptos`. Both packages depend on different branches/commits of the Aptos SDK that use incompatible jemalloc allocators, causing a native library linking conflict. 
+Default bind: `0.0.0.0:3402`
 
-**Recommended alternative:** Use the TypeScript CLI `ledgerflow-aptos-cli-ts` which provides equivalent functionality with a better user experience:
+## References
 
-```bash
-cd ledgerflow-aptos-cli-ts
-npm install
-npm run build
-```
+- x402 official site: [https://www.x402.org/](https://www.x402.org/)
+- x402 docs: [https://docs.x402.org/introduction](https://docs.x402.org/introduction)
+- x402 whitepaper: [https://www.x402.org/x402-whitepaper.pdf](https://www.x402.org/x402-whitepaper.pdf)
+- x402-rs: [https://github.com/x402-rs/x402-rs](https://github.com/x402-rs/x402-rs)
 
-### Module Documentation
-
-For detailed usage instructions, please refer to the README.md files in each module:
-
-* [EVM Smart Contract Deployment](./ledgerflow-vault-evm/README.md)
-* [Aptos Smart Contract Deployment](./ledgerflow-vault-aptos/README.md)
-* [Backend Service Configuration](./ledgerflow-balancer/README.md)
-* [Telegram Bot Setup](./ledgerflow-bot/README.md)
-* [EVM Event Indexer Configuration](./ledgerflow-indexer-evm/README.md)
-* [Aptos Event Indexer Configuration](./ledgerflow-indexer-aptos/README.md)
-* [Database Migrations Setup](./ledgerflow-migrations/README.md)
-* [EVM Command Line Tool Usage](./ledgerflow-eth-cli/README.md)
-* [Aptos CLI Tools](./ledgerflow-aptos-cli/README.md)
-* [TypeScript Aptos CLI](./ledgerflow-aptos-cli-ts/README.md)
-
-- [x402 Facilitator Server](./ledgerflow-facilitator/README.md)
-
-## 🔮 Future Vision
-
-* **SaaS Merchant Dashboard**: Develop Web frontend for merchants to manage orders and data more intuitively
-* **One-Click Plugin Integration**: Develop payment plugins for mainstream e-commerce platforms
- 
-- **Subscription & Recurring Payments**: Implement authorization and time-lock logic at the contract level
-
-- **Business Model**: Free usage initially, future minimal service fees (0.1% - 0.25%) on withdrawals
-
----
-
-**Let's build a more open, transparent, and efficient global payment network together!**
-
-## x402 Protocol Integration (EVM)
-
-LedgerFlow supports the x402 V1 `exact` scheme on EVM via USDC EIP-3009. The `PaymentVault` exposes `depositWithAuthorization` so a facilitator can settle x402 payments while the vault emits `DepositReceived(payer, orderId, amount)` to preserve our on-chain order linkage. Clients generate `orderId` locally and set the EIP-3009 `nonce` to this `orderId`. See `docs/scheme_exact_evm.md` for details.
