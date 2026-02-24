@@ -7,6 +7,7 @@ repository = "https://github.com/longcipher/ledgerflow"
 description = "LedgerFlow chain-agnostic x402 v2 facilitator with offchain/CEX adapter support"
 
 [dependencies]
+alloy = { workspace = true, features = ["full"] }
 axum = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 tower-http = { workspace = true, features = ["trace", "cors"] }
@@ -21,6 +22,8 @@ color-eyre = { workspace = true }
 thiserror = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 uuid = { workspace = true, features = ["v4"] }
+hex = { workspace = true }
+url = { workspace = true }
 
 async-trait = "0.1"
 dotenvy = "0.15"

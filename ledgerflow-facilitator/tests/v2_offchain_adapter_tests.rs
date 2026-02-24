@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use axum_test::TestServer;
 use ledgerflow_facilitator::{
+    AppConfig,
     adapters::{
         AdapterDescriptor, AdapterRegistry, OffchainAdapter, OffchainAdapterConfig,
         OffchainBackendConfig,
@@ -35,7 +36,7 @@ fn test_service() -> FacilitatorService {
 
 #[tokio::test]
 async fn verify_v2_offchain_payment() {
-    let app = build_app(test_service());
+    let app = build_app(test_service(), AppConfig::default());
     let server = TestServer::new(app).expect("start server");
 
     let request = json!({
@@ -82,7 +83,7 @@ async fn verify_v2_offchain_payment() {
 
 #[tokio::test]
 async fn settle_v2_offchain_payment() {
-    let app = build_app(test_service());
+    let app = build_app(test_service(), AppConfig::default());
     let server = TestServer::new(app).expect("start server");
 
     let request = json!({
@@ -136,7 +137,7 @@ async fn settle_v2_offchain_payment() {
 
 #[tokio::test]
 async fn supported_includes_offchain_networks() {
-    let app = build_app(test_service());
+    let app = build_app(test_service(), AppConfig::default());
     let server = TestServer::new(app).expect("start server");
     let response = server.get("/supported").await;
     response.assert_status_ok();

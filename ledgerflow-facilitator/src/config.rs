@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 use crate::{
     adapters::{
-        AdapterDescriptor, AdapterRegistry, OffchainAdapter, OffchainAdapterConfig,
-        OffchainBackendConfig, PaymentAdapter,
+        AdapterDescriptor, AdapterRegistry, EvmAdapter, EvmAdapterConfig, OffchainAdapter,
+        OffchainAdapterConfig, OffchainBackendConfig, PaymentAdapter,
     },
     service::FacilitatorService,
 };
@@ -27,17 +28,18 @@ pub struct ServerConfig {
     pub host: Option<String>,
     pub port: Option<u16>,
 
-    #[serde(default)]
-    pub adapters: Vec<AdapterConfig>,
+    /// Maximum requests per second (global). `None` or `0` = unlimited.
+    pub rate_limit_per_second: Option<u64>,
 
     #[serde(default)]
-    pub offchain_adapters: Vec<OffchainAdapterInput>,
+    pub adapters: Vec<AdapterConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum AdapterConfig {
     Offchain(OffchainAdapterInput),
+    Evm(EvmAdapterInput),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,6 +90,73 @@ impl OffchainAdapterInput {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvmAdapterInput {
+    pub id: String,
+
+    #[serde(default = "default_enabled")]
+    pub enabled: bool,
+
+    #[serde(default = "default_x402_version")]
+    pub x402_version: u8,
+
+    #[serde(default = "default_scheme")]
+    pub scheme: String,
+
+    /// CAIP-2 network patterns (e.g. `"eip155:84532"`, `"eip155:*"`).
+    #[serde(default)]
+    pub networks: Vec<String>,
+
+    /// JSON-RPC endpoint URL.
+    pub rpc_url: String,
+
+    /// Numeric chain ID (e.g. `84532`).
+    pub chain_id: u64,
+
+    /// Environment variable name holding the hex-encoded signer private key.
+    /// Required for settlement; verify-only if absent.
+    #[serde(default)]
+    pub signer_key_env: Option<String>,
+
+    /// Facilitator signer addresses reported in `/supported`.
+    #[serde(default)]
+    pub signers: Vec<String>,
+}
+
+impl EvmAdapterInput {
+    fn into_runtime(self) -> Result<EvmAdapterConfig, eyre::Error> {
+        let network_patterns = if self.networks.is_empty() {
+            vec![format!("eip155:{}", self.chain_id).parse()?]
+        } else {
+            self.networks
+                .iter()
+                .map(|pattern| pattern.parse())
+                .collect::<Result<Vec<_>, _>>()?
+        };
+
+        let descriptor = AdapterDescriptor {
+            id: self.id,
+            x402_version: self.x402_version,
+            scheme: self.scheme,
+            networks: network_patterns,
+        };
+
+        // Resolve signer key from environment variable if configured.
+        let signer_key = self
+            .signer_key_env
+            .as_deref()
+            .and_then(|env_name| std::env::var(env_name).ok());
+
+        Ok(EvmAdapterConfig {
+            descriptor,
+            rpc_url: self.rpc_url,
+            chain_id: self.chain_id,
+            signer_key,
+            signers: self.signers,
+        })
+    }
+}
+
 pub fn build_service(config: &ServerConfig) -> eyre::Result<FacilitatorService> {
     let mut adapters: Vec<Arc<dyn PaymentAdapter>> = Vec::new();
 
@@ -95,23 +164,29 @@ pub fn build_service(config: &ServerConfig) -> eyre::Result<FacilitatorService> 
         match adapter {
             AdapterConfig::Offchain(offchain) if offchain.enabled => {
                 let runtime = offchain.clone().into_runtime()?;
+                info!(id = %runtime.descriptor.id, "registering offchain adapter");
                 let adapter = OffchainAdapter::try_new(runtime)?;
                 adapters.push(Arc::new(adapter));
             }
             AdapterConfig::Offchain(_) => {}
+            AdapterConfig::Evm(evm) if evm.enabled => {
+                let runtime = evm.clone().into_runtime()?;
+                let has_signer = runtime.signer_key.is_some();
+                info!(
+                    id = %runtime.descriptor.id,
+                    chain_id = %runtime.chain_id,
+                    settle_enabled = has_signer,
+                    "registering EVM adapter"
+                );
+                let adapter = EvmAdapter::try_new(runtime)?;
+                adapters.push(Arc::new(adapter));
+            }
+            AdapterConfig::Evm(_) => {}
         }
-    }
-
-    for offchain in &config.offchain_adapters {
-        if !offchain.enabled {
-            continue;
-        }
-        let runtime = offchain.clone().into_runtime()?;
-        let adapter = OffchainAdapter::try_new(runtime)?;
-        adapters.push(Arc::new(adapter));
     }
 
     if adapters.is_empty() {
+        info!("no adapters configured, registering default mock offchain adapter");
         let default = OffchainAdapter::try_new(OffchainAdapterConfig {
             descriptor: AdapterDescriptor {
                 id: "default-mock-offchain".to_string(),
@@ -128,6 +203,7 @@ pub fn build_service(config: &ServerConfig) -> eyre::Result<FacilitatorService> 
         adapters.push(Arc::new(default));
     }
 
+    info!(count = adapters.len(), "adapter registry ready");
     let registry = AdapterRegistry::new(adapters);
     Ok(FacilitatorService::new(registry))
 }

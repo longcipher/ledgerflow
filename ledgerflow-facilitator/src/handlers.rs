@@ -5,6 +5,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::Serialize;
+use tracing::warn;
 use x402_types::proto::{self, v1};
 
 use crate::{adapters::AdapterError, service::FacilitatorService};
@@ -43,8 +44,8 @@ pub async fn get_supported(State(service): State<FacilitatorService>) -> impl In
     (StatusCode::OK, Json(supported))
 }
 
-pub async fn get_health(State(service): State<FacilitatorService>) -> impl IntoResponse {
-    get_supported(State(service)).await
+pub async fn get_health() -> impl IntoResponse {
+    Json(serde_json::json!({ "status": "ok" }))
 }
 
 pub async fn post_verify(
@@ -54,6 +55,7 @@ pub async fn post_verify(
     match service.verify(&body).await {
         Ok(valid_response) => (StatusCode::OK, Json(valid_response)).into_response(),
         Err(crate::service::ServiceError::Adapter(adapter_error)) => {
+            warn!(error = %adapter_error, "verify failed");
             verify_error_response(adapter_error)
         }
     }
@@ -71,6 +73,7 @@ pub async fn post_settle(
     match service.settle(&body).await {
         Ok(settle_response) => (StatusCode::OK, Json(settle_response)).into_response(),
         Err(crate::service::ServiceError::Adapter(adapter_error)) => {
+            warn!(error = %adapter_error, network = %network_hint, "settle failed");
             settle_error_response(adapter_error, network_hint)
         }
     }

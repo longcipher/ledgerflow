@@ -4,7 +4,7 @@ use clap::Parser;
 use color_eyre::Result;
 use dotenvy::dotenv;
 use ledgerflow_facilitator::{
-    build_app,
+    AppConfig, build_app,
     config::{build_service, load_config},
 };
 use tracing::level_filters::LevelFilter;
@@ -35,7 +35,10 @@ async fn main() -> Result<()> {
     let cfg = load_config(args.config.as_deref())?;
     let service = build_service(&cfg)?;
 
-    let app = build_app(service);
+    let app_config = AppConfig {
+        rate_limit_per_second: cfg.rate_limit_per_second,
+    };
+    let app = build_app(service, app_config);
 
     let host = cfg.host.unwrap_or_else(|| "0.0.0.0".to_string());
     let port = cfg.port.unwrap_or(3402);

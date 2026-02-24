@@ -1,4 +1,5 @@
 use thiserror::Error;
+use tracing::info;
 use x402_types::proto;
 
 use crate::adapters::{AdapterError, AdapterRegistry};
@@ -18,6 +19,7 @@ impl FacilitatorService {
         request: &proto::VerifyRequest,
     ) -> Result<proto::VerifyResponse, ServiceError> {
         let adapter = self.registry.resolve_by_request(request)?;
+        info!(adapter_id = %adapter.descriptor().id, "dispatching verify");
         Ok(adapter.verify(request).await?)
     }
 
@@ -26,6 +28,7 @@ impl FacilitatorService {
         request: &proto::SettleRequest,
     ) -> Result<proto::SettleResponse, ServiceError> {
         let adapter = self.registry.resolve_settle(request)?;
+        info!(adapter_id = %adapter.descriptor().id, "dispatching settle");
         Ok(adapter.settle(request).await?)
     }
 

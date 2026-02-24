@@ -6855,6 +6855,7 @@ dependencies = [
 name = "ledgerflow-facilitator"
 version = "0.1.0"
 dependencies = [
+ "alloy",
  "async-trait",
  "axum 0.8.8",
  "axum-test",
@@ -6863,6 +6864,7 @@ dependencies = [
  "config",
  "dotenvy",
  "eyre",
+ "hex",
  "reqwest 0.13.2",
  "serde",
  "serde_json",
@@ -6872,6 +6874,7 @@ dependencies = [
  "tower-http 0.6.8",
  "tracing",
  "tracing-subscriber",
+ "url",
  "uuid",
  "x402-types",
 ]

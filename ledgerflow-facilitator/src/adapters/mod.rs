@@ -8,8 +8,10 @@ use x402_types::{
     scheme::SchemeHandlerSlug,
 };
 
+pub mod evm;
 pub mod offchain;
 
+pub use evm::{EvmAdapter, EvmAdapterConfig};
 pub use offchain::{OffchainAdapter, OffchainAdapterConfig, OffchainBackendConfig};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

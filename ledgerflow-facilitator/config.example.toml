@@ -4,9 +4,15 @@
 # - chain-agnostic network ids (CAIP-like `namespace:reference`)
 # - adapter registry (each adapter handles specific scheme + version + network pattern)
 # - offchain/CEX adapters for centralized payment systems
+# - EVM on-chain adapters for EIP-3009 transferWithAuthorization
 
 host = "0.0.0.0"
 port = 3402
+
+# Global rate limit (requests per second). Comment out or set to 0 to disable.
+# rate_limit_per_second = 100
+
+# ── Offchain / CEX adapter (mock for development) ────────────────────
 
 [[adapters]]
 kind = "offchain"
@@ -22,7 +28,36 @@ type = "mock"
 payer = "cex:user:alice"
 transaction_prefix = "cex-tx"
 
-# Example: connect to a real CEX/centralized payment bridge API
+# ── EVM on-chain adapter examples ─────────────────────────────────────
+#
+# Base Sepolia (testnet)
+# [[adapters]]
+# kind = "evm"
+# id = "base-sepolia"
+# enabled = true
+# x402_version = 2
+# scheme = "exact"
+# networks = ["eip155:84532"]
+# rpc_url = "https://sepolia.base.org"
+# chain_id = 84532
+# signer_key_env = "EVM_SIGNER_PRIVATE_KEY"   # optional – needed for settlement
+# signers = ["0xYourFacilitatorAddress"]
+#
+# Base Mainnet
+# [[adapters]]
+# kind = "evm"
+# id = "base-mainnet"
+# enabled = true
+# x402_version = 2
+# scheme = "exact"
+# networks = ["eip155:8453"]
+# rpc_url = "https://mainnet.base.org"
+# chain_id = 8453
+# signer_key_env = "EVM_SIGNER_PRIVATE_KEY"
+# signers = ["0xYourFacilitatorAddress"]
+
+# ── Offchain HTTP backend example ─────────────────────────────────────
+#
 # [[adapters]]
 # kind = "offchain"
 # id = "binance-bridge"
