@@ -28,13 +28,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Rust (nightly)
+        uses: dtolnay/rust-toolchain@nightly
         with:
-          profile: minimal
-          toolchain: stable
-          override: true
           components: rustfmt, clippy
+
+      - name: Install just
+        uses: taiki-e/install-action@just
+
+      - name: Install taplo
+        uses: taiki-e/install-action@v2
+        with:
+          tool: taplo-cli
+
+      - name: Install cargo-machete
+        uses: taiki-e/install-action@cargo-machete
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -54,14 +65,5 @@ jobs:
           path: target
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Check formatting
-        run: |
-          cargo fmt --all -- --check
-
-      - name: Run clippy
-        run: |
-          cargo clippy --all-targets --all-features -- -D warnings
-
-      - name: Run tests
-        run: |
-          cargo test --all-features
+      - name: CI checks
+        run: just ci
