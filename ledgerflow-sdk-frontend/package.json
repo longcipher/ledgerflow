@@ -1,0 +1,12 @@
+{
+  "name": "@ledgerflow/sdk-frontend",
+  "version": "0.1.0",
+  "description": "LedgerFlow SDK for browsers (WASM)",
+  "main": "ledgerflow_sdk_frontend.js",
+  "types": "ledgerflow_sdk_frontend.d.ts",
+  "files": [
+    "ledgerflow_sdk_frontend_bg.wasm",
+    "ledgerflow_sdk_frontend.js",
+    "ledgerflow_sdk_frontend.d.ts"
+  ]
+}

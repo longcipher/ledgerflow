@@ -170,3 +170,14 @@ Default bind: `0.0.0.0:3402`
 - x402 whitepaper: [https://www.x402.org/x402-whitepaper.pdf](https://www.x402.org/x402-whitepaper.pdf)
 - x402-rs: [https://github.com/x402-rs/x402-rs](https://github.com/x402-rs/x402-rs)
 
+## SDK Ecosystem
+
+LedgerFlow provides multi-language SDKs for integrating with the Balancer API:
+
+| Package | Language | Description |
+|---------|----------|-------------|
+| [ledgerflow-sdk-rs](./ledgerflow-sdk-rs/) | Rust | Core SDK — typed client, models, `generate_order_id` |
+| [ledgerflow-sdk-py](./ledgerflow-sdk-py/) | Python | PyO3 bindings — `pip install` via maturin |
+| [ledgerflow-sdk-ts](./ledgerflow-sdk-ts/) | TypeScript/Node.js | napi-rs bindings — native `.node` addon |
+| [ledgerflow-sdk-frontend](./ledgerflow-sdk-frontend/) | Browser/WASM | wasm-bindgen bindings — ESM import |
+

@@ -35,3 +35,6 @@ url = "2.5"
 
 [patch.crates-io]
 merlin = { git = "https://github.com/aptos-labs/merlin" }
+
+[package.metadata.cargo-machete]
+ignored = ["hpx"]

@@ -1,0 +1,54 @@
+[package]
+name = "ledgerflow-sdk-rs"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/longcipher/ledgerflow"
+description = "LedgerFlow SDK for Rust — client bindings for the LedgerFlow Balancer API"
+
+[dependencies]
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+# Crypto / hashing
+hex = { workspace = true }
+sha3 = { workspace = true }
+
+# Time
+chrono = { workspace = true, features = ["serde"] }
+
+# Error handling
+thiserror = { workspace = true }
+
+# HTTP client (native / tokio)
+hpx = { workspace = true, features = ["json"], optional = true }
+tokio = { workspace = true, features = [
+    "macros",
+    "rt-multi-thread",
+], optional = true }
+
+# WASM support
+gloo-net = { version = "0.6", optional = true, features = ["http", "json"] }
+js-sys = { version = "0.3", optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
+wasm-bindgen-futures = { version = "0.4", optional = true }
+web-sys = { version = "0.3", optional = true }
+
+[features]
+default = ["native"]
+native = ["dep:hpx", "dep:tokio"]
+wasm = [
+    "dep:wasm-bindgen",
+    "dep:wasm-bindgen-futures",
+    "dep:gloo-net",
+    "dep:js-sys",
+    "dep:web-sys",
+]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+wiremock = "0.6"
+
+[package.metadata.cargo-machete]
+ignored = ["js-sys", "wasm-bindgen", "wasm-bindgen-futures", "web-sys"]

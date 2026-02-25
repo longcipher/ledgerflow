@@ -1,0 +1,18 @@
+[package]
+name = "ledgerflow-sdk-ts"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/longcipher/ledgerflow"
+description = "LedgerFlow SDK Node.js/TypeScript bindings via napi-rs"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+ledgerflow-sdk-rs = { path = "../ledgerflow-sdk-rs", features = ["native"] }
+napi = { version = "3", features = ["async"] }
+napi-derive = "3"
+
+[build-dependencies]
+napi-build = "2"

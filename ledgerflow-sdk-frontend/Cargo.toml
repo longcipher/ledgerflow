@@ -1,0 +1,24 @@
+[package]
+name = "ledgerflow-sdk-frontend"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/longcipher/ledgerflow"
+description = "LedgerFlow SDK for browsers — WASM bindings"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+# All dependencies are WASM-only; guard them so that `cargo check --workspace`
+# on a native host compiles this crate as an empty stub without pulling in any
+# wasm32-incompatible crates.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+ledgerflow-sdk-rs = { path = "../ledgerflow-sdk-rs", default-features = false, features = [
+    "wasm",
+] }
+serde-wasm-bindgen = "0.6"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+
+[package.metadata.cargo-machete]
+ignored = ["wasm-bindgen-futures"]
