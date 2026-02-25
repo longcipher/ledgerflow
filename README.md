@@ -4,6 +4,15 @@
 
 # LedgerFlow
 
+[![DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/longcipher/ledgerflow)
+[![Context7](https://img.shields.io/badge/Website-context7.com-blue)](https://context7.com/longcipher/ledgerflow)
+
+![hpx](https://socialify.git.ci/longcipher/ledgerflow/image?font=Source+Code+Pro&language=1&name=1&owner=1&pattern=Circuit+Board&theme=Auto)
+
+## MVP
+
+[![LedgerFlow MVP](https://img.youtube.com/vi/YedfwqCenMQ/maxresdefault.jpg)](https://www.youtube.com/watch?v=YedfwqCenMQ)
+
 **A chain-agnostic x402 v2 facilitator for AI-native payments.**
 
 ## Executive Summary
