@@ -9,12 +9,9 @@
 //! wasm32-incompatible dependencies.
 
 #![cfg(target_arch = "wasm32")]
-
-use wasm_bindgen::prelude::*;
-
 // Re-export the inner WASM client and models for convenience.
-use ledgerflow_sdk_rs::models;
-use ledgerflow_sdk_rs::wasm_client;
+use ledgerflow_sdk_rs::{models, wasm_client};
+use wasm_bindgen::prelude::*;
 
 // ---------------------------------------------------------------------------
 // Client
@@ -117,10 +114,7 @@ impl LedgerFlowClient {
     /// Accepts `f64` because wasm-bindgen does not support `i64` directly.
     /// Safe for all realistic Telegram IDs (< 2^53).
     #[wasm_bindgen(js_name = "getAccountByTelegramId")]
-    pub async fn get_account_by_telegram_id(
-        &self,
-        telegram_id: f64,
-    ) -> Result<JsValue, JsError> {
+    pub async fn get_account_by_telegram_id(&self, telegram_id: f64) -> Result<JsValue, JsError> {
         let tid = telegram_id as i64;
         let resp = self
             .inner
@@ -162,9 +156,20 @@ impl LedgerFlowClient {
         limit: Option<f64>,
         offset: Option<f64>,
     ) -> Result<JsValue, JsError> {
-        let limit = limit.and_then(|v| if v.is_finite() && v >= 0.0 { Some(v as u32) } else { None });
-        let offset =
-            offset.and_then(|v| if v.is_finite() && v >= 0.0 { Some(v as u32) } else { None });
+        let limit = limit.and_then(|v| {
+            if v.is_finite() && v >= 0.0 {
+                Some(v as u32)
+            } else {
+                None
+            }
+        });
+        let offset = offset.and_then(|v| {
+            if v.is_finite() && v >= 0.0 {
+                Some(v as u32)
+            } else {
+                None
+            }
+        });
         let resp = self
             .inner
             .list_pending_orders(limit, offset)

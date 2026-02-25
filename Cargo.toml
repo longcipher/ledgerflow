@@ -11,12 +11,12 @@ members = [
     "ledgerflow-facilitator",
     "ledgerflow-mcp",
     "ledgerflow-sdk-rs",
-    "ledgerflow-sdk-py",
-    "ledgerflow-sdk-ts",
-    "ledgerflow-sdk-frontend", # WASM bindings — deps gated on target_arch = "wasm32"
+    "ledgerflow-sdk-frontend",  # WASM bindings — deps gated on target_arch = "wasm32"
 ]
 exclude = [
-    "ledgerflow-aptos-cli",    # Excluded due to jemalloc conflict with indexer-aptos
+    "ledgerflow-aptos-cli", # Excluded due to jemalloc conflict with indexer-aptos
+    "ledgerflow-sdk-py",    # Python bindings — must be built via maturin, not cargo build
+    "ledgerflow-sdk-ts",    # Node.js/TypeScript bindings — must be built via napi-cli
 ]
 resolver = "3"
 
