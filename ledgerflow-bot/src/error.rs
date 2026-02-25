@@ -13,7 +13,7 @@ pub enum BotError {
     Telegram(#[from] RequestError),
 
     #[error("HTTP client error: {0}")]
-    Http(#[from] reqwest::Error),
+    Http(#[from] hpx::Error),
 
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),

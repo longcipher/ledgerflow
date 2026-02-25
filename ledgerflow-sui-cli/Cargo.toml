@@ -30,7 +30,7 @@ serde_yaml = { workspace = true }
 config = { workspace = true }
 hex = { workspace = true }
 # HTTP client for facilitator communication
-reqwest = { workspace = true, features = ["json"] }
+hpx = { workspace = true, features = ["json"] }
 # Cryptography for intent signatures
 base64 = { workspace = true }
 sha3 = { workspace = true }

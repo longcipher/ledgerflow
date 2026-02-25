@@ -568,7 +568,7 @@ async fn send_to_facilitator(
     intent_tx: &IntentSignedTransaction,
     facilitator_url: &str,
 ) -> Result<serde_json::Value> {
-    let client = reqwest::Client::new();
+    let client = hpx::Client::new();
 
     // Create the facilitator payload following the x402 protocol format
     let payload = json!({
@@ -665,7 +665,7 @@ async fn send_to_settle(
     intent_tx: &IntentSignedTransaction,
     facilitator_url: &str,
 ) -> Result<serde_json::Value> {
-    let client = reqwest::Client::new();
+    let client = hpx::Client::new();
 
     // Create the same payload structure as for verify
     let payload = json!({

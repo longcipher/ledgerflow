@@ -1,7 +1,7 @@
 use std::{collections::HashMap, env, time::Duration};
 
 use async_trait::async_trait;
-use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
+use hpx::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -333,7 +333,7 @@ impl OffchainBackend for MockOffchainBackend {
 }
 
 struct HttpOffchainBackend {
-    client: reqwest::Client,
+    client: hpx::Client,
     verify_url: String,
     settle_url: String,
 }
@@ -362,7 +362,7 @@ impl HttpOffchainBackend {
             headers.insert(AUTHORIZATION, header);
         }
 
-        let client = reqwest::Client::builder()
+        let client = hpx::Client::builder()
             .default_headers(headers)
             .timeout(Duration::from_secs(timeout_seconds))
             .build()

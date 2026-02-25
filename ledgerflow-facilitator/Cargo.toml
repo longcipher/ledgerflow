@@ -20,7 +20,7 @@ clap = { workspace = true, features = ["derive"] }
 eyre = { workspace = true }
 color-eyre = { workspace = true }
 thiserror = { workspace = true }
-reqwest = { workspace = true, features = ["json"] }
+hpx = { workspace = true, features = ["json"] }
 uuid = { workspace = true, features = ["v4"] }
 hex = { workspace = true }
 url = { workspace = true }

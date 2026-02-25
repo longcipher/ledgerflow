@@ -1,5 +1,5 @@
 #![allow(unused)]
-use reqwest::Client;
+use hpx::Client;
 use tracing::{error, info};
 
 use crate::{

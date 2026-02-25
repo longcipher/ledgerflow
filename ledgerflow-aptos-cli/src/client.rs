@@ -25,7 +25,7 @@ impl VaultClient {
         contract_address: String,
         _chain_id: u8,
     ) -> Result<Self> {
-        let client = AptosClient::new(reqwest::Url::parse(&node_url).context("Invalid node URL")?);
+        let client = AptosClient::new(url::Url::parse(&node_url).context("Invalid node URL")?);
 
         let contract_address = AccountAddress::from_hex_literal(&contract_address)
             .context("Failed to parse contract address")?;
