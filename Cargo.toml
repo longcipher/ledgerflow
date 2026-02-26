@@ -69,7 +69,7 @@ diesel_migrations = "=2.2.0"
 teloxide = "0.17.0"
 
 # HTTP client
-hpx = "2.3.0"
+hpx = "2.3.1"
 
 # QR code generation
 image = "0.25.9"
@@ -99,7 +99,7 @@ rust_decimal = "1.40.0"
 num-traits = "0.2"
 
 # x402 protocol core types (v2 + CAIP-2)
-x402-types = "1.3.1"
+x402-types = "1.4.1"
 
 [patch.crates-io]
 merlin = { git = "https://github.com/aptos-labs/merlin" }
