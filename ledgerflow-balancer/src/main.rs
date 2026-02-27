@@ -11,6 +11,7 @@ use tokio::net::TcpListener;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::{error, info};
 
+mod auth;
 mod config;
 mod database;
 mod error;

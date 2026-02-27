@@ -8,9 +8,10 @@ use crate::{
     config::Config,
     database::Database,
     error::{BotError, BotResult},
+    lib_utils::parse_private_key,
     models::{CreateOrderRequest, RegisterAccountRequest, UserSession, UserState},
     services::BalancerService,
-    wallet::{execute_deposit, execute_withdraw},
+    wallet::{encrypt_private_key, execute_deposit, execute_withdraw},
 };
 
 pub type SessionManager = Arc<RwLock<HashMap<i64, UserSession>>>;
@@ -31,7 +32,7 @@ pub async fn create_handler(
     database: Database,
     config: Config,
 ) -> BotResult<UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'static>>> {
-    let balancer = BalancerService::new(&config);
+    let balancer = BalancerService::new(&config)?;
     let sessions = Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new()));
 
     let state = std::sync::Arc::new(AppState {
@@ -393,8 +394,7 @@ async fn handle_evm_pk_input(
         username: username.clone(),
         email: email.clone(),
         telegram_id,
-        evm_pk: evm_pk.to_string(),
-        is_admin: None,
+        evm_address: parse_private_key(evm_pk)?.address().to_checksum(None),
     };
 
     let response = state.balancer.register_account(register_request).await?;
@@ -402,7 +402,13 @@ async fn handle_evm_pk_input(
     let account_id = response.id;
     let address = response
         .evm_address
-        .expect("EVM address should be available after registration");
+        .ok_or_else(|| BotError::Config("Missing EVM address in register response".to_string()))?;
+
+    let encrypted_pk = encrypt_private_key(evm_pk)?;
+    state
+        .database
+        .update_account_encrypted_pk(account_id, &encrypted_pk)
+        .await?;
 
     // Clear session state
     {
@@ -451,11 +457,13 @@ async fn handle_deposit_amount_input(
         .ok_or_else(|| BotError::Config("Account not found".to_string()))?;
 
     // Create order using BalancerService
+    let chain_id = i64::try_from(state.config.blockchain.chain_id)
+        .map_err(|_| BotError::Config("chain_id out of range for i64".to_string()))?;
     let create_order_request = CreateOrderRequest {
         account_id: account.id,
-        amount: None,
-        token_address: None,
-        chain_id: None,
+        amount: amount.to_string(),
+        token_address: state.config.blockchain.usdc_address.clone(),
+        chain_id,
         broker_id: None,
     };
 

@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::{
     models::{Account, Order},
-    wallet::decrypt_private_key,
+    wallet::{decrypt_private_key, encrypt_private_key},
 };
 
 #[derive(Clone)]
@@ -20,18 +20,41 @@ impl Database {
     }
 
     pub async fn get_account_evm_pk_by_id(&self, account_id: i64) -> Result<Option<String>> {
-        let row = sqlx::query("SELECT encrypted_pk FROM accounts WHERE id = $1")
+        let encrypted_pk = sqlx::query_scalar::<_, Option<String>>(
+            "SELECT encrypted_pk FROM accounts WHERE id = $1",
+        )
+        .bind(account_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .flatten();
+
+        let Some(encrypted_pk) = encrypted_pk else {
+            return Ok(None);
+        };
+
+        let decrypted_pk = decrypt_private_key(&encrypted_pk)?;
+
+        // Lazy in-place migration for legacy XOR ciphertext.
+        if !encrypted_pk.starts_with("v2:") {
+            let upgraded_ciphertext = encrypt_private_key(&decrypted_pk)?;
+            self.update_account_encrypted_pk(account_id, &upgraded_ciphertext)
+                .await?;
+        }
+
+        Ok(Some(decrypted_pk))
+    }
+
+    pub async fn update_account_encrypted_pk(
+        &self,
+        account_id: i64,
+        encrypted_pk: &str,
+    ) -> Result<()> {
+        sqlx::query("UPDATE accounts SET encrypted_pk = $1, updated_at = NOW() WHERE id = $2")
+            .bind(encrypted_pk)
             .bind(account_id)
-            .fetch_optional(&self.pool)
+            .execute(&self.pool)
             .await?;
-
-        let encrypted_pk = row.map(|r| r.get::<String, _>("encrypted_pk"));
-        let decrypted_pk = encrypted_pk
-            .as_ref()
-            .map(|pk| decrypt_private_key(pk))
-            .transpose()?;
-
-        Ok(decrypted_pk)
+        Ok(())
     }
 
     pub async fn create_account(&self, account: &Account) -> Result<i64> {
@@ -99,7 +122,7 @@ impl Database {
         let row = sqlx::query(
             r#"
             INSERT INTO orders (order_id, account_id, broker_id, amount, token_address, chain_id, status, notified)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            VALUES ($1, $2, $3, CAST($4 AS NUMERIC(78,0)), $5, $6, $7, $8)
             RETURNING id
             "#,
         )
@@ -120,7 +143,7 @@ impl Database {
     pub async fn get_account_orders(&self, telegram_id: i64) -> Result<Vec<Order>> {
         let rows = sqlx::query(
             r#"
-            SELECT o.id, o.order_id, o.account_id, o.broker_id, o.amount, o.token_address, o.chain_id, o.status, o.created_at, o.updated_at, o.transaction_hash, o.notified
+            SELECT o.id, o.order_id, o.account_id, o.broker_id, o.amount::TEXT AS amount, o.token_address, o.chain_id, o.status, o.created_at, o.updated_at, o.transaction_hash, o.notified
             FROM orders o
             JOIN accounts a ON o.account_id = a.id
             WHERE a.telegram_id = $1
@@ -153,10 +176,11 @@ impl Database {
     }
 
     pub async fn get_balance(&self, account_id: i64) -> Result<String> {
-        let row = sqlx::query("SELECT balance FROM balances WHERE account_id = $1")
-            .bind(account_id)
-            .fetch_optional(&self.pool)
-            .await?;
+        let row =
+            sqlx::query("SELECT balance::TEXT AS balance FROM balances WHERE account_id = $1")
+                .bind(account_id)
+                .fetch_optional(&self.pool)
+                .await?;
 
         if let Some(row) = row {
             Ok(row.get("balance"))
@@ -169,7 +193,7 @@ impl Database {
     pub async fn get_completed_unnotified_orders(&self) -> Result<Vec<(Order, i64)>> {
         let rows = sqlx::query(
             r#"
-            SELECT o.id, o.order_id, o.account_id, o.broker_id, o.amount, o.token_address, o.chain_id, o.status, o.created_at, o.updated_at, o.transaction_hash, o.notified, a.telegram_id
+            SELECT o.id, o.order_id, o.account_id, o.broker_id, o.amount::TEXT AS amount, o.token_address, o.chain_id, o.status, o.created_at, o.updated_at, o.transaction_hash, o.notified, a.telegram_id
             FROM orders o
             JOIN accounts a ON o.account_id = a.id
             WHERE o.status = 'completed' AND o.notified = false

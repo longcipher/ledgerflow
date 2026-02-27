@@ -15,17 +15,20 @@ clap = { workspace = true, features = ["derive"] }
 eyre = { workspace = true }
 color-eyre = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+hpx = { workspace = true, features = ["json"] }
+x402-types = { workspace = true }
 async-trait = "0.1"
 
-# Use the facilitator crate we just built to reuse ProviderCache + handlers
-x402-rs = { git = "https://github.com/x402-rs/x402-rs", package = "x402-rs" }
-
 dotenvy = "0.15"
+serde.workspace = true
 
 [features]
 default = []
 # Enable HTTP transport by enabling ultrafast-mcp's HTTP feature set
 http = ["ultrafast-mcp/http-with-auth"]
+
+[dev-dependencies]
+axum.workspace = true
 
 [package.metadata.docs.rs]
 all-features = true

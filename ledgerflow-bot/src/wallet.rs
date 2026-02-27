@@ -1,6 +1,10 @@
 #![allow(unused)]
 use std::env;
 
+use aes_gcm::{
+    Aes256Gcm,
+    aead::{Aead, KeyInit, consts::U12},
+};
 use alloy::{
     primitives::{U256, keccak256},
     providers::Provider,
@@ -19,6 +23,10 @@ use crate::{
     },
     models::Wallet,
 };
+
+const MASTER_KEY_ENV_PRIMARY: &str = "WALLET_MASTER_KEY";
+const MASTER_KEY_ENV_LEGACY: &str = "ENCRYPTED_MASTER_KEY";
+const CIPHERTEXT_V2_PREFIX: &str = "v2";
 
 pub async fn generate_wallet() -> Result<Wallet> {
     // Generate a random private key
@@ -64,24 +72,124 @@ pub fn format_address(address: &str) -> String {
 }
 
 pub fn decrypt_private_key(encrypted_key: &str) -> Result<String> {
-    let master_key = env::var("ENCRYPTED_MASTER_KEY").map_err(|e| {
-        eyre!(
-            "ENCRYPTED_MASTER_KEY environment variable is not set: {}",
-            e
-        )
-    })?;
+    let master_key = load_master_key()?;
+    decrypt_private_key_with_master_key(encrypted_key, &master_key)
+}
 
+pub fn encrypt_private_key(private_key: &str) -> Result<String> {
+    let master_key = load_master_key()?;
+    encrypt_private_key_with_master_key(private_key, &master_key)
+}
+
+fn load_master_key() -> Result<String> {
+    let master_key = env::var(MASTER_KEY_ENV_PRIMARY)
+        .or_else(|_| env::var(MASTER_KEY_ENV_LEGACY))
+        .map_err(|_| {
+            eyre!("{MASTER_KEY_ENV_PRIMARY} (preferred) or {MASTER_KEY_ENV_LEGACY} must be set")
+        })?;
+
+    if master_key.trim().is_empty() {
+        return Err(eyre!(
+            "{MASTER_KEY_ENV_PRIMARY}/{MASTER_KEY_ENV_LEGACY} must not be empty"
+        ));
+    }
+
+    Ok(master_key)
+}
+
+fn derive_aead_key(master_key: &str) -> [u8; 32] {
+    keccak256(master_key.as_bytes()).0
+}
+
+fn encrypt_private_key_with_master_key(private_key: &str, master_key: &str) -> Result<String> {
+    let key_bytes = derive_aead_key(master_key);
+    let cipher =
+        Aes256Gcm::new_from_slice(&key_bytes).map_err(|e| eyre!("invalid AES key: {e}"))?;
+    let nonce_bytes = rand::random::<[u8; 12]>();
+    let nonce = aes_gcm::Nonce::<U12>::from(nonce_bytes);
+    let ciphertext = cipher
+        .encrypt(&nonce, private_key.as_bytes())
+        .map_err(|e| eyre!("AES-GCM encryption failed: {e}"))?;
+
+    Ok(format!(
+        "{CIPHERTEXT_V2_PREFIX}:{}:{}",
+        hex::encode(nonce_bytes),
+        hex::encode(ciphertext)
+    ))
+}
+
+fn decrypt_private_key_with_master_key(encrypted_key: &str, master_key: &str) -> Result<String> {
+    if encrypted_key.starts_with(&format!("{CIPHERTEXT_V2_PREFIX}:")) {
+        return decrypt_private_key_v2(encrypted_key, master_key);
+    }
+
+    decrypt_private_key_legacy_xor(encrypted_key, master_key)
+}
+
+fn decrypt_private_key_v2(encrypted_key: &str, master_key: &str) -> Result<String> {
+    let mut parts = encrypted_key.split(':');
+    let version = parts
+        .next()
+        .ok_or_else(|| eyre!("missing ciphertext version"))?;
+    let nonce_hex = parts
+        .next()
+        .ok_or_else(|| eyre!("missing ciphertext nonce"))?;
+    let ciphertext_hex = parts
+        .next()
+        .ok_or_else(|| eyre!("missing ciphertext payload"))?;
+    if parts.next().is_some() {
+        return Err(eyre!("invalid ciphertext format"));
+    }
+    if version != CIPHERTEXT_V2_PREFIX {
+        return Err(eyre!("unsupported ciphertext version: {version}"));
+    }
+
+    let nonce_bytes_vec = hex::decode(nonce_hex).map_err(|e| eyre!("invalid nonce hex: {e}"))?;
+    if nonce_bytes_vec.len() != 12 {
+        return Err(eyre!(
+            "invalid nonce length: expected 12 bytes, got {}",
+            nonce_bytes_vec.len()
+        ));
+    }
+    let nonce_bytes: [u8; 12] = nonce_bytes_vec
+        .try_into()
+        .map_err(|_| eyre!("invalid nonce length"))?;
+    let ciphertext =
+        hex::decode(ciphertext_hex).map_err(|e| eyre!("invalid ciphertext hex: {e}"))?;
+
+    let key_bytes = derive_aead_key(master_key);
+    let cipher =
+        Aes256Gcm::new_from_slice(&key_bytes).map_err(|e| eyre!("invalid AES key: {e}"))?;
+    let nonce = aes_gcm::Nonce::<U12>::from(nonce_bytes);
+    let plaintext = cipher
+        .decrypt(&nonce, ciphertext.as_ref())
+        .map_err(|e| eyre!("AES-GCM decryption failed: {e}"))?;
+
+    String::from_utf8(plaintext).map_err(|e| eyre!("decrypted key is not valid UTF-8: {e}"))
+}
+
+fn decrypt_private_key_legacy_xor(encrypted_key: &str, master_key: &str) -> Result<String> {
     let encrypted_bytes =
-        hex::decode(encrypted_key).map_err(|e| eyre!("Failed to decode hex: {}", e))?;
+        hex::decode(encrypted_key).map_err(|e| eyre!("invalid legacy ciphertext hex: {e}"))?;
     let master_key_bytes = master_key.as_bytes();
-
     let decrypted: Vec<u8> = encrypted_bytes
         .iter()
         .enumerate()
         .map(|(i, byte)| byte ^ master_key_bytes[i % master_key_bytes.len()])
         .collect();
+    String::from_utf8(decrypted).map_err(|e| eyre!("legacy key is not valid UTF-8: {e}"))
+}
 
-    String::from_utf8(decrypted).map_err(|e| eyre!("Failed to convert to UTF-8: {}", e))
+#[cfg(test)]
+fn encrypt_private_key_legacy_xor(private_key: &str, master_key: &str) -> String {
+    let private_key_bytes = private_key.as_bytes();
+    let master_key_bytes = master_key.as_bytes();
+    let encrypted: Vec<u8> = private_key_bytes
+        .iter()
+        .enumerate()
+        .map(|(i, byte)| byte ^ master_key_bytes[i % master_key_bytes.len()])
+        .collect();
+    hex::encode(encrypted)
 }
 
 /// Execute standard deposit operation
@@ -362,5 +470,30 @@ mod tests {
             format_address("0x742d35Cc6634C0532925a3b8D4fd6c4d4d61ddD6"),
             "0x742d35Cc6634C0532925a3b8D4fd6c4d4d61ddD6"
         );
+    }
+
+    #[test]
+    fn test_encrypt_decrypt_round_trip_v2() {
+        let private_key = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let master_key = "unit-test-master-key";
+
+        let encrypted = encrypt_private_key_with_master_key(private_key, master_key)
+            .expect("v2 encryption should succeed");
+        assert!(encrypted.starts_with("v2:"));
+
+        let decrypted = decrypt_private_key_with_master_key(&encrypted, master_key)
+            .expect("v2 decryption should succeed");
+        assert_eq!(decrypted, private_key);
+    }
+
+    #[test]
+    fn test_decrypt_legacy_xor_for_backward_compatibility() {
+        let private_key = "0xabcdef";
+        let master_key = "legacy-master-key";
+        let legacy_ciphertext = encrypt_private_key_legacy_xor(private_key, master_key);
+
+        let decrypted = decrypt_private_key_with_master_key(&legacy_ciphertext, master_key)
+            .expect("legacy ciphertext should still decrypt");
+        assert_eq!(decrypted, private_key);
     }
 }

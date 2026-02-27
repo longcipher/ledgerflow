@@ -29,6 +29,12 @@ pub enum AppError {
     #[error("Too many pending orders for account: {0}")]
     TooManyPendingOrders(String),
 
+    #[error("Unauthorized: {0}")]
+    Unauthorized(String),
+
+    #[error("Forbidden: {0}")]
+    Forbidden(String),
+
     #[error("Internal server error: {0}")]
     Internal(String),
 }
@@ -45,6 +51,8 @@ impl IntoResponse for AppError {
             AppError::TooManyPendingOrders(_) => {
                 (StatusCode::BAD_REQUEST, "Too many pending orders")
             }
+            AppError::Unauthorized(_) => (StatusCode::UNAUTHORIZED, "Unauthorized"),
+            AppError::Forbidden(_) => (StatusCode::FORBIDDEN, "Forbidden"),
             AppError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"),
         };
 

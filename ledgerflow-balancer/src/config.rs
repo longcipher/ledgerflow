@@ -8,6 +8,8 @@ pub struct Config {
     pub database_url: String,
     pub server: ServerConfig,
     pub business: BusinessConfig,
+    #[serde(default)]
+    pub auth: AuthConfig,
     pub x402: Option<X402Config>,
 }
 
@@ -21,6 +23,20 @@ pub struct ServerConfig {
 pub struct BusinessConfig {
     pub max_pending_orders_per_account: u32,
     pub broker_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AuthConfig {
+    #[serde(default)]
+    pub service_tokens: Vec<ServiceTokenConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceTokenConfig {
+    pub name: String,
+    pub token: String,
+    #[serde(default)]
+    pub is_admin: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,6 +80,7 @@ impl Default for Config {
                 max_pending_orders_per_account: 2,
                 broker_id: "ledgerflow-vault".to_string(),
             },
+            auth: AuthConfig::default(),
             x402: None,
         }
     }

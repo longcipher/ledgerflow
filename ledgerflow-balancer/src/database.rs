@@ -29,8 +29,8 @@ impl Database {
         let result = sqlx::query_as::<_, Order>(
             r#"
             INSERT INTO orders (id, order_id, account_id, broker_id, amount, token_address, chain_id, status, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            RETURNING id, order_id, account_id, broker_id, amount, token_address, chain_id, status, created_at, updated_at, transaction_hash
+            VALUES ($1, $2, $3, $4, CAST($5 AS NUMERIC(78,0)), $6, $7, $8, $9, $10)
+            RETURNING id, order_id, account_id, broker_id, amount::TEXT AS amount, token_address, chain_id, status, created_at, updated_at, transaction_hash
             "#,
         )
         .bind(order.id)
@@ -52,7 +52,7 @@ impl Database {
     pub async fn get_order_by_id(&self, order_id: &str) -> Result<Option<Order>, AppError> {
         let result = sqlx::query_as::<_, Order>(
             r#"
-            SELECT id, order_id, account_id, broker_id, amount, token_address, chain_id, status, created_at, updated_at, transaction_hash
+            SELECT id, order_id, account_id, broker_id, amount::TEXT AS amount, token_address, chain_id, status, created_at, updated_at, transaction_hash
             FROM orders
             WHERE order_id = $1
             "#,
@@ -111,7 +111,7 @@ impl Database {
 
         let result = sqlx::query_as::<_, Order>(
             r#"
-            SELECT id, order_id, account_id, broker_id, amount, token_address, chain_id, status, created_at, updated_at, transaction_hash
+            SELECT id, order_id, account_id, broker_id, amount::TEXT AS amount, token_address, chain_id, status, created_at, updated_at, transaction_hash
             FROM orders
             WHERE status = 'pending'
             ORDER BY created_at DESC
@@ -147,17 +147,18 @@ impl Database {
     pub async fn create_or_update_account(&self, account: &Account) -> Result<Account, AppError> {
         let result = sqlx::query_as::<_, Account>(
             r#"
-            INSERT INTO accounts (username, email, telegram_id, evm_address, encrypted_pk, is_admin, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            INSERT INTO accounts (username, email, telegram_id, evm_address, encrypted_pk, api_token_hash, is_admin, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             ON CONFLICT (username) 
             DO UPDATE SET 
                 email = COALESCE($2, accounts.email),
                 telegram_id = COALESCE($3, accounts.telegram_id),
                 evm_address = COALESCE($4, accounts.evm_address),
                 encrypted_pk = COALESCE($5, accounts.encrypted_pk),
-                is_admin = COALESCE($6, accounts.is_admin),
-                updated_at = $8
-            RETURNING id, username, email, telegram_id, evm_address, encrypted_pk, is_admin, created_at, updated_at
+                api_token_hash = COALESCE($6, accounts.api_token_hash),
+                is_admin = COALESCE($7, accounts.is_admin),
+                updated_at = $9
+            RETURNING id, username, email, telegram_id, evm_address, encrypted_pk, api_token_hash, is_admin, created_at, updated_at
             "#,
         )
         .bind(&account.username)
@@ -165,6 +166,7 @@ impl Database {
         .bind(account.telegram_id)
         .bind(&account.evm_address)
         .bind(&account.encrypted_pk)
+        .bind(&account.api_token_hash)
         .bind(account.is_admin)
         .bind(account.created_at)
         .bind(account.updated_at)
@@ -209,9 +211,9 @@ impl Database {
 
         let result = sqlx::query_as::<_, Account>(
             r#"
-            INSERT INTO accounts (username, email, telegram_id, evm_address, encrypted_pk, is_admin, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
-            RETURNING id, username, email, telegram_id, evm_address, encrypted_pk, is_admin, created_at, updated_at
+            INSERT INTO accounts (username, email, telegram_id, evm_address, encrypted_pk, api_token_hash, is_admin, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+            RETURNING id, username, email, telegram_id, evm_address, encrypted_pk, api_token_hash, is_admin, created_at, updated_at
             "#,
         )
         .bind(&account.username)
@@ -219,6 +221,7 @@ impl Database {
         .bind(account.telegram_id)
         .bind(&account.evm_address)
         .bind(&account.encrypted_pk)
+        .bind(&account.api_token_hash)
         .bind(account.is_admin)
         .fetch_one(&self.pool)
         .await?;
@@ -233,7 +236,7 @@ impl Database {
     ) -> Result<Option<Account>, AppError> {
         let result = sqlx::query_as::<_, Account>(
             r#"
-            SELECT id, username, email, telegram_id, evm_address, encrypted_pk, is_admin, created_at, updated_at
+            SELECT id, username, email, telegram_id, evm_address, encrypted_pk, api_token_hash, is_admin, created_at, updated_at
             FROM accounts
             WHERE username = $1
             "#,
@@ -249,7 +252,7 @@ impl Database {
     pub async fn get_account_by_email(&self, email: &str) -> Result<Option<Account>, AppError> {
         let result = sqlx::query_as::<_, Account>(
             r#"
-            SELECT id, username, email, telegram_id, evm_address, encrypted_pk, is_admin, created_at, updated_at
+            SELECT id, username, email, telegram_id, evm_address, encrypted_pk, api_token_hash, is_admin, created_at, updated_at
             FROM accounts
             WHERE email = $1
             "#,
@@ -268,7 +271,7 @@ impl Database {
     ) -> Result<Option<Account>, AppError> {
         let result = sqlx::query_as::<_, Account>(
             r#"
-            SELECT id, username, email, telegram_id, evm_address, encrypted_pk, is_admin, created_at, updated_at
+            SELECT id, username, email, telegram_id, evm_address, encrypted_pk, api_token_hash, is_admin, created_at, updated_at
             FROM accounts
             WHERE telegram_id = $1
             "#,
@@ -284,7 +287,7 @@ impl Database {
     pub async fn get_account_by_id(&self, id: i64) -> Result<Option<Account>, AppError> {
         let result = sqlx::query_as::<_, Account>(
             r#"
-            SELECT id, username, email, telegram_id, evm_address, encrypted_pk, is_admin, created_at, updated_at
+            SELECT id, username, email, telegram_id, evm_address, encrypted_pk, api_token_hash, is_admin, created_at, updated_at
             FROM accounts
             WHERE id = $1
             "#,
@@ -296,11 +299,29 @@ impl Database {
         Ok(result)
     }
 
+    pub async fn get_account_by_api_token_hash(
+        &self,
+        api_token_hash: &str,
+    ) -> Result<Option<Account>, AppError> {
+        let result = sqlx::query_as::<_, Account>(
+            r#"
+            SELECT id, username, email, telegram_id, evm_address, encrypted_pk, api_token_hash, is_admin, created_at, updated_at
+            FROM accounts
+            WHERE api_token_hash = $1
+            "#,
+        )
+        .bind(api_token_hash)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(result)
+    }
+
     /// Get all orders with deposited status
     pub async fn get_deposited_orders(&self) -> Result<Vec<Order>, AppError> {
         let result = sqlx::query_as::<_, Order>(
             r#"
-            SELECT id, order_id, account_id, broker_id, amount, token_address, chain_id, status, created_at, updated_at, transaction_hash
+            SELECT id, order_id, account_id, broker_id, amount::TEXT AS amount, token_address, chain_id, status, created_at, updated_at, transaction_hash
             FROM orders
             WHERE status = 'deposited'
             ORDER BY created_at ASC
@@ -331,10 +352,10 @@ impl Database {
         sqlx::query(
             r#"
             INSERT INTO balances (account_id, balance, created_at, updated_at)
-            VALUES ($1, $2, NOW(), NOW())
+            VALUES ($1, CAST($2 AS NUMERIC(78,0)), NOW(), NOW())
             ON CONFLICT (account_id)
             DO UPDATE SET 
-                balance = (CAST(balances.balance AS NUMERIC) + CAST($2 AS NUMERIC))::text,
+                balance = balances.balance + CAST($2 AS NUMERIC(78,0)),
                 updated_at = NOW()
             "#,
         )
@@ -366,12 +387,30 @@ impl Database {
         Ok(())
     }
 
+    /// Mark an order as completed only when current status is `deposited`.
+    pub async fn mark_order_completed_if_deposited(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        order_id: &str,
+    ) -> Result<bool, AppError> {
+        let result = sqlx::query(
+            "UPDATE orders
+             SET status = 'completed', updated_at = NOW()
+             WHERE order_id = $1 AND status = 'deposited'",
+        )
+        .bind(order_id)
+        .execute(&mut **tx)
+        .await?;
+
+        Ok(result.rows_affected() == 1)
+    }
+
     /// Get account balance record
     pub async fn get_account_balance_record(&self, account_id: i64) -> Result<Balance, AppError> {
         // Try to get existing balance record
         let balance = sqlx::query_as::<_, Balance>(
             r#"
-            SELECT id, account_id, balance, created_at, updated_at
+            SELECT id, account_id, balance::TEXT AS balance, created_at, updated_at
             FROM balances
             WHERE account_id = $1
             "#,
@@ -387,8 +426,8 @@ impl Database {
             let new_balance = sqlx::query_as::<_, Balance>(
                 r#"
                 INSERT INTO balances (account_id, balance, created_at, updated_at)
-                VALUES ($1, '0', NOW(), NOW())
-                RETURNING id, account_id, balance, created_at, updated_at
+                VALUES ($1, CAST('0' AS NUMERIC(78,0)), NOW(), NOW())
+                RETURNING id, account_id, balance::TEXT AS balance, created_at, updated_at
                 "#,
             )
             .bind(account_id)

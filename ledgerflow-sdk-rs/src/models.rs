@@ -29,9 +29,9 @@ pub enum OrderStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateOrderRequest {
     pub account_id: i64,
-    pub amount: Option<String>,
-    pub token_address: Option<String>,
-    pub chain_id: Option<i64>,
+    pub amount: String,
+    pub token_address: String,
+    pub chain_id: i64,
     pub broker_id: Option<String>,
 }
 
@@ -41,8 +41,7 @@ pub struct RegisterAccountRequest {
     pub username: String,
     pub email: String,
     pub telegram_id: i64,
-    pub evm_pk: String,
-    pub is_admin: Option<bool>,
+    pub evm_address: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -53,9 +52,9 @@ pub struct RegisterAccountRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateOrderResponse {
     pub order_id: String,
-    pub amount: Option<String>,
-    pub token_address: Option<String>,
-    pub chain_id: Option<i64>,
+    pub amount: String,
+    pub token_address: String,
+    pub chain_id: i64,
     pub status: OrderStatus,
     pub created_at: DateTime<Utc>,
 }
@@ -90,6 +89,8 @@ pub struct RegisterAccountResponse {
     pub email: Option<String>,
     pub telegram_id: Option<i64>,
     pub evm_address: Option<String>,
+    #[serde(default)]
+    pub api_token: Option<String>,
     pub is_admin: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -169,9 +170,9 @@ mod tests {
     fn models_create_order_request_round_trip() {
         let req = CreateOrderRequest {
             account_id: 42,
-            amount: Some("100.50".into()),
-            token_address: Some("0xA0b8...".into()),
-            chain_id: Some(1),
+            amount: "100.50".into(),
+            token_address: "0xA0b8...".into(),
+            chain_id: 1,
             broker_id: Some("broker-1".into()),
         };
         let rt = round_trip(&req);
@@ -185,8 +186,7 @@ mod tests {
             username: "alice".into(),
             email: "alice@example.com".into(),
             telegram_id: 123456,
-            evm_pk: "0xdeadbeef".into(),
-            is_admin: Some(false),
+            evm_address: "0x00000000000000000000000000000000000000AA".into(),
         };
         let rt = round_trip(&req);
         assert_eq!(rt.username, req.username);
@@ -197,9 +197,9 @@ mod tests {
     fn models_create_order_response_round_trip() {
         let resp = CreateOrderResponse {
             order_id: "0xabc123".into(),
-            amount: Some("50.00".into()),
-            token_address: Some("0xUSDC".into()),
-            chain_id: Some(137),
+            amount: "50.00".into(),
+            token_address: "0xUSDC".into(),
+            chain_id: 137,
             status: OrderStatus::Pending,
             created_at: Utc::now(),
         };
@@ -246,6 +246,7 @@ mod tests {
             email: Some("bob@example.com".into()),
             telegram_id: Some(654321),
             evm_address: Some("0xBob".into()),
+            api_token: Some("lf_test_token".into()),
             is_admin: false,
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -253,6 +254,7 @@ mod tests {
         let rt = round_trip(&resp);
         assert_eq!(rt.id, resp.id);
         assert_eq!(rt.is_admin, false);
+        assert_eq!(rt.api_token, resp.api_token);
     }
 
     #[test]

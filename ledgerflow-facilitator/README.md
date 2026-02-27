@@ -56,19 +56,48 @@ scheme = "exact"
 networks = ["eip155:84532"]
 rpc_url = "https://sepolia.base.org"
 chain_id = 84532
+vault_address = "0xYourPaymentVaultAddress"
 signer_key_env = "EVM_SIGNER_PRIVATE_KEY"   # optional – needed for settlement
 signers = ["0xYourFacilitatorAddress"]
 ```
 
 **Verify** checks:
 1. Authorization timing (validAfter / validBefore)
-2. Amount >= required
+2. Amount exactly equals `paymentRequirements.amount`
 3. Receiver matches `payTo`
 4. On-chain token balance sufficient
 5. Authorization nonce not already used
-6. `transferWithAuthorization` simulation via `eth_call`
+6. Settlement call simulation via `eth_call` (`depositWithAuthorization` when `vault_address` is set, otherwise `transferWithAuthorization`)
 
-**Settle** sends the `transferWithAuthorization` transaction on-chain (requires `signer_key_env`).
+`paymentRequirements.extra.assetTransferMethod` is standardized to `eip3009` for EVM in this repo.
+If omitted, verification still defaults to EIP-3009.
+
+**Settle** sends `PaymentVault.depositWithAuthorization` on-chain (requires `vault_address` + `signer_key_env`).
+
+### EVM Request Examples
+
+Ready-to-run EVM request examples are available under:
+
+- `examples/evm/verify_request.base-sepolia.json`
+- `examples/evm/settle_request.base-sepolia.json`
+- `examples/evm/verify_request.ethereum-sepolia.json`
+- `examples/evm/verify_request.local-anvil.json`
+
+Quick verify call:
+
+```bash
+curl -sS http://127.0.0.1:3402/verify \
+  -H 'content-type: application/json' \
+  --data @examples/evm/verify_request.base-sepolia.json
+```
+
+Quick settle call:
+
+```bash
+curl -sS http://127.0.0.1:3402/settle \
+  -H 'content-type: application/json' \
+  --data @examples/evm/settle_request.base-sepolia.json
+```
 
 ### Offchain Mock Backend (default)
 
@@ -116,4 +145,3 @@ Your external system implements two endpoints (verify + settle) per the contract
 ## Architecture
 
 See: [x402_v2_chain_agnostic_architecture.md](../docs/x402_v2_chain_agnostic_architecture.md)
-

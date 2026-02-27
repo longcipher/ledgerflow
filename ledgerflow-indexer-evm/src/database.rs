@@ -10,7 +10,8 @@ pub struct Database {
 
 impl Database {
     pub async fn new(database_url: &str) -> Result<Self> {
-        info!("Connecting to database: {}", database_url);
+        let redacted = redact_database_url(database_url);
+        info!("Connecting to database: {}", redacted);
         let pool = PgPool::connect(database_url).await?;
         info!("Successfully connected to database");
         Ok(Database { pool })
@@ -86,7 +87,7 @@ impl Database {
 
         let result = sqlx::query(
             "INSERT INTO deposit_events (chain_id, contract_address, order_id, sender, amount, transaction_hash, block_number, log_index, created_at, processed) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), false)
+             VALUES ($1, $2, $3, $4, CAST($5 AS NUMERIC(78,0)), $6, $7, $8, NOW(), false)
              ON CONFLICT (chain_id, transaction_hash, log_index) DO NOTHING",
         )
         .bind(event.chain_id)
@@ -133,7 +134,7 @@ impl Database {
         debug!("Getting unprocessed events for chain_id: {}", chain_id);
 
         let events = sqlx::query_as::<_, DepositEvent>(
-            "SELECT id, chain_id, contract_address, order_id, sender, amount, transaction_hash, block_number, log_index, created_at, processed 
+            "SELECT id, chain_id, contract_address, order_id, sender, amount::TEXT AS amount, transaction_hash, block_number, log_index, created_at, processed 
              FROM deposit_events 
              WHERE chain_id = $1 AND processed = false 
              ORDER BY block_number, log_index",
@@ -166,7 +167,7 @@ impl Database {
             "UPDATE orders SET 
                 status = 'deposited', 
                 transaction_hash = $1, 
-                amount = $2, 
+                amount = CAST($2 AS NUMERIC(78,0)), 
                 chain_id = $3, 
                 updated_at = NOW() 
              WHERE order_id = $4",
@@ -191,5 +192,34 @@ impl Database {
         }
 
         Ok(())
+    }
+}
+
+fn redact_database_url(database_url: &str) -> String {
+    match database_url.rsplit_once('@') {
+        Some((_, host_and_path)) => format!("***@{host_and_path}"),
+        None => "***".to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::redact_database_url;
+
+    #[test]
+    fn redact_database_url_hides_credentials() {
+        let redacted = redact_database_url(
+            "postgresql://ledger:secret@localhost:5432/ledgerflow?sslmode=disable",
+        );
+        assert_eq!(
+            redacted,
+            "***@localhost:5432/ledgerflow?sslmode=disable".to_string()
+        );
+    }
+
+    #[test]
+    fn redact_database_url_without_host_fallbacks_to_mask() {
+        let redacted = redact_database_url("not-a-url");
+        assert_eq!(redacted, "***");
     }
 }

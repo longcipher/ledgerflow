@@ -40,6 +40,7 @@ transaction_prefix = "cex-tx"
 # networks = ["eip155:84532"]
 # rpc_url = "https://sepolia.base.org"
 # chain_id = 84532
+# vault_address = "0xYourPaymentVaultAddress"
 # signer_key_env = "EVM_SIGNER_PRIVATE_KEY"   # optional – needed for settlement
 # signers = ["0xYourFacilitatorAddress"]
 #
@@ -53,6 +54,7 @@ transaction_prefix = "cex-tx"
 # networks = ["eip155:8453"]
 # rpc_url = "https://mainnet.base.org"
 # chain_id = 8453
+# vault_address = "0xYourPaymentVaultAddress"
 # signer_key_env = "EVM_SIGNER_PRIVATE_KEY"
 # signers = ["0xYourFacilitatorAddress"]
 

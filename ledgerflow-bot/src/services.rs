@@ -14,21 +14,31 @@ use crate::{
 pub struct BalancerService {
     client: Client,
     base_url: String,
+    api_token: String,
 }
 
 impl BalancerService {
-    pub fn new(config: &Config) -> Self {
+    pub fn new(config: &Config) -> BotResult<Self> {
+        let api_token = config.balancer.api_token.trim().to_string();
+        if api_token.is_empty() {
+            return Err(BotError::Config(
+                "balancer.api_token must be configured for authenticated balancer endpoints"
+                    .to_string(),
+            ));
+        }
+
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(
                 config.balancer.timeout_seconds,
             ))
             .build()
-            .expect("Failed to build HTTP client");
+            .map_err(|e| BotError::Config(format!("Failed to build HTTP client: {e}")))?;
 
-        Self {
+        Ok(Self {
             client,
             base_url: config.balancer.base_url.clone(),
-        }
+            api_token,
+        })
     }
 
     pub async fn register_account(
@@ -39,7 +49,10 @@ impl BalancerService {
 
         info!("Registering account: {:?}", request);
 
-        let response = self.client.post(&url).json(&request).send().await?;
+        let response = self
+            .with_auth(self.client.post(&url).json(&request))
+            .send()
+            .await?;
 
         if !response.status().is_success() {
             let error_text = response
@@ -69,7 +82,10 @@ impl BalancerService {
 
         info!("Creating order for account: {}", request.account_id);
 
-        let response = self.client.post(&url).json(&request).send().await?;
+        let response = self
+            .with_auth(self.client.post(&url).json(&request))
+            .send()
+            .await?;
 
         if !response.status().is_success() {
             let error_text = response
@@ -91,7 +107,7 @@ impl BalancerService {
     pub async fn get_order(&self, order_id: &str) -> BotResult<Order> {
         let url = format!("{}/orders/{}", self.base_url, order_id);
 
-        let response = self.client.get(&url).send().await?;
+        let response = self.with_auth(self.client.get(&url)).send().await?;
 
         if !response.status().is_success() {
             let error_text = response
@@ -110,7 +126,7 @@ impl BalancerService {
     pub async fn get_balance(&self, account_id: i64) -> BotResult<BalanceResponse> {
         let url = format!("{}/accounts/{}/balance", self.base_url, account_id);
 
-        let response = self.client.get(&url).send().await?;
+        let response = self.with_auth(self.client.get(&url)).send().await?;
 
         if !response.status().is_success() {
             let error_text = response
@@ -129,9 +145,13 @@ impl BalancerService {
     pub async fn health_check(&self) -> BotResult<bool> {
         let url = format!("{}/health", self.base_url);
 
-        match self.client.get(&url).send().await {
+        match self.with_auth(self.client.get(&url)).send().await {
             Ok(response) => Ok(response.status().is_success()),
             Err(_) => Ok(false),
         }
+    }
+
+    fn with_auth(&self, request: hpx::RequestBuilder) -> hpx::RequestBuilder {
+        request.header("Authorization", format!("Bearer {}", self.api_token))
     }
 }

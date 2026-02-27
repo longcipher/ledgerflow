@@ -75,8 +75,7 @@ pub struct RegisterAccountRequest {
     pub username: String,
     pub email: String,
     pub telegram_id: i64,
-    pub evm_pk: String,
-    pub is_admin: Option<bool>,
+    pub evm_address: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -86,6 +85,7 @@ pub struct RegisterAccountResponse {
     pub email: Option<String>,
     pub telegram_id: Option<i64>,
     pub evm_address: Option<String>,
+    pub api_token: Option<String>,
     pub is_admin: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -94,9 +94,9 @@ pub struct RegisterAccountResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateOrderRequest {
     pub account_id: i64,
-    pub amount: Option<String>,
-    pub token_address: Option<String>,
-    pub chain_id: Option<i64>,
+    pub amount: String,
+    pub token_address: String,
+    pub chain_id: i64,
     pub broker_id: Option<String>,
 }
 
@@ -104,9 +104,9 @@ pub struct CreateOrderRequest {
 pub struct CreateOrderResponse {
     pub order_id: String,
     pub payment_address: Option<String>,
-    pub amount: Option<String>,
-    pub token_address: Option<String>,
-    pub chain_id: Option<i64>,
+    pub amount: String,
+    pub token_address: String,
+    pub chain_id: i64,
     pub status: OrderStatus,
     pub created_at: DateTime<Utc>,
 }

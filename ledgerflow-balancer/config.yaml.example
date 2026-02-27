@@ -14,12 +14,22 @@ business:
   # Broker ID used for order ID generation
   broker_id: "ledgerflow-vault"
 
+# Authentication configuration.
+# - /register is public and returns a per-account API token.
+# - Protected routes require Authorization: Bearer <token>.
+# - Service tokens are intended for trusted internal components (bot/indexer/admin tools).
+auth:
+  service_tokens:
+    - name: "ledgerflow-bot"
+      token: "replace-with-long-random-token"
+      is_admin: true
+
 # Optional: x402 configuration
 # Enable x402 facilitator endpoints and EVM settlement via PaymentVault::depositWithAuthorization
 x402:
   kinds:
     - scheme: "exact"
-      network: "evm"
+      network: "eip155:84532"
   evm:
     # EVM RPC HTTP endpoint
     rpc_http: "https://base-sepolia.g.alchemy.com/v2/your-key"

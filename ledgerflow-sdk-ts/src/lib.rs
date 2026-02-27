@@ -33,9 +33,9 @@ fn order_status_to_string(status: &models::OrderStatus) -> String {
 #[napi(object)]
 pub struct CreateOrderRequest {
     pub account_id: i64,
-    pub amount: Option<String>,
-    pub token_address: Option<String>,
-    pub chain_id: Option<i64>,
+    pub amount: String,
+    pub token_address: String,
+    pub chain_id: i64,
     pub broker_id: Option<String>,
 }
 
@@ -45,8 +45,7 @@ pub struct RegisterAccountRequest {
     pub username: String,
     pub email: String,
     pub telegram_id: i64,
-    pub evm_pk: String,
-    pub is_admin: Option<bool>,
+    pub evm_address: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -57,9 +56,9 @@ pub struct RegisterAccountRequest {
 #[napi(object)]
 pub struct CreateOrderResponse {
     pub order_id: String,
-    pub amount: Option<String>,
-    pub token_address: Option<String>,
-    pub chain_id: Option<i64>,
+    pub amount: String,
+    pub token_address: String,
+    pub chain_id: i64,
     /// Order status as lowercase string (`"pending"`, `"completed"`, …).
     pub status: String,
     /// ISO 8601 timestamp string.
@@ -138,6 +137,7 @@ pub struct RegisterAccountResponse {
     pub email: Option<String>,
     pub telegram_id: Option<i64>,
     pub evm_address: Option<String>,
+    pub api_token: Option<String>,
     pub is_admin: bool,
     /// ISO 8601 timestamp string.
     pub created_at: String,
@@ -153,6 +153,7 @@ impl From<models::RegisterAccountResponse> for RegisterAccountResponse {
             email: r.email,
             telegram_id: r.telegram_id,
             evm_address: r.evm_address,
+            api_token: r.api_token,
             is_admin: r.is_admin,
             created_at: r.created_at.to_rfc3339(),
             updated_at: r.updated_at.to_rfc3339(),
@@ -291,8 +292,7 @@ impl LedgerFlowClient {
             username: request.username,
             email: request.email,
             telegram_id: request.telegram_id,
-            evm_pk: request.evm_pk,
-            is_admin: request.is_admin,
+            evm_address: request.evm_address,
         };
         let resp = self
             .inner

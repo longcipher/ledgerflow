@@ -4,16 +4,10 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use serde::Serialize;
 use tracing::warn;
 use x402_types::proto::{self, v1};
 
 use crate::{adapters::AdapterError, service::FacilitatorService};
-
-#[derive(Debug, Serialize)]
-pub struct ErrorResponse {
-    error: String,
-}
 
 pub async fn get_verify_info() -> impl IntoResponse {
     Json(serde_json::json!({
@@ -89,8 +83,11 @@ fn verify_error_response(error: AdapterError) -> Response {
         )
             .into_response(),
         AdapterError::InvalidRequest(details) => (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse { error: details }),
+            StatusCode::OK,
+            Json::<proto::VerifyResponse>(
+                v1::VerifyResponse::invalid(None::<String>, format!("invalid_request: {details}"))
+                    .into(),
+            ),
         )
             .into_response(),
         AdapterError::Upstream(details) => (
@@ -118,8 +115,14 @@ fn settle_error_response(error: AdapterError, network_hint: String) -> Response 
         )
             .into_response(),
         AdapterError::InvalidRequest(details) => (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse { error: details }),
+            StatusCode::OK,
+            Json::<proto::SettleResponse>(
+                (v1::SettleResponse::Error {
+                    reason: format!("invalid_request: {details}"),
+                    network: network_hint,
+                })
+                .into(),
+            ),
         )
             .into_response(),
         AdapterError::Upstream(details) => (

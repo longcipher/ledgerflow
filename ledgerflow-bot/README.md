@@ -19,7 +19,7 @@ LedgerFlow Bot is a Telegram bot that serves as the primary user interface for t
 - **Tokio**: Async runtime
 - **Clap**: CLI argument parsing
 - **Alloy**: EVM blockchain interactions
-- **Reqwest**: HTTP client for API calls
+- **hpx**: HTTP client for API calls
 
 ### Architecture Overview
 ```
@@ -89,7 +89,7 @@ cargo run -- --help
 - **SQLx**: Database ORM with compile-time SQL checking
 - **Alloy**: Ethereum/EVM blockchain interaction
 - **PostgreSQL**: Database for user data and order tracking
-- **Reqwest**: HTTP client for API communication
+- **hpx**: HTTP client for API communication
 - **Tracing**: Structured logging and observability
 
 ## Development Status
@@ -153,3 +153,9 @@ just docs     # Generate documentation
    - Bot periodically checks for completed orders and notifies users
 
 All flows are stateful and menu-driven, with clear English prompts and error messages. Legacy commands and Chinese prompts have been removed.
+
+## Security Requirements
+
+- `balancer.api_token` is required and must be a trusted service token (`is_admin: true`) from balancer config.
+- Set `WALLET_MASTER_KEY` (preferred) or `ENCRYPTED_MASTER_KEY` for wallet key encryption at rest.
+- Wallet private keys are encrypted with `AES-256-GCM` and random nonces (`v2:<nonce>:<ciphertext>` format).

@@ -29,9 +29,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create an order
     let order = client.create_order(&CreateOrderRequest {
         account_id: 1,
-        amount: Some("10.00".into()),
-        token_address: None,
-        chain_id: None,
+        amount: "10.00".into(),
+        token_address: "0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".into(),
+        chain_id: 1,
         broker_id: Some("my-broker".into()),
     }).await?;
 

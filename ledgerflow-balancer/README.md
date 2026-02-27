@@ -5,6 +5,7 @@ LedgerFlow Balancer is the backend service for the LedgerFlow payment system. It
 ## Features
 
 - **Account Management**: Associate Email/Telegram ID with EVM addresses
+- **Token-Based Access Control**: Protected routes require bearer tokens (account token or admin service token)
 - **Order Creation**: REST API to generate unique order IDs and store them in database
 - **Status Queries**: API to query order status by order ID
 - **Balance Queries**: API to query account total balance by aggregating completed orders
@@ -99,20 +100,20 @@ Where:
 ### Core Endpoints
 
 - `POST /register` - Register new account
-- `GET /accounts/username/{username}` - Get account by username
-- `GET /accounts/email/{email}` - Get account by email
-- `GET /accounts/telegram/{telegram_id}` - Get account by telegram ID
-- `POST /orders` - Create new order
-- `GET /orders/{order_id}` - Get order details
-- `GET /accounts/{account_id}/balance` - Get account balance
-- `GET /admin/orders` - List pending orders (admin only)
+- `GET /accounts/username/{username}` - Get account by username (auth required)
+- `GET /accounts/email/{email}` - Get account by email (auth required)
+- `GET /accounts/telegram/{telegram_id}` - Get account by telegram ID (auth required)
+- `POST /orders` - Create new order (auth required)
+- `GET /orders/{order_id}` - Get order details (auth required)
+- `GET /accounts/{account_id}/balance` - Get account balance (auth required)
+- `GET /admin/orders` - List pending orders (admin token required)
 - `GET /health` - Health check
 
 ### x402 Facilitator Endpoints
 
 - `GET /x402/supported` - List supported kinds (scheme/network)
-- `POST /x402/verify` - Verify an x402 payment header against requirements
-- `POST /x402/settle` - Settle an x402 payment (EVM exact via EIP-3009 wrapper)
+- `POST /x402/verify` - Verify an x402 v2 payment payload against requirements
+- `POST /x402/settle` - Settle an x402 v2 payment (`exact` + `assetTransferMethod=eip3009`)
 
 Enable these by adding the `x402` section to `config.yaml` (see `config.yaml.example`).
 
@@ -130,28 +131,34 @@ curl -X POST http://localhost:3000/register \
   }'
 ```
 
+The response includes `api_token`. Persist it securely and use it as a bearer token.
+
 #### Get Account by Username
 ```bash
-curl http://localhost:3000/accounts/username/john_doe
+curl http://localhost:3000/accounts/username/john_doe \
+  -H "Authorization: Bearer <api-token>"
 ```
 
 #### Get Account by Email
 ```bash
-curl http://localhost:3000/accounts/email/john@example.com
+curl http://localhost:3000/accounts/email/john@example.com \
+  -H "Authorization: Bearer <api-token>"
 ```
 
 #### Get Account by Telegram ID
 ```bash
-curl http://localhost:3000/accounts/telegram/123456789
+curl http://localhost:3000/accounts/telegram/123456789 \
+  -H "Authorization: Bearer <api-token>"
 ```
 
 #### Create Order
 ```bash
 curl -X POST http://localhost:3000/orders \
+  -H "Authorization: Bearer <api-token>" \
   -H "Content-Type: application/json" \
   -d '{
     "account_id": 1,
-    "amount": "10.00",
+    "amount": "10000000",
     "token_address": "0xa0b86a33e6441d00000000000000000000000000",
     "chain_id": 1
   }'
@@ -159,12 +166,14 @@ curl -X POST http://localhost:3000/orders \
 
 #### Get Order Status
 ```bash
-curl http://localhost:3000/orders/{order_id}
+curl http://localhost:3000/orders/{order_id} \
+  -H "Authorization: Bearer <api-token>"
 ```
 
 #### Get Account Balance
 ```bash
-curl http://localhost:3000/accounts/{account_id}/balance
+curl http://localhost:3000/accounts/{account_id}/balance \
+  -H "Authorization: Bearer <api-token>"
 ```
 
 ## Configuration
@@ -179,6 +188,11 @@ server:
 business:
   max_pending_orders_per_account: 2
   broker_id: "ledgerflow-vault"
+auth:
+  service_tokens:
+    - name: "ledgerflow-bot"
+      token: "replace-with-long-random-token"
+      is_admin: true
 ```
 
 ## Database Schema
@@ -188,7 +202,7 @@ business:
 - `order_id`: Unique order identifier (keccak256 hash)
 - `account_id`: Account identifier
 - `broker_id`: Broker/merchant identifier
-- `amount`: Payment amount (string for precision)
+- `amount`: Payment amount (`NUMERIC(78,0)`, API surface remains string-encoded integer)
 - `token_address`: ERC20 token contract address
 - `status`: Order status (pending, completed, failed, cancelled)
 - `created_at`, `updated_at`: Timestamps
@@ -200,6 +214,7 @@ business:
 - `email`: Email address (optional)
 - `telegram_id`: Telegram user ID (optional)
 - `evm_address`: Ethereum address (optional)
+- `api_token_hash`: Hashed bearer token for account authentication
 - `created_at`, `updated_at`: Timestamps
 
 ## Getting Started

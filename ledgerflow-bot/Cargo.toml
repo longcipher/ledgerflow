@@ -67,4 +67,5 @@ serde_yaml = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
 
 # Base64 encoding
+aes-gcm = "0.10.3"
 base64 = { workspace = true }

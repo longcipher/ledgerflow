@@ -35,6 +35,7 @@ pub struct Account {
     pub telegram_id: Option<i64>,
     pub evm_address: Option<String>,
     pub encrypted_pk: Option<String>,
+    pub api_token_hash: Option<String>,
     pub is_admin: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -50,20 +51,21 @@ pub struct Balance {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CreateOrderRequest {
     pub account_id: i64,
-    pub amount: Option<String>,
-    pub token_address: Option<String>,
-    pub chain_id: Option<i64>,
+    pub amount: String,
+    pub token_address: String,
+    pub chain_id: i64,
     pub broker_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CreateOrderResponse {
     pub order_id: String,
-    pub amount: Option<String>,
-    pub token_address: Option<String>,
-    pub chain_id: Option<i64>,
+    pub amount: String,
+    pub token_address: String,
+    pub chain_id: i64,
     pub status: OrderStatus,
     pub created_at: DateTime<Utc>,
 }
@@ -95,12 +97,12 @@ pub struct AdminOrdersResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RegisterAccountRequest {
     pub username: String,
     pub email: String,
     pub telegram_id: i64,
-    pub evm_pk: String,
-    pub is_admin: Option<bool>,
+    pub evm_address: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -110,6 +112,7 @@ pub struct RegisterAccountResponse {
     pub email: Option<String>,
     pub telegram_id: Option<i64>,
     pub evm_address: Option<String>,
+    pub api_token: String,
     pub is_admin: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -125,4 +128,42 @@ pub struct AccountResponse {
     pub is_admin: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RegisterAccountRequest;
+
+    #[test]
+    fn register_request_accepts_evm_address_field() {
+        let payload = serde_json::json!({
+            "username": "alice",
+            "email": "alice@example.com",
+            "telegram_id": 123456,
+            "evm_address": "0x00000000000000000000000000000000000000aa"
+        });
+
+        let request: RegisterAccountRequest =
+            serde_json::from_value(payload).expect("evm_address payload should deserialize");
+        assert_eq!(request.username, "alice");
+    }
+
+    #[test]
+    fn register_request_rejects_is_admin_field() {
+        let payload = serde_json::json!({
+            "username": "alice",
+            "email": "alice@example.com",
+            "telegram_id": 123456,
+            "evm_address": "0x00000000000000000000000000000000000000aa",
+            "is_admin": true
+        });
+
+        let error = serde_json::from_value::<RegisterAccountRequest>(payload)
+            .expect_err("is_admin must not be accepted from clients")
+            .to_string();
+        assert!(
+            error.contains("unknown field `is_admin`"),
+            "unexpected error: {error}"
+        );
+    }
 }

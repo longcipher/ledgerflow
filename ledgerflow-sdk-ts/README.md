@@ -23,6 +23,8 @@ const client = new LedgerFlowClient('https://api.ledgerflow.dev');
 const order = await client.createOrder({
   accountId: 1,
   amount: '10.00',
+  tokenAddress: '0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+  chainId: 1,
   brokerId: 'my-broker',
 });
 console.log(`Order: ${order.orderId}, status: ${order.status}`);

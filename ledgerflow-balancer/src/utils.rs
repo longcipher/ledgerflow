@@ -1,5 +1,3 @@
-use std::env;
-
 use sha3::{Digest, Keccak256};
 
 /// Generate a unique order ID using keccak256 hash
@@ -16,53 +14,25 @@ pub fn generate_order_id(broker_id: &str, account_id: i64, order_id_num: i64) ->
     hex::encode(result)
 }
 
-/// Encrypt a private key using XOR with an environment variable key
-pub fn encrypt_private_key(private_key: &str) -> Result<String, String> {
-    let master_key = env::var("ENCRYPTED_MASTER_KEY")
-        .map_err(|_| "ENCRYPTED_MASTER_KEY environment variable is not set".to_string())?;
-
-    let private_key_bytes = private_key.as_bytes();
-    let master_key_bytes = master_key.as_bytes();
-
-    let encrypted: Vec<u8> = private_key_bytes
-        .iter()
-        .enumerate()
-        .map(|(i, byte)| byte ^ master_key_bytes[i % master_key_bytes.len()])
-        .collect();
-
-    Ok(hex::encode(encrypted))
+/// Generate a random API token for client authentication.
+pub fn generate_api_token() -> String {
+    let bytes = rand::random::<[u8; 32]>();
+    format!("lf_{:}", hex::encode(bytes))
 }
 
-/// Decrypt a private key using XOR with an environment variable key
-#[allow(unused)]
-pub fn decrypt_private_key(encrypted_key: &str) -> Result<String, String> {
-    let master_key = env::var("ENCRYPTED_MASTER_KEY")
-        .map_err(|_| "ENCRYPTED_MASTER_KEY environment variable is not set".to_string())?;
-
-    let encrypted_bytes =
-        hex::decode(encrypted_key).map_err(|e| format!("Failed to decode hex: {e}"))?;
-    let master_key_bytes = master_key.as_bytes();
-
-    let decrypted: Vec<u8> = encrypted_bytes
-        .iter()
-        .enumerate()
-        .map(|(i, byte)| byte ^ master_key_bytes[i % master_key_bytes.len()])
-        .collect();
-
-    String::from_utf8(decrypted).map_err(|e| format!("Failed to convert to UTF-8: {e}"))
+/// Hash API token before persistence or lookup.
+pub fn hash_api_token(token: &str) -> String {
+    let mut hasher = Keccak256::new();
+    hasher.update(token.as_bytes());
+    hex::encode(hasher.finalize())
 }
 
-/// Generate EVM address from private key
-pub fn generate_evm_address_from_pk(private_key: &str) -> Result<String, String> {
-    use alloy::signers::local::PrivateKeySigner;
-
-    let private_key_bytes = hex::decode(private_key.trim_start_matches("0x"))
-        .map_err(|e| format!("Failed to decode private key: {e}"))?;
-
-    let signer = PrivateKeySigner::from_slice(&private_key_bytes)
-        .map_err(|e| format!("Failed to create signer: {e}"))?;
-
-    Ok(signer.address().to_checksum(None))
+/// Parse and normalize an EVM address to EIP-55 checksum format.
+pub fn normalize_evm_address(address: &str) -> Result<String, String> {
+    let parsed = address
+        .parse::<alloy::primitives::Address>()
+        .map_err(|e| format!("Invalid EVM address '{address}': {e}"))?;
+    Ok(parsed.to_checksum(None))
 }
 
 /// Get the next order ID number globally (auto-increment) - for testing/fallback
@@ -99,6 +69,23 @@ mod tests {
     }
 
     #[test]
+    fn test_generate_api_token() {
+        let token = generate_api_token();
+        assert!(token.starts_with("lf_"));
+        assert_eq!(token.len(), 67);
+    }
+
+    #[test]
+    fn test_hash_api_token_is_deterministic() {
+        let hash1 = hash_api_token("token-1");
+        let hash2 = hash_api_token("token-1");
+        let hash3 = hash_api_token("token-2");
+        assert_eq!(hash1, hash2);
+        assert_ne!(hash1, hash3);
+        assert_eq!(hash1.len(), 64);
+    }
+
+    #[test]
     fn test_get_next_order_id_num_fallback() {
         let account_id = "test_account";
 
@@ -111,6 +98,19 @@ mod tests {
         // Different account should still get next global number
         let num3 = get_next_order_id_num_fallback("different_account");
         assert_eq!(num3, num2 + 1);
+    }
+
+    #[test]
+    fn test_normalize_evm_address() {
+        let normalized = normalize_evm_address("0x00000000000000000000000000000000000000aa")
+            .expect("address should normalize");
+        assert_eq!(normalized, "0x00000000000000000000000000000000000000AA");
+    }
+
+    #[test]
+    fn test_normalize_evm_address_rejects_invalid_value() {
+        let error = normalize_evm_address("not-an-address").expect_err("must reject invalid");
+        assert!(error.contains("Invalid EVM address"));
     }
 
     #[tokio::test]

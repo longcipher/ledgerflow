@@ -3,11 +3,11 @@ name: Foundry Lint
 on:
   push:
     paths:
-      - 'ledgerflow-vault/**'
+      - 'ledgerflow-vault-evm/**'
       - '.github/workflows/foundry_lint.yml'
   pull_request:
     paths:
-      - 'ledgerflow-vault/**'
+      - 'ledgerflow-vault-evm/**'
       - '.github/workflows/foundry_lint.yml'
   workflow_dispatch:
 
@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ledgerflow-vault
+        working-directory: ledgerflow-vault-evm
     steps:
       - uses: actions/checkout@v4
         with:

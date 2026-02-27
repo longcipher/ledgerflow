@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{BTreeSet, HashMap},
+    sync::Arc,
+};
 
 use async_trait::async_trait;
 use thiserror::Error;
@@ -86,6 +89,10 @@ pub trait PaymentAdapter: Send + Sync {
     fn signer_hints(&self) -> HashMap<ChainId, Vec<String>> {
         HashMap::new()
     }
+
+    fn protocol_extensions(&self) -> Vec<String> {
+        Vec::new()
+    }
 }
 
 #[derive(Clone, Default)]
@@ -135,6 +142,7 @@ impl AdapterRegistry {
     pub fn supported(&self) -> proto::SupportedResponse {
         let mut kinds = Vec::new();
         let mut signers: HashMap<ChainId, Vec<String>> = HashMap::new();
+        let mut extensions: BTreeSet<String> = BTreeSet::new();
 
         for adapter in &self.adapters {
             kinds.extend(adapter.descriptor().supported_kinds());
@@ -144,11 +152,12 @@ impl AdapterRegistry {
                     .or_default()
                     .extend(signer_addresses);
             }
+            extensions.extend(adapter.protocol_extensions());
         }
 
         proto::SupportedResponse {
             kinds,
-            extensions: Vec::new(),
+            extensions: extensions.into_iter().collect(),
             signers,
         }
     }

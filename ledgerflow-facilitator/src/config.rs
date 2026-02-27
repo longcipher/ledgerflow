@@ -113,6 +113,10 @@ pub struct EvmAdapterInput {
     /// Numeric chain ID (e.g. `84532`).
     pub chain_id: u64,
 
+    /// PaymentVault address used for settlement via `depositWithAuthorization`.
+    #[serde(default)]
+    pub vault_address: Option<String>,
+
     /// Environment variable name holding the hex-encoded signer private key.
     /// Required for settlement; verify-only if absent.
     #[serde(default)]
@@ -151,6 +155,7 @@ impl EvmAdapterInput {
             descriptor,
             rpc_url: self.rpc_url,
             chain_id: self.chain_id,
+            vault_address: self.vault_address,
             signer_key,
             signers: self.signers,
         })
@@ -171,11 +176,12 @@ pub fn build_service(config: &ServerConfig) -> eyre::Result<FacilitatorService> 
             AdapterConfig::Offchain(_) => {}
             AdapterConfig::Evm(evm) if evm.enabled => {
                 let runtime = evm.clone().into_runtime()?;
-                let has_signer = runtime.signer_key.is_some();
+                let has_settle_inputs =
+                    runtime.signer_key.is_some() && runtime.vault_address.is_some();
                 info!(
                     id = %runtime.descriptor.id,
                     chain_id = %runtime.chain_id,
-                    settle_enabled = has_signer,
+                    settle_enabled = has_settle_inputs,
                     "registering EVM adapter"
                 );
                 let adapter = EvmAdapter::try_new(runtime)?;

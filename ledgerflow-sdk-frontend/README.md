@@ -52,7 +52,7 @@ const account = await client.registerAccount({
   username: "alice",
   email: "alice@example.com",
   telegram_id: 123456,
-  evm_pk: "0xabc...",
+  evm_address: "0x00000000000000000000000000000000000000AA",
 });
 
 // Look up accounts
@@ -78,9 +78,9 @@ const orderId = generateOrderId("broker-1", 1, 42);
 | Method | Parameters | Returns |
 |--------|-----------|---------|
 | `new(baseUrl)` | `string` | `LedgerFlowClient` |
-| `createOrder(request)` | `{ account_id, amount?, token_address?, chain_id?, broker_id? }` | `Promise<CreateOrderResponse>` |
+| `createOrder(request)` | `{ account_id, amount, token_address, chain_id, broker_id? }` | `Promise<CreateOrderResponse>` |
 | `getOrder(orderId)` | `string` | `Promise<OrderResponse>` |
-| `registerAccount(request)` | `{ username, email, telegram_id, evm_pk, is_admin? }` | `Promise<RegisterAccountResponse>` |
+| `registerAccount(request)` | `{ username, email, telegram_id, evm_address }` | `Promise<RegisterAccountResponse>` |
 | `getAccountByUsername(username)` | `string` | `Promise<AccountResponse>` |
 | `getAccountByEmail(email)` | `string` | `Promise<AccountResponse>` |
 | `getAccountByTelegramId(telegramId)` | `number` | `Promise<AccountResponse>` |

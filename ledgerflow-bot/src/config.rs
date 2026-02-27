@@ -21,6 +21,7 @@ pub struct TelegramConfig {
 pub struct BalancerConfig {
     pub base_url: String,
     pub timeout_seconds: u64,
+    pub api_token: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -28,6 +29,12 @@ pub struct BlockchainConfig {
     pub rpc_url: String,
     pub payment_vault_address: String,
     pub chain_id: u64,
+    #[serde(default = "default_usdc_address")]
+    pub usdc_address: String,
+}
+
+fn default_usdc_address() -> String {
+    "0x0000000000000000000000000000000000000000".to_string()
 }
 
 impl Config {
@@ -49,11 +56,13 @@ impl Default for Config {
             balancer: BalancerConfig {
                 base_url: "http://localhost:3000".to_string(),
                 timeout_seconds: 30,
+                api_token: "replace-with-balancer-service-token".to_string(),
             },
             blockchain: BlockchainConfig {
                 rpc_url: "https://sepolia.unichain.org".to_string(),
                 payment_vault_address: "0x0000000000000000000000000000000000000000".to_string(),
                 chain_id: 1301,
+                usdc_address: default_usdc_address(),
             },
         }
     }

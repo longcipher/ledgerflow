@@ -49,9 +49,9 @@ async fn test_create_order() {
 
     let req = CreateOrderRequest {
         account_id: 42,
-        amount: Some("100.50".into()),
-        token_address: Some("0xUSDC".into()),
-        chain_id: Some(137),
+        amount: "100.50".into(),
+        token_address: "0xUSDC".into(),
+        chain_id: 137,
         broker_id: None,
     };
 
@@ -61,9 +61,9 @@ async fn test_create_order() {
         .expect("create_order should succeed");
 
     assert_eq!(resp.order_id, "0xabc123");
-    assert_eq!(resp.amount.as_deref(), Some("100.50"));
-    assert_eq!(resp.token_address.as_deref(), Some("0xUSDC"));
-    assert_eq!(resp.chain_id, Some(137));
+    assert_eq!(resp.amount, "100.50");
+    assert_eq!(resp.token_address, "0xUSDC");
+    assert_eq!(resp.chain_id, 137);
     assert_eq!(resp.status, OrderStatus::Pending);
 }
 
@@ -200,8 +200,7 @@ async fn test_register_account() {
         username: "alice".into(),
         email: "alice@example.com".into(),
         telegram_id: 123456,
-        evm_pk: "0xdeadbeef".into(),
-        is_admin: Some(false),
+        evm_address: "0x00000000000000000000000000000000000000AA".into(),
     };
 
     let resp = client

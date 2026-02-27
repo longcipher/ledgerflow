@@ -4,10 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-# Aptos indexer SDK
-aptos-indexer-processor-sdk = { workspace = true, features = ["postgres_full"] }
-diesel_migrations = { workspace = true }
-
 # Core dependencies
 clap = { workspace = true, features = ["derive"] }
 eyre = { workspace = true }

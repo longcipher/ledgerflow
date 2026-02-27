@@ -22,47 +22,57 @@ impl OrderService {
     }
 
     pub async fn create_order(&self, request: CreateOrderRequest) -> Result<Order, AppError> {
+        let CreateOrderRequest {
+            account_id,
+            amount,
+            token_address,
+            chain_id,
+            broker_id,
+        } = request;
+
         info!(
             "Creating order for account {}: amount={}, token={}, chain_id={}",
-            request.account_id,
-            request.amount.as_deref().unwrap_or("0"),
-            request.token_address.as_deref().unwrap_or("0x0"),
-            request.chain_id.unwrap_or(0)
+            account_id, amount, token_address, chain_id
         );
 
-        // Check if account has too many pending orders
-        let pending_count = self.db.get_pending_orders_count(request.account_id).await?;
-        if pending_count >= self.max_pending_orders as i64 {
-            warn!(
-                "Account {} has reached maximum pending orders limit: {}/{}",
-                request.account_id, pending_count, self.max_pending_orders
-            );
-            return Err(AppError::TooManyPendingOrders(
-                request.account_id.to_string(),
+        Self::validate_amount(&amount)?;
+        let normalized_token_address =
+            crate::utils::normalize_evm_address(&token_address).map_err(AppError::InvalidInput)?;
+        if chain_id <= 0 {
+            return Err(AppError::InvalidInput(
+                "chain_id must be greater than 0".to_string(),
             ));
         }
 
+        // Check if account has too many pending orders
+        let pending_count = self.db.get_pending_orders_count(account_id).await?;
+        if pending_count >= self.max_pending_orders as i64 {
+            warn!(
+                "Account {} has reached maximum pending orders limit: {}/{}",
+                account_id, pending_count, self.max_pending_orders
+            );
+            return Err(AppError::TooManyPendingOrders(account_id.to_string()));
+        }
+
         // Generate unique order ID
-        let broker_id = request
-            .broker_id
-            .unwrap_or_else(|| "ledgerflow".to_string());
+        let broker_id = broker_id.unwrap_or_else(|| "ledgerflow".to_string());
         let order_id_num = self.db.get_next_order_id_num().await?;
-        let order_id = generate_order_id(&broker_id, request.account_id, order_id_num);
+        let order_id = generate_order_id(&broker_id, account_id, order_id_num);
 
         info!(
             "Generated order ID: {}, order_id_num: {}, for account {}",
-            order_id, order_id_num, request.account_id
+            order_id, order_id_num, account_id
         );
 
         // Create order
         let order = Order {
             id: order_id_num,
             order_id,
-            account_id: request.account_id,
+            account_id,
             broker_id,
-            amount: request.amount.unwrap_or_else(|| "0".to_string()),
-            token_address: request.token_address.unwrap_or_else(|| "0x0".to_string()),
-            chain_id: request.chain_id.unwrap_or(0),
+            amount,
+            token_address: normalized_token_address,
+            chain_id,
             status: OrderStatus::Pending,
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -73,6 +83,29 @@ impl OrderService {
         info!("Order created successfully: {}", created_order.order_id);
 
         Ok(created_order)
+    }
+
+    fn validate_amount(amount: &str) -> Result<(), AppError> {
+        let trimmed = amount.trim();
+        if trimmed.is_empty() {
+            return Err(AppError::InvalidInput(
+                "amount must not be empty".to_string(),
+            ));
+        }
+
+        if !trimmed.chars().all(|ch| ch.is_ascii_digit()) {
+            return Err(AppError::InvalidInput(
+                "amount must be an unsigned integer string".to_string(),
+            ));
+        }
+
+        if trimmed.chars().all(|ch| ch == '0') {
+            return Err(AppError::InvalidInput(
+                "amount must be greater than 0".to_string(),
+            ));
+        }
+
+        Ok(())
     }
 
     pub async fn get_order(&self, order_id: &str) -> Result<Order, AppError> {
@@ -111,6 +144,11 @@ pub struct AccountService {
     db: Database,
 }
 
+pub struct RegisterAccountResult {
+    pub account: Account,
+    pub api_token: String,
+}
+
 impl AccountService {
     pub fn new(db: Database) -> Self {
         Self { db }
@@ -120,53 +158,32 @@ impl AccountService {
     pub async fn register_account(
         &self,
         request: RegisterAccountRequest,
-    ) -> Result<Account, AppError> {
+    ) -> Result<RegisterAccountResult, AppError> {
         info!("Registering new account: username={}", request.username);
 
         // Check if username already exists
         if let Some(_existing) = self.db.get_account_by_username(&request.username).await? {
             warn!("Username '{}' already exists", request.username);
-            return Err(AppError::NotFound(format!(
+            return Err(AppError::InvalidInput(format!(
                 "Username {} already exists",
                 request.username
             )));
         }
 
-        // Process EVM private key (now required)
-        let (evm_address, encrypted_pk) = {
-            // Generate address from private key
-            let address = match crate::utils::generate_evm_address_from_pk(&request.evm_pk) {
-                Ok(addr) => addr,
-                Err(e) => {
-                    error!("Failed to generate EVM address: {}", e);
-                    return Err(AppError::InvalidInput(format!(
-                        "Invalid EVM private key: {e}"
-                    )));
-                }
-            };
-
-            // Encrypt private key
-            let encrypted = match crate::utils::encrypt_private_key(&request.evm_pk) {
-                Ok(enc) => enc,
-                Err(e) => {
-                    error!("Failed to encrypt private key: {}", e);
-                    return Err(AppError::Internal(format!(
-                        "Failed to encrypt private key: {e}"
-                    )));
-                }
-            };
-
-            (Some(address), Some(encrypted))
-        };
+        let evm_address = crate::utils::normalize_evm_address(&request.evm_address)
+            .map_err(AppError::InvalidInput)?;
+        let api_token = crate::utils::generate_api_token();
+        let api_token_hash = crate::utils::hash_api_token(&api_token);
 
         let account = Account {
             id: 0, // This will be set by the database
             username: request.username.clone(),
             email: Some(request.email.clone()),
             telegram_id: Some(request.telegram_id),
-            evm_address,
-            encrypted_pk,
-            is_admin: request.is_admin.unwrap_or(false),
+            evm_address: Some(evm_address),
+            encrypted_pk: None,
+            api_token_hash: Some(api_token_hash),
+            is_admin: false,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };
@@ -177,7 +194,10 @@ impl AccountService {
             created_account.id, created_account.username
         );
 
-        Ok(created_account)
+        Ok(RegisterAccountResult {
+            account: created_account,
+            api_token,
+        })
     }
 
     /// Get account by username
@@ -229,12 +249,19 @@ impl BalanceService {
 
         for order in deposited_orders {
             match self.process_single_order(&order).await {
-                Ok(_) => {
-                    processed_count += 1;
-                    info!(
-                        "✅ Successfully processed deposited order: {}, amount: {} for account {}",
-                        order.order_id, order.amount, order.account_id
-                    );
+                Ok(processed) => {
+                    if processed {
+                        processed_count += 1;
+                        info!(
+                            "✅ Successfully processed deposited order: {}, amount: {} for account {}",
+                            order.order_id, order.amount, order.account_id
+                        );
+                    } else {
+                        info!(
+                            "⏭️ Skipped already-processed deposited order: {}",
+                            order.order_id
+                        );
+                    }
                 }
                 Err(e) => {
                     error!(
@@ -256,36 +283,64 @@ impl BalanceService {
     }
 
     /// Process a single deposited order
-    async fn process_single_order(&self, order: &Order) -> Result<(), AppError> {
+    async fn process_single_order(&self, order: &Order) -> Result<bool, AppError> {
         // Start a transaction to ensure atomicity
         let mut tx = self.db.begin_transaction().await?;
 
-        // Add amount to user's balance
-        match self
+        let claimed = self
+            .db
+            .mark_order_completed_if_deposited(&mut tx, &order.order_id)
+            .await?;
+        if !claimed {
+            tx.rollback().await?;
+            return Ok(false);
+        }
+
+        if let Err(e) = self
             .db
             .add_to_balance(&mut tx, order.account_id, &order.amount)
             .await
         {
-            Ok(_) => {
-                // Update order status to completed
-                self.db
-                    .update_order_status_tx(&mut tx, &order.order_id, OrderStatus::Completed, None)
-                    .await?;
-
-                // Commit transaction
-                tx.commit().await?;
-                Ok(())
-            }
-            Err(e) => {
-                // Rollback transaction on error
-                tx.rollback().await?;
-                Err(e)
-            }
+            tx.rollback().await?;
+            return Err(e);
         }
+
+        tx.commit().await?;
+        Ok(true)
     }
 
     /// Get account balance
     pub async fn get_account_balance(&self, account_id: i64) -> Result<Balance, AppError> {
         self.db.get_account_balance_record(account_id).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::OrderService;
+    use crate::error::AppError;
+
+    #[test]
+    fn validate_amount_accepts_positive_integer() {
+        assert!(OrderService::validate_amount("1250000").is_ok());
+    }
+
+    #[test]
+    fn validate_amount_rejects_decimal_values() {
+        let error = OrderService::validate_amount("1.2500").expect_err("decimal must be rejected");
+        assert!(matches!(error, AppError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn validate_amount_rejects_zero() {
+        let error = OrderService::validate_amount("0").expect_err("zero must be rejected");
+        assert!(matches!(error, AppError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn validate_amount_rejects_non_numeric_values() {
+        let error =
+            OrderService::validate_amount("abc").expect_err("non-numeric value must be rejected");
+        assert!(matches!(error, AppError::InvalidInput(_)));
     }
 }

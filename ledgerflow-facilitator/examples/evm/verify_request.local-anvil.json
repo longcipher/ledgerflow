@@ -1,0 +1,44 @@
+{
+  "x402Version": 2,
+  "paymentPayload": {
+    "x402Version": 2,
+    "accepted": {
+      "scheme": "exact",
+      "network": "eip155:31337",
+      "amount": "1000000",
+      "payTo": "0x1111111111111111111111111111111111111111",
+      "maxTimeoutSeconds": 300,
+      "asset": "0x2222222222222222222222222222222222222222",
+      "extra": {
+        "assetTransferMethod": "eip3009"
+      }
+    },
+    "payload": {
+      "signature": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "authorization": {
+        "from": "0x3333333333333333333333333333333333333333",
+        "to": "0x1111111111111111111111111111111111111111",
+        "value": "1000000",
+        "validAfter": "1735603200",
+        "validBefore": "1735603500",
+        "nonce": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      }
+    },
+    "resource": {
+      "url": "http://127.0.0.1:8545/local-resource",
+      "description": "LedgerFlow local anvil verify example",
+      "mimeType": "application/json"
+    }
+  },
+  "paymentRequirements": {
+    "scheme": "exact",
+    "network": "eip155:31337",
+    "amount": "1000000",
+    "payTo": "0x1111111111111111111111111111111111111111",
+    "maxTimeoutSeconds": 300,
+    "asset": "0x2222222222222222222222222222222222222222",
+    "extra": {
+      "assetTransferMethod": "eip3009"
+    }
+  }
+}

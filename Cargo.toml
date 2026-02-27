@@ -80,26 +80,9 @@ uuid = "1.21.0"
 
 # Base64 encoding
 base64 = "0.22.1"
-bcs = "0.1.6"
-
-# Sui SDK and related dependencies
-sui-json-rpc-types = { git = "https://github.com/MystenLabs/sui", package = "sui-json-rpc-types" }
-sui-keys = { git = "https://github.com/MystenLabs/sui", package = "sui-keys" }
-sui-rpc-api = { git = "https://github.com/MystenLabs/sui", package = "sui-rpc-api" }
-sui-sdk = { git = "https://github.com/MystenLabs/sui", package = "sui-sdk" }
-sui-types = { git = "https://github.com/MystenLabs/sui", package = "sui-types" }
 
 # URL handling
 url = "2.5"
 
-# Decimal arithmetic
-rust_decimal = "1.40.0"
-
-# Numeric traits
-num-traits = "0.2.19"
-
 # x402 protocol core types (v2 + CAIP-2)
 x402-types = "1.4.2"
-
-[patch.crates-io]
-merlin = { git = "https://github.com/aptos-labs/merlin" }

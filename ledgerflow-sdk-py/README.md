@@ -20,7 +20,13 @@ from ledgerflow_sdk import LedgerFlowClient, CreateOrderRequest, generate_order_
 client = LedgerFlowClient("https://api.ledgerflow.dev")
 
 # Create an order
-req = CreateOrderRequest(account_id=1, amount="10.00", broker_id="my-broker")
+req = CreateOrderRequest(
+    account_id=1,
+    amount="10.00",
+    token_address="0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    chain_id=1,
+    broker_id="my-broker",
+)
 order = client.create_order(req)
 print(f"Order: {order.order_id}, status: {order.status}")
 
@@ -35,8 +41,8 @@ print(f"Order ID: {order_id}")
 - `OrderStatus` — `Pending`, `Deposited`, `Completed`, `Failed`, `Cancelled`
 
 ### Request Types
-- `CreateOrderRequest(account_id, amount=None, token_address=None, chain_id=None, broker_id=None)`
-- `RegisterAccountRequest(username, email, telegram_id, evm_pk, is_admin=None)`
+- `CreateOrderRequest(account_id, amount, token_address, chain_id, broker_id=None)`
+- `RegisterAccountRequest(username, email, telegram_id, evm_address)`
 
 ### Response Types
 - `CreateOrderResponse` — `order_id`, `amount`, `token_address`, `chain_id`, `status`, `created_at`
