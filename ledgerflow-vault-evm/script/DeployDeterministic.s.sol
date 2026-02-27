@@ -107,7 +107,14 @@ contract DeployDeterministicPaymentVault is Script {
      * @notice Verifies that the deployment addresses match predictions
      * @dev Call this after deployment to ensure deterministic deployment worked
      */
-    function verifyDeployment(address, /* expectedImpl */ address expectedProxy) external view {
+    function verifyDeployment(
+        address,
+        /* expectedImpl */
+        address expectedProxy
+    )
+        external
+        view
+    {
         require(address(paymentVault) == expectedProxy, "Proxy address mismatch");
         console.log("Deployment verification passed");
     }

@@ -86,9 +86,9 @@ contract PaymentVault is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         __UUPSUpgradeable_init();
 
         // Set storage variables
-    usdcToken = IERC20(_usdcTokenAddress);
-    usdcPermitToken = IERC20Permit(_usdcTokenAddress);
-    usdc3009Token = IERC3009(_usdcTokenAddress);
+        usdcToken = IERC20(_usdcTokenAddress);
+        usdcPermitToken = IERC20Permit(_usdcTokenAddress);
+        usdc3009Token = IERC3009(_usdcTokenAddress);
     }
 
     // ============ DEPOSIT FUNCTIONS ============
@@ -186,17 +186,7 @@ contract PaymentVault is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         uint256 beforeBalance = usdcToken.balanceOf(address(this));
 
         // Submit the EIP-3009 authorization to the token contract.
-        usdc3009Token.transferWithAuthorization(
-            from,
-            address(this),
-            value,
-            validAfter,
-            validBefore,
-            nonce,
-            v,
-            r,
-            s
-        );
+        usdc3009Token.transferWithAuthorization(from, address(this), value, validAfter, validBefore, nonce, v, r, s);
 
         uint256 afterBalance = usdcToken.balanceOf(address(this));
         uint256 receivedAmount = afterBalance - beforeBalance;

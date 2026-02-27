@@ -64,7 +64,9 @@ contract MockERC20 {
         uint8, /* v */
         bytes32, /* r */
         bytes32 /* s */
-    ) external {
+    )
+        external
+    {
         require(deadline >= block.timestamp, "ERC20Permit: expired deadline");
 
         // For testing purposes, skip signature verification and just set allowance
