@@ -17928,9 +17928,9 @@ dependencies = [
 
 [[package]]
 name = "x402-types"
-version = "1.4.1"
+version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb2b0d5bfa87a7b80b61d6a04e0c99798f12dcda13180f2d8f1517a785f55e89"
+checksum = "d904d1ca5bc85e23d8ef049d2f16b9774b1ace23c3951ed734296c07b1fa666f"
 dependencies = [
  "alloy-primitives",
  "async-trait",
