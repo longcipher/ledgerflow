@@ -23,7 +23,7 @@ resolver = "3"
 [workspace.dependencies]
 # Web framework
 axum = "0.8.8"
-tokio = "1.49.0"
+tokio = "1.50.0"
 tokio-test = "0.4.5"
 tower-http = "0.6.8"
 
