@@ -1,0 +1,31 @@
+# Rust
+/target/
+Cargo.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.wasm
+pkg/
+
+# Node/Bun (if using for Tailwind)
+node_modules/
+bun.lockb
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Leptos
+/site/
+.rumdl_cache/

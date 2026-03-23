@@ -1,0 +1,6 @@
+warrant_id=warrant-1
+merchant_id=merchant-a
+tool_name=web-search
+amount=200
+payment_subject=caip10:eip155:8453:0xabc123
+digest=sha256:0dca458ca8be0b08cea87c07be741733a7a65f41d43bb44d99badfbc0ec31a4b

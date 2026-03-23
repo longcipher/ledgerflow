@@ -1,0 +1,15 @@
+//! Settlement-rail routing for verified LedgerFlow authorizations.
+
+#![allow(missing_docs)]
+#![allow(missing_debug_implementations)]
+
+pub mod rails;
+pub mod routing;
+pub mod subject;
+
+pub use crate::{
+    routing::{Facilitator, RailKind, RouteDecision, RoutingError},
+    subject::{
+        DefaultSubjectResolver, PaymentSubjectResolver, ResolvedSubject, SubjectResolutionError,
+    },
+};

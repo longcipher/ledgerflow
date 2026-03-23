@@ -1,0 +1,15 @@
+[package]
+name = "ledgerflow-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+clap = { workspace = true, features = ["derive"] }
+eyre.workspace = true
+ledgerflow-core = { path = "../../crates/ledgerflow-core" }
+ledgerflow-x402 = { path = "../../crates/ledgerflow-x402" }
+
+[lints]
+workspace = true

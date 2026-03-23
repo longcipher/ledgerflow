@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master"]
+    tags: ["v*"]
+  pull_request:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  ci:
+    name: Lint Test Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt, clippy
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-machete,taplo-cli,typos-cli,rumdl
+
+      - name: CI
+        run: just ci

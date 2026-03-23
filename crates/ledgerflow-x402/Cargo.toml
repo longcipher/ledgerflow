@@ -1,0 +1,20 @@
+[package]
+name = "ledgerflow-x402"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ciborium.workspace = true
+ledgerflow-core = { path = "../ledgerflow-core" }
+serde = { workspace = true, features = ["derive"] }
+thiserror.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+

@@ -1,0 +1,7 @@
+challenge_id=challenge-1
+payment_identifier=payment-1
+accepted_amount=200
+warrant_digest=sha256:0dca458ca8be0b08cea87c07be741733a7a65f41d43bb44d99badfbc0ec31a4b
+request_hash=sha256:a06e5ff6b5cc932c2a08cf2e218f92fbdbeb6df76a109b9208fadeb9ef43d1e7
+accepted_hash=sha256:2e3dae07a61a8a3de16b7527b3e845b9554e82e614ee9d7a111810d66ec25267
+payment_subject=caip10:eip155:8453:0xabc123

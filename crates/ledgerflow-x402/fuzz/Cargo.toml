@@ -1,0 +1,23 @@
+[package]
+name = "ledgerflow-x402-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.ledgerflow-x402]
+path = ".."
+
+[[bin]]
+name = "parse_extension"
+path = "fuzz_targets/parse_extension.rs"
+test = false
+doc = false
+bench = false

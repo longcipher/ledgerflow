@@ -1,0 +1,204 @@
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/akjong/ledgerflow"
+
+[workspace]
+members = ["bin/*", "crates/*"]
+exclude = [".github/"]
+resolver = "3"
+
+[workspace.dependencies]
+ciborium = "0.2.2"
+clap = "4.6.0"
+config = "0.15.22"
+criterion = "0.8.2"
+eyre = "0.6.12"
+proptest = "1.10.0"
+serde = "1.0.228"
+thiserror = "2.0.18"
+tokio = "1.50.0"
+tracing = "0.1.44"
+tracing-subscriber = "0.3.23"
+
+# Enable pedantic lints for stricter code quality
+# Priority -1 so individual lint settings override
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+
+# Pedantic overrides - these are too noisy or don't fit this codebase
+missing_errors_doc = "allow"        # Requires extensive documentation work
+missing_panics_doc = "allow"        # Requires extensive documentation work
+must_use_candidate = "allow"        # Very noisy, too subjective
+doc_markdown = "allow"              # Backticks in docs - low value for effort
+similar_names = "allow"             # Often false positives
+too_many_lines = "allow"            # Subjective function length
+module_name_repetitions = "allow"   # FooModule::Foo patterns are common and fine
+struct_excessive_bools = "allow"    # Sometimes structs legitimately need multiple bools
+fn_params_excessive_bools = "allow" # Sometimes functions legitimately need multiple bools
+items_after_statements = "allow"    # Style preference, not harmful
+uninlined_format_args = "allow"     # format!("{}", x) vs format!("{x}") is minor
+return_self_not_must_use = "allow"  # Builder pattern returns
+
+# Cast lints - many false positives in contexts where values are known to be in range
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+cast_precision_loss = "allow"
+cast_possible_wrap = "allow"
+# Note: cast_lossless is NOT allowed - prefer From::from() for clarity
+# Default::default() vs TypeName::default() is a style preference
+default_trait_access = "allow"
+# Sometimes separate match arms are clearer even if bodies are identical
+match_same_arms = "allow"
+# Some async functions don't await but are async for API consistency or future use
+unused_async = "allow"
+# let...else is new syntax, current style is fine
+manual_let_else = "allow"
+# Used underscore bindings are sometimes intentional for documentation
+used_underscore_binding = "allow"
+# &Option<T> vs Option<&T> - sometimes &Option is intentional
+ref_option_ref = "allow"
+ref_option = "allow"
+# Appending format! to String - push_str with format is equivalent
+format_push_string = "allow"
+# Case-sensitive extension comparison is often intentional
+case_sensitive_file_extension_comparisons = "allow"
+# Unnecessary wrapping in Result - sometimes for API consistency
+unnecessary_wraps = "allow"
+# Passing by value when not consumed - often cleaner API design
+needless_pass_by_value = "allow"
+# Small Copy types by reference - often for API consistency
+trivially_copy_pass_by_ref = "allow"
+# Underscore-prefixed bindings - used for documentation or future use
+no_effect_underscore_binding = "allow"
+# Closure vs method reference - closure syntax is clearer: .map(|s| s.to_string())
+redundant_closure_for_method_calls = "allow"
+
+# Panic safety - deny any operations that could panic
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+# Note: indexing_slicing lint is too strict and flags many safe uses
+# Instead, we rely on careful code review and bounds checking
+
+# Prohibit all allow attributes - no exceptions
+allow_attributes = "deny"
+
+# Allow large error types - error types need rich context for good UX
+result_large_err = "allow"
+
+# No debug macros in production code
+dbg_macro = "deny"
+
+# No incomplete code markers
+todo = "deny"
+unimplemented = "deny"
+
+# Use tracing instead of println/eprintln in library code
+# CLI crates override this via #![allow(...)] in lib.rs/main.rs
+print_stdout = "deny"
+print_stderr = "deny"
+
+# These are some of clippy's nursery (i.e., experimental) lints that we like.
+# By default, nursery lints are allowed. Some of the lints below have made good
+# suggestions which we fixed. The others didn't have any findings, so we can
+# assume they don't have that many false positives. Let's enable them to
+# prevent future problems.
+borrow_as_ptr = "warn"
+branches_sharing_code = "warn"
+clear_with_drain = "warn"
+cloned_instead_of_copied = "warn"
+collection_is_never_read = "warn"
+derive_partial_eq_without_eq = "warn"
+empty_line_after_doc_comments = "warn"
+empty_line_after_outer_attr = "warn"
+enum_glob_use = "warn"
+equatable_if_let = "warn"
+explicit_into_iter_loop = "warn"
+explicit_iter_loop = "warn"
+flat_map_option = "warn"
+from_iter_instead_of_collect = "warn"
+if_not_else = "warn"
+if_then_some_else_none = "warn"
+implicit_clone = "warn"
+imprecise_flops = "warn"
+iter_on_empty_collections = "warn"
+iter_on_single_items = "warn"
+iter_with_drain = "warn"
+iter_without_into_iter = "warn"
+large_stack_frames = "warn"
+manual_assert = "warn"
+manual_clamp = "warn"
+manual_is_variant_and = "warn"
+manual_string_new = "warn"
+missing_const_for_fn = "warn"
+mutex_integer = "warn"
+naive_bytecount = "warn"
+needless_bitwise_bool = "warn"
+needless_continue = "warn"
+needless_for_each = "warn"
+needless_pass_by_ref_mut = "warn"
+nonstandard_macro_braces = "warn"
+option_as_ref_cloned = "warn"
+or_fun_call = "warn"
+path_buf_push_overwrite = "warn"
+read_zero_byte_vec = "warn"
+redundant_clone = "warn"
+redundant_else = "warn"
+single_char_pattern = "warn"
+string_lit_as_bytes = "warn"
+string_lit_chars_any = "warn"
+suboptimal_flops = "warn"
+suspicious_operation_groupings = "warn"
+trailing_empty_array = "warn"
+trait_duplication_in_bounds = "warn"
+transmute_undefined_repr = "warn"
+trivial_regex = "warn"
+tuple_array_conversions = "warn"
+type_repetition_in_bounds = "warn"
+uninhabited_references = "warn"
+unnecessary_self_imports = "warn"
+unnecessary_struct_initialization = "warn"
+unnested_or_patterns = "warn"
+unused_peekable = "warn"
+unused_rounding = "warn"
+use_self = "warn"
+useless_let_if_seq = "warn"
+while_float = "warn"
+zero_sized_map_values = "warn"
+
+# These are nursery lints which have findings. Allow them for now. Some are not
+# quite mature enough for use in our codebase and some we don't really want.
+# Explicitly listing should make it easier to fix in the future.
+as_ptr_cast_mut = "allow"
+cognitive_complexity = "allow"
+debug_assert_with_mut_call = "allow"
+fallible_impl_from = "allow"
+future_not_send = "allow"
+needless_collect = "allow"
+non_send_fields_in_send_ty = "allow"
+redundant_pub_crate = "allow"
+significant_drop_in_scrutinee = "allow"
+significant_drop_tightening = "allow"
+too_long_first_doc_paragraph = "allow"
+
+[workspace.lints.rust]
+missing_debug_implementations = "warn"
+missing_docs = "warn"
+rust_2018_idioms = { level = "deny", priority = -1 }
+unreachable_pub = "warn"
+unused_must_use = "deny"
+
+[workspace.lints.rustdoc]
+all = "warn"
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

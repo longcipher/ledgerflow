@@ -1,0 +1,23 @@
+[package]
+name = "ledgerflow-core-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.ledgerflow-core]
+path = ".."
+
+[[bin]]
+name = "decode_warrant"
+path = "fuzz_targets/decode_warrant.rs"
+test = false
+doc = false
+bench = false

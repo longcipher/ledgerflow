@@ -1,0 +1,13 @@
+[package]
+name = "ledgerflow-facilitator"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ledgerflow-core = { path = "../ledgerflow-core" }
+thiserror.workspace = true
+
+[lints]
+workspace = true
