@@ -1,4 +1,4 @@
-//! Exchange rail adapter for offchain account settlement.
+//! Traditional payment gateway settlement adapter.
 
 use ledgerflow_core::VerifiedAuthorization;
 
@@ -8,21 +8,21 @@ use crate::{
     subject::ResolvedSubject,
 };
 
-/// Adapter for exchange or gateway-style settlement.
+/// Traditional payment gateway settlement adapter.
 #[derive(Clone, Copy, Debug, Default)]
-pub struct ExchangeRailAdapter;
+pub struct GatewayRailAdapter;
 
-impl RailAdapter for ExchangeRailAdapter {
+impl RailAdapter for GatewayRailAdapter {
     fn kind(&self) -> RailKind {
-        RailKind::Exchange
+        RailKind::Gateway
     }
 
     fn supports(&self, subject: &ResolvedSubject) -> bool {
-        matches!(subject.rail, RailKind::Exchange)
+        matches!(subject.rail, RailKind::Gateway)
     }
 
     fn quote(&self, _authorization: &VerifiedAuthorization) -> Result<RailQuote, RoutingError> {
-        Ok(RailQuote { rail: RailKind::Exchange, estimated_fee: 0, estimated_time_ms: 2_000 })
+        Ok(RailQuote { rail: RailKind::Gateway, estimated_fee: 10, estimated_time_ms: 5_000 })
     }
 
     fn settle(
@@ -30,8 +30,8 @@ impl RailAdapter for ExchangeRailAdapter {
         authorization: &VerifiedAuthorization,
     ) -> Result<SettlementReceipt, RoutingError> {
         Ok(SettlementReceipt {
-            rail: RailKind::Exchange,
-            transaction_id: format!("exchange-tx-{}", authorization.warrant_digest),
+            rail: RailKind::Gateway,
+            transaction_id: format!("gw-tx-{}", authorization.warrant_digest),
             settled_amount: authorization.amount,
         })
     }

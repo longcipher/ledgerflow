@@ -11,8 +11,8 @@ pub use crate::{
         AmountLimit, AssetRef, AudienceScope, AuthorizationContext, Constraint,
         DEFAULT_PROOF_FRESHNESS_MS, DelegationPolicy, MAX_WARRANT_CBOR_BYTES, MerchantConstraint,
         PaymentConstraint, PaymentRail, PaymentSubjectKind, PaymentSubjectRef, PeriodLimit, Proof,
-        ResourceConstraint, SignatureEnvelope, SignerRef, SigningAlgorithm, SponsorshipConstraint,
-        ToolConstraint, VerifiedAuthorization, WARRANT_VERSION_V1, Warrant, WarrantMetadata,
-        sha256_prefixed, verify_authorization,
+        ResourceConstraint, SignatureEnvelope, SignerRef, SigningAlgorithm, SigningKeyPair,
+        SponsorshipConstraint, ToolConstraint, VerifiedAuthorization, WARRANT_VERSION_V1, Warrant,
+        WarrantMetadata, sha256_prefixed, verify_authorization,
     },
 };

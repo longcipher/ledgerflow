@@ -4,7 +4,10 @@ use ledgerflow_core::VerifiedAuthorization;
 use thiserror::Error;
 
 use crate::{
-    rails::{RailAdapter, evm::EvmRailAdapter, exchange::ExchangeRailAdapter},
+    rails::{
+        RailAdapter, RailQuote, custodial::CustodialRailAdapter, evm::EvmRailAdapter,
+        exchange::ExchangeRailAdapter, gateway::GatewayRailAdapter,
+    },
     subject::{DefaultSubjectResolver, PaymentSubjectResolver, SubjectResolutionError},
 };
 
@@ -13,6 +16,8 @@ use crate::{
 pub enum RailKind {
     Evm,
     Exchange,
+    Custodial,
+    Gateway,
 }
 
 /// Final routing decision returned by the Facilitator.
@@ -21,6 +26,7 @@ pub struct RouteDecision {
     pub rail: RailKind,
     pub subject_value: String,
     pub merchant_flow_preserved: bool,
+    pub quote: Option<RailQuote>,
 }
 
 /// Routing failures surfaced by the Facilitator.
@@ -42,7 +48,12 @@ impl Default for Facilitator<DefaultSubjectResolver> {
     fn default() -> Self {
         Self::new(
             DefaultSubjectResolver,
-            vec![Box::new(EvmRailAdapter), Box::new(ExchangeRailAdapter)],
+            vec![
+                Box::new(EvmRailAdapter),
+                Box::new(ExchangeRailAdapter),
+                Box::new(CustodialRailAdapter),
+                Box::new(GatewayRailAdapter),
+            ],
         )
     }
 }
@@ -69,10 +80,13 @@ where
             .find(|adapter| adapter.supports(&resolved))
             .ok_or(RoutingError::NoCompatibleRail)?;
 
+        let quote = adapter.quote(authorization)?;
+
         Ok(RouteDecision {
             rail: adapter.kind(),
             subject_value: resolved.value,
             merchant_flow_preserved: true,
+            quote: Some(quote),
         })
     }
 }
@@ -115,6 +129,7 @@ mod tests {
 
         assert_eq!(route.rail, RailKind::Evm);
         assert!(route.merchant_flow_preserved);
+        assert!(route.quote.is_some());
     }
 
     #[test]
@@ -129,5 +144,40 @@ mod tests {
 
         assert_eq!(route.rail, RailKind::Exchange);
         assert!(route.merchant_flow_preserved);
+        assert!(route.quote.is_some());
+    }
+
+    #[test]
+    fn routes_custodial_subjects_to_the_custodial_adapter() {
+        let facilitator = Facilitator::default();
+        let authorization = verified_authorization(PaymentSubjectRef::new(
+            PaymentSubjectKind::Opaque,
+            "custodial:internal-id-abc",
+        ));
+
+        let route = facilitator.route(&authorization).expect("route");
+
+        assert_eq!(route.rail, RailKind::Custodial);
+        assert!(route.merchant_flow_preserved);
+        let quote = route.quote.expect("quote");
+        assert_eq!(quote.rail, RailKind::Custodial);
+        assert_eq!(quote.estimated_fee, 0);
+    }
+
+    #[test]
+    fn routes_gateway_subjects_to_the_gateway_adapter() {
+        let facilitator = Facilitator::default();
+        let authorization = verified_authorization(PaymentSubjectRef::new(
+            PaymentSubjectKind::Opaque,
+            "gateway:stripe:acct_abc123",
+        ));
+
+        let route = facilitator.route(&authorization).expect("route");
+
+        assert_eq!(route.rail, RailKind::Gateway);
+        assert!(route.merchant_flow_preserved);
+        let quote = route.quote.expect("quote");
+        assert_eq!(quote.rail, RailKind::Gateway);
+        assert_eq!(quote.estimated_fee, 10);
     }
 }

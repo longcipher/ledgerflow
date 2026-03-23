@@ -1,4 +1,4 @@
-//! Exchange rail adapter for offchain account settlement.
+//! Custodial ledger settlement adapter.
 
 use ledgerflow_core::VerifiedAuthorization;
 
@@ -8,21 +8,21 @@ use crate::{
     subject::ResolvedSubject,
 };
 
-/// Adapter for exchange or gateway-style settlement.
+/// Custodial ledger settlement adapter.
 #[derive(Clone, Copy, Debug, Default)]
-pub struct ExchangeRailAdapter;
+pub struct CustodialRailAdapter;
 
-impl RailAdapter for ExchangeRailAdapter {
+impl RailAdapter for CustodialRailAdapter {
     fn kind(&self) -> RailKind {
-        RailKind::Exchange
+        RailKind::Custodial
     }
 
     fn supports(&self, subject: &ResolvedSubject) -> bool {
-        matches!(subject.rail, RailKind::Exchange)
+        matches!(subject.rail, RailKind::Custodial)
     }
 
     fn quote(&self, _authorization: &VerifiedAuthorization) -> Result<RailQuote, RoutingError> {
-        Ok(RailQuote { rail: RailKind::Exchange, estimated_fee: 0, estimated_time_ms: 2_000 })
+        Ok(RailQuote { rail: RailKind::Custodial, estimated_fee: 0, estimated_time_ms: 1_000 })
     }
 
     fn settle(
@@ -30,13 +30,13 @@ impl RailAdapter for ExchangeRailAdapter {
         authorization: &VerifiedAuthorization,
     ) -> Result<SettlementReceipt, RoutingError> {
         Ok(SettlementReceipt {
-            rail: RailKind::Exchange,
-            transaction_id: format!("exchange-tx-{}", authorization.warrant_digest),
+            rail: RailKind::Custodial,
+            transaction_id: format!("custodial-tx-{}", authorization.warrant_digest),
             settled_amount: authorization.amount,
         })
     }
 
     fn verify(&self, _receipt: &SettlementReceipt) -> Result<VerificationResult, RoutingError> {
-        Ok(VerificationResult { verified: true, confirmations: 1 })
+        Ok(VerificationResult { verified: true, confirmations: 0 })
     }
 }

@@ -3,7 +3,9 @@
 use std::io::Cursor;
 
 use ciborium::{de::from_reader, ser::into_writer};
-use ledgerflow_core::{PaymentSubjectRef, Proof, SignerRef, Warrant, sha256_prefixed};
+use ledgerflow_core::{
+    PaymentSubjectRef, Proof, SignerRef, SigningKeyPair, Warrant, sha256_prefixed,
+};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use thiserror::Error;
 
@@ -192,10 +194,10 @@ impl WarrantTransport {
 }
 
 /// Inputs that vary per payment payload while the x402 shape stays fixed.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct PaymentPayloadSeed {
     pub payment_subject: PaymentSubjectRef,
-    pub signer: SignerRef,
+    pub signer: SigningKeyPair,
     pub created_at_ms: u64,
     pub nonce: String,
     pub payment_identifier: Option<String>,
@@ -262,7 +264,7 @@ pub fn build_payment_payload(
             challenge_id: challenge.challenge_id.clone(),
             warrant,
             proof,
-            signer: seed.signer,
+            signer: seed.signer.signer_ref(),
             payment_subject: seed.payment_subject,
         }),
     }
@@ -292,8 +294,8 @@ mod tests {
     use ledgerflow_core::{
         AmountLimit, AssetRef, AudienceScope, Constraint, DelegationPolicy, MerchantConstraint,
         PaymentConstraint, PaymentRail, PaymentSubjectKind, PaymentSubjectRef, ResourceConstraint,
-        SignerRef, SigningAlgorithm, SponsorshipConstraint, ToolConstraint, WARRANT_VERSION_V1,
-        Warrant, WarrantMetadata,
+        SigningKeyPair, SponsorshipConstraint, ToolConstraint, WARRANT_VERSION_V1, Warrant,
+        WarrantMetadata,
     };
     use proptest::prelude::*;
 
@@ -302,12 +304,22 @@ mod tests {
         canonical_accepted_hash, canonical_request_hash, merchant_payment_required,
     };
 
+    fn issuer_keys() -> SigningKeyPair {
+        SigningKeyPair::from_bytes(&[1u8; 32])
+    }
+
+    fn agent_keys() -> SigningKeyPair {
+        SigningKeyPair::from_bytes(&[2u8; 32])
+    }
+
     fn sample_warrant() -> Warrant {
+        let issuer = issuer_keys();
+        let agent = agent_keys();
         Warrant {
             version: WARRANT_VERSION_V1,
             warrant_id: "warrant-1".to_string(),
-            issuer: SignerRef::new(SigningAlgorithm::Ed25519, "issuer-key"),
-            subject_signer: SignerRef::new(SigningAlgorithm::Ed25519, "agent-key"),
+            issuer: issuer.signer_ref(),
+            subject_signer: agent.signer_ref(),
             payment_subjects: vec![PaymentSubjectRef::new(
                 PaymentSubjectKind::Caip10,
                 "caip10:eip155:8453:0xabc123",
@@ -344,10 +356,9 @@ mod tests {
                 }),
             ],
             metadata: WarrantMetadata::default(),
-            signature: SignerRef::new(SigningAlgorithm::Ed25519, "issuer-key")
-                .sign_message("placeholder"),
+            signature: issuer.sign(b"placeholder"),
         }
-        .sign()
+        .sign_with(&issuer)
     }
 
     #[test]
@@ -395,7 +406,7 @@ mod tests {
                     PaymentSubjectKind::Caip10,
                     "caip10:eip155:8453:0xabc123",
                 ),
-                signer: SignerRef::new(SigningAlgorithm::Ed25519, "agent-key"),
+                signer: agent_keys(),
                 created_at_ms: 2_000,
                 nonce: "nonce-1".to_string(),
                 payment_identifier: Some("payment-1".to_string()),
@@ -451,7 +462,7 @@ mod tests {
                     PaymentSubjectKind::Caip10,
                     "caip10:eip155:8453:0xabc123",
                 ),
-                signer: SignerRef::new(SigningAlgorithm::Ed25519, "agent-key"),
+                signer: agent_keys(),
                 created_at_ms: 2_000,
                 nonce: "nonce-1".to_string(),
                 payment_identifier: Some("payment-1".to_string()),

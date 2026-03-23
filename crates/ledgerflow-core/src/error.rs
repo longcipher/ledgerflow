@@ -23,6 +23,10 @@ pub enum AuthorizationError {
     MerchantNotAllowed { merchant_id: String },
     #[error("tool `{tool_name}` is not allowed by the warrant")]
     ToolNotAllowed { tool_name: String },
+    #[error("model provider `{model_provider}` is not allowed by the warrant")]
+    ModelProviderNotAllowed { model_provider: String },
+    #[error("action label `{action_label}` is not allowed by the warrant")]
+    ActionLabelNotAllowed { action_label: String },
     #[error("request method `{method}` is not allowed by the warrant")]
     HttpMethodNotAllowed { method: String },
     #[error("request path `{path}` is not allowed by the warrant")]
@@ -59,6 +63,8 @@ pub enum AuthorizationError {
     DelegationNotAllowed,
     #[error("presented delegation depth {presented} exceeds the allowed depth {allowed}")]
     DelegationDepthExceeded { presented: u8, allowed: u8 },
+    #[error("sponsorship is not allowed for this warrant")]
+    SponsorshipNotAllowed,
 }
 
 /// Errors returned while encoding or decoding LedgerFlow wire payloads.

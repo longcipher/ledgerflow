@@ -10,7 +10,10 @@ workspace = true
 
 [dependencies]
 ciborium.workspace = true
+ed25519-dalek.workspace = true
+rand_core.workspace = true
 serde = { workspace = true, features = ["derive"] }
+serde_bytes = "0.11.19"
 sha2 = "0.10.9"
 thiserror.workspace = true
 

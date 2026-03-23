@@ -27,7 +27,7 @@ pub trait PaymentSubjectResolver {
     ) -> Result<ResolvedSubject, SubjectResolutionError>;
 }
 
-/// Default subject resolver for the MVP's onchain and exchange rails.
+/// Default subject resolver for the MVP's onchain, exchange, custodial, and gateway rails.
 #[derive(Clone, Debug, Default)]
 pub struct DefaultSubjectResolver;
 
@@ -46,12 +46,16 @@ impl PaymentSubjectResolver for DefaultSubjectResolver {
             PaymentSubjectKind::FacilitatorAccount if subject.value.starts_with("okx:") => {
                 RailKind::Exchange
             }
-            PaymentSubjectKind::Opaque => {
+            PaymentSubjectKind::Opaque if subject.value.starts_with("gateway:") => {
+                RailKind::Gateway
+            }
+            PaymentSubjectKind::Opaque => RailKind::Custodial,
+            PaymentSubjectKind::FacilitatorAccount => RailKind::Exchange,
+            _ => {
                 return Err(SubjectResolutionError::UnsupportedSubject {
                     value: subject.value.clone(),
                 });
             }
-            PaymentSubjectKind::FacilitatorAccount => RailKind::Exchange,
         };
 
         Ok(ResolvedSubject { rail, value: subject.value.clone() })

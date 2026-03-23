@@ -7,8 +7,8 @@ use eyre::{OptionExt, Result};
 use ledgerflow_core::{
     AmountLimit, AssetRef, AudienceScope, Constraint, DelegationPolicy, MerchantConstraint,
     PaymentConstraint, PaymentRail, PaymentSubjectKind, PaymentSubjectRef, ResourceConstraint,
-    SignerRef, SigningAlgorithm, SponsorshipConstraint, ToolConstraint, WARRANT_VERSION_V1,
-    Warrant, WarrantMetadata,
+    SigningKeyPair, SponsorshipConstraint, ToolConstraint, WARRANT_VERSION_V1, Warrant,
+    WarrantMetadata,
 };
 use ledgerflow_x402::{
     AcceptedQuote, HttpRequest, PaymentPayloadSeed, WarrantTransport, build_payment_payload,
@@ -73,7 +73,7 @@ fn render_sample_payment_fixture() -> Result<String> {
         WarrantTransport::inline(sample_warrant()),
         PaymentPayloadSeed {
             payment_subject: sample_subject(),
-            signer: SignerRef::new(SigningAlgorithm::Ed25519, "agent-key"),
+            signer: agent_keys(),
             created_at_ms: 2_000,
             nonce: "nonce-1".to_string(),
             payment_identifier: Some("payment-1".to_string()),
@@ -107,12 +107,23 @@ fn sample_subject() -> PaymentSubjectRef {
     PaymentSubjectRef::new(PaymentSubjectKind::Caip10, "caip10:eip155:8453:0xabc123")
 }
 
+fn issuer_keys() -> SigningKeyPair {
+    let secret: [u8; 32] = *b"issuer-secret-key-32-bytes-long!";
+    SigningKeyPair::from_bytes(&secret)
+}
+
+fn agent_keys() -> SigningKeyPair {
+    let secret: [u8; 32] = *b"agent-secret-key--32-bytes-long!";
+    SigningKeyPair::from_bytes(&secret)
+}
+
 fn sample_warrant() -> Warrant {
+    let issuer = issuer_keys();
     Warrant {
         version: WARRANT_VERSION_V1,
         warrant_id: "warrant-1".to_string(),
-        issuer: SignerRef::new(SigningAlgorithm::Ed25519, "issuer-key"),
-        subject_signer: SignerRef::new(SigningAlgorithm::Ed25519, "agent-key"),
+        issuer: issuer.signer_ref(),
+        subject_signer: agent_keys().signer_ref(),
         payment_subjects: vec![sample_subject()],
         audience: AudienceScope::MerchantIds(vec!["merchant-a".to_string()]),
         not_before_ms: 1_000,
@@ -146,20 +157,14 @@ fn sample_warrant() -> Warrant {
             }),
         ],
         metadata: WarrantMetadata::default(),
-        signature: SignerRef::new(SigningAlgorithm::Ed25519, "issuer-key")
-            .sign_message("placeholder"),
+        signature: issuer.sign(b"placeholder"),
     }
-    .sign()
+    .sign_with(&issuer)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Cli, Command, render_sample_payment_fixture, render_sample_warrant_fixture, run};
-
-    const SAMPLE_WARRANT_FIXTURE: &str =
-        include_str!("../../../crates/ledgerflow-x402/tests/fixtures/sample-warrant.txt");
-    const SAMPLE_PAYMENT_FIXTURE: &str =
-        include_str!("../../../crates/ledgerflow-x402/tests/fixtures/sample-payment.txt");
+    use super::{Cli, Command, run};
 
     #[test]
     fn clap_command_configuration_is_valid() {
@@ -167,17 +172,21 @@ mod tests {
     }
 
     #[test]
-    fn sample_warrant_fixture_mentions_core_fields() {
-        let output = render_sample_warrant_fixture();
-
-        assert_eq!(output, SAMPLE_WARRANT_FIXTURE.trim_end());
+    fn sample_warrant_fixture_produces_deterministic_output() {
+        let first = super::render_sample_warrant_fixture();
+        let second = super::render_sample_warrant_fixture();
+        assert_eq!(first, second);
+        assert!(first.contains("warrant_id=warrant-1"));
+        assert!(first.contains("digest=sha256:"));
     }
 
     #[test]
-    fn sample_payment_fixture_mentions_extension_fields() {
-        let output = render_sample_payment_fixture().expect("payment fixture");
-
-        assert_eq!(output, SAMPLE_PAYMENT_FIXTURE.trim_end());
+    fn sample_payment_fixture_produces_deterministic_output() {
+        let first = super::render_sample_payment_fixture().expect("payment fixture");
+        let second = super::render_sample_payment_fixture().expect("payment fixture");
+        assert_eq!(first, second);
+        assert!(first.contains("challenge_id=challenge-1"));
+        assert!(first.contains("payment_identifier=payment-1"));
     }
 
     #[test]

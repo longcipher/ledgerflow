@@ -10,7 +10,7 @@ use thiserror::Error;
 
 use crate::{
     extension::{
-        AcceptedQuote, HttpRequest, LedgerFlowChallenge, PaymentPayload, WarrantTransport,
+        HttpRequest, LedgerFlowChallenge, PaymentPayload, WarrantTransport,
         canonical_accepted_hash, canonical_request_hash,
     },
     replay::{ReplayConflict, ReplayFingerprint, ReplayStore},
@@ -121,7 +121,7 @@ where
         let accepted_hash = canonical_accepted_hash(&payload.accepted);
         let request_hash = canonical_request_hash(request);
 
-        self.claim_replay(challenge, extension, &request_hash, &accepted_hash)?;
+        self.claim_replay(challenge, extension, &request_hash, &accepted_hash, now_ms)?;
 
         let warrant = self.resolve_warrant(&extension.warrant)?;
         let proof_freshness_ms = if challenge.proof_freshness_ms == 0 {
@@ -133,13 +133,23 @@ where
             merchant_id: challenge.merchant_id.clone(),
             merchant_host: request.authority.clone(),
             tool_name: tool_name.to_string(),
+            model_provider: String::new(),
+            action_label: String::new(),
             http_method: request.method.clone(),
             path_and_query: request.path_and_query.clone(),
             selected_quote_amount: payload.accepted.amount,
             asset: payload.accepted.asset.clone(),
             scheme: payload.accepted.scheme.clone(),
             payee_id: payload.accepted.payee_id.clone(),
-            rail: payment_rail(&payload.accepted, &extension.payment_subject),
+            rail: match extension.payment_subject.kind {
+                ledgerflow_core::PaymentSubjectKind::ExchangeAccount => {
+                    ledgerflow_core::PaymentRail::Exchange
+                }
+                ledgerflow_core::PaymentSubjectKind::FacilitatorAccount => {
+                    ledgerflow_core::PaymentRail::Exchange
+                }
+                _ => ledgerflow_core::PaymentRail::Onchain,
+            },
             challenge_id: challenge.challenge_id.clone(),
             request_hash,
             accepted_hash,
@@ -163,6 +173,7 @@ where
         extension: &crate::extension::LedgerFlowAuthorizationExtension,
         request_hash: &str,
         accepted_hash: &str,
+        now_ms: u64,
     ) -> Result<(), MerchantVerificationError> {
         let fingerprint = ReplayFingerprint {
             challenge_id: challenge.challenge_id.clone(),
@@ -171,7 +182,7 @@ where
             accepted_hash: accepted_hash.to_string(),
         };
 
-        match self.replay_store.claim_nonce(fingerprint) {
+        match self.replay_store.claim_nonce(fingerprint, now_ms) {
             Ok(()) => Ok(()),
             Err(ReplayConflict { existing })
                 if existing.request_hash == request_hash &&
@@ -202,27 +213,22 @@ where
     }
 }
 
-fn payment_rail(
-    accepted: &AcceptedQuote,
-    payment_subject: &ledgerflow_core::PaymentSubjectRef,
-) -> ledgerflow_core::PaymentRail {
-    if payment_subject.kind == ledgerflow_core::PaymentSubjectKind::ExchangeAccount ||
-        accepted.payee_id.starts_with("exchange:")
-    {
-        ledgerflow_core::PaymentRail::Exchange
-    } else {
-        ledgerflow_core::PaymentRail::Onchain
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use ledgerflow_core::{
         AmountLimit, AssetRef, AudienceScope, Constraint, DelegationPolicy, MerchantConstraint,
         PaymentConstraint, PaymentRail, PaymentSubjectKind, PaymentSubjectRef, ResourceConstraint,
-        SignerRef, SigningAlgorithm, SponsorshipConstraint, ToolConstraint, WARRANT_VERSION_V1,
-        Warrant, WarrantMetadata,
+        SigningKeyPair, SponsorshipConstraint, ToolConstraint, WARRANT_VERSION_V1, Warrant,
+        WarrantMetadata,
     };
+
+    fn issuer_keys() -> SigningKeyPair {
+        SigningKeyPair::from_bytes(&[1u8; 32])
+    }
+
+    fn agent_keys() -> SigningKeyPair {
+        SigningKeyPair::from_bytes(&[2u8; 32])
+    }
 
     use crate::{
         extension::{
@@ -234,11 +240,13 @@ mod tests {
     };
 
     fn sample_warrant(payment_subject: PaymentSubjectRef, rail: PaymentRail) -> Warrant {
+        let issuer = issuer_keys();
+        let agent = agent_keys();
         Warrant {
             version: WARRANT_VERSION_V1,
             warrant_id: "warrant-1".to_string(),
-            issuer: SignerRef::new(SigningAlgorithm::Ed25519, "issuer-key"),
-            subject_signer: SignerRef::new(SigningAlgorithm::Ed25519, "agent-key"),
+            issuer: issuer.signer_ref(),
+            subject_signer: agent.signer_ref(),
             payment_subjects: vec![payment_subject],
             audience: AudienceScope::MerchantIds(vec!["merchant-a".to_string()]),
             not_before_ms: 1_000,
@@ -272,10 +280,9 @@ mod tests {
                 }),
             ],
             metadata: WarrantMetadata::default(),
-            signature: SignerRef::new(SigningAlgorithm::Ed25519, "issuer-key")
-                .sign_message("placeholder"),
+            signature: issuer.sign(b"placeholder"),
         }
-        .sign()
+        .sign_with(&issuer)
     }
 
     fn challenge(accepted: AcceptedQuote) -> LedgerFlowChallenge {
@@ -299,7 +306,7 @@ mod tests {
             WarrantTransport::inline(sample_warrant(subject.clone(), PaymentRail::Onchain)),
             PaymentPayloadSeed {
                 payment_subject: subject,
-                signer: SignerRef::new(SigningAlgorithm::Ed25519, "agent-key"),
+                signer: agent_keys(),
                 created_at_ms: 2_000,
                 nonce: "nonce-1".to_string(),
                 payment_identifier: Some("payment-1".to_string()),
@@ -338,7 +345,7 @@ mod tests {
             WarrantTransport::inline(warrant.clone()),
             PaymentPayloadSeed {
                 payment_subject: subject.clone(),
-                signer: SignerRef::new(SigningAlgorithm::Ed25519, "agent-key"),
+                signer: agent_keys(),
                 created_at_ms: 2_000,
                 nonce: "nonce-1".to_string(),
                 payment_identifier: Some("payment-1".to_string()),
@@ -357,7 +364,7 @@ mod tests {
             WarrantTransport::inline(warrant),
             PaymentPayloadSeed {
                 payment_subject: subject,
-                signer: SignerRef::new(SigningAlgorithm::Ed25519, "agent-key"),
+                signer: agent_keys(),
                 created_at_ms: 2_100,
                 nonce: "nonce-1".to_string(),
                 payment_identifier: Some("payment-2".to_string()),
@@ -387,7 +394,7 @@ mod tests {
             WarrantTransport::inline(warrant),
             PaymentPayloadSeed {
                 payment_subject: subject,
-                signer: SignerRef::new(SigningAlgorithm::Ed25519, "agent-key"),
+                signer: agent_keys(),
                 created_at_ms: 2_000,
                 nonce: "nonce-1".to_string(),
                 payment_identifier: Some("payment-1".to_string()),
@@ -429,7 +436,7 @@ mod tests {
             WarrantTransport::inline(warrant),
             PaymentPayloadSeed {
                 payment_subject: subject.clone(),
-                signer: SignerRef::new(SigningAlgorithm::Ed25519, "agent-key"),
+                signer: agent_keys(),
                 created_at_ms: 2_000,
                 nonce: "nonce-1".to_string(),
                 payment_identifier: Some("payment-1".to_string()),
@@ -446,7 +453,7 @@ mod tests {
             WarrantTransport::digest_ref(warrant_digest),
             PaymentPayloadSeed {
                 payment_subject: subject,
-                signer: SignerRef::new(SigningAlgorithm::Ed25519, "agent-key"),
+                signer: agent_keys(),
                 created_at_ms: 2_100,
                 nonce: "nonce-2".to_string(),
                 payment_identifier: Some("payment-2".to_string()),
@@ -474,7 +481,7 @@ mod tests {
             WarrantTransport::digest_ref("sha256:missing"),
             PaymentPayloadSeed {
                 payment_subject: subject,
-                signer: SignerRef::new(SigningAlgorithm::Ed25519, "agent-key"),
+                signer: agent_keys(),
                 created_at_ms: 2_000,
                 nonce: "nonce-1".to_string(),
                 payment_identifier: Some("payment-1".to_string()),

@@ -4,16 +4,16 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use ledgerflow_core::{
     AmountLimit, AssetRef, AudienceScope, AuthorizationContext, Constraint, DelegationPolicy,
     MerchantConstraint, PaymentConstraint, PaymentRail, PaymentSubjectKind, PaymentSubjectRef,
-    Proof, ResourceConstraint, SignerRef, SigningAlgorithm, SponsorshipConstraint, ToolConstraint,
+    Proof, ResourceConstraint, SigningKeyPair, SponsorshipConstraint, ToolConstraint,
     WARRANT_VERSION_V1, Warrant, WarrantMetadata, sha256_prefixed, verify_authorization,
 };
 
-fn issuer() -> SignerRef {
-    SignerRef::new(SigningAlgorithm::Ed25519, "issuer-key")
+fn issuer() -> SigningKeyPair {
+    SigningKeyPair::from_bytes(&[1u8; 32])
 }
 
-fn subject_signer() -> SignerRef {
-    SignerRef::new(SigningAlgorithm::Ed25519, "agent-key")
+fn subject_signer() -> SigningKeyPair {
+    SigningKeyPair::from_bytes(&[2u8; 32])
 }
 
 fn subject_ref() -> PaymentSubjectRef {
@@ -21,11 +21,12 @@ fn subject_ref() -> PaymentSubjectRef {
 }
 
 fn warrant() -> Warrant {
+    let issuer_key = issuer();
     Warrant {
         version: WARRANT_VERSION_V1,
         warrant_id: "warrant-1".to_string(),
-        issuer: issuer(),
-        subject_signer: subject_signer(),
+        issuer: issuer_key.signer_ref(),
+        subject_signer: subject_signer().signer_ref(),
         payment_subjects: vec![subject_ref()],
         audience: AudienceScope::MerchantIds(vec!["merchant-a".to_string()]),
         not_before_ms: 1_000,
@@ -59,9 +60,9 @@ fn warrant() -> Warrant {
             }),
         ],
         metadata: WarrantMetadata::default(),
-        signature: issuer().sign_message("placeholder"),
+        signature: issuer_key.sign(b"placeholder"),
     }
-    .sign()
+    .sign_with(&issuer_key)
 }
 
 fn context() -> AuthorizationContext {
@@ -69,6 +70,8 @@ fn context() -> AuthorizationContext {
         merchant_id: "merchant-a".to_string(),
         merchant_host: "merchant-a.example".to_string(),
         tool_name: "web-search".to_string(),
+        model_provider: String::new(),
+        action_label: String::new(),
         http_method: "GET".to_string(),
         path_and_query: "/search?q=ledgerflow".to_string(),
         selected_quote_amount: 200,

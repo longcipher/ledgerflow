@@ -8,6 +8,11 @@ pub mod routing;
 pub mod subject;
 
 pub use crate::{
+    rails::{
+        RailAdapter, RailQuote, SettlementReceipt, VerificationResult,
+        custodial::CustodialRailAdapter, evm::EvmRailAdapter, exchange::ExchangeRailAdapter,
+        gateway::GatewayRailAdapter,
+    },
     routing::{Facilitator, RailKind, RouteDecision, RoutingError},
     subject::{
         DefaultSubjectResolver, PaymentSubjectResolver, ResolvedSubject, SubjectResolutionError,
