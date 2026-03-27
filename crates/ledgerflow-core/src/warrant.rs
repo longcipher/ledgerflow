@@ -10,7 +10,10 @@ use ed25519_dalek::{Signature, Signer as _, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::error::{AuthorizationError, Result, WireError, WireResult};
+use crate::{
+    constraint::verify_all,
+    error::{AuthorizationError, Result, WireError, WireResult},
+};
 
 /// Default proof freshness window for merchant verification.
 pub const DEFAULT_PROOF_FRESHNESS_MS: u64 = 60_000;
@@ -20,6 +23,54 @@ pub const WARRANT_VERSION_V1: u16 = 1;
 
 /// Maximum accepted size for serialized warrant payloads.
 pub const MAX_WARRANT_CBOR_BYTES: usize = 64 * 1024;
+
+// ---------------------------------------------------------------------------
+// CborCodec: Extension trait for CBOR encode/decode
+// ---------------------------------------------------------------------------
+
+/// Extension trait for types that support CBOR serialization with size limits.
+///
+/// # Design Pattern: Extension Trait
+///
+/// Provides a uniform `encode_cbor()` / `decode_cbor()` interface across
+/// domain types. Implementations can override the default max-payload size
+/// via [`max_cbor_bytes`](Self::max_cbor_bytes).
+///
+/// # Example
+///
+/// ```ignore
+/// use ledgerflow_core::warrant::CborCodec;
+///
+/// let bytes = warrant.encode_cbor()?;
+/// let decoded = Warrant::decode_cbor(&bytes)?;
+/// ```
+pub trait CborCodec: serde::Serialize + serde::de::DeserializeOwned {
+    /// Maximum payload size accepted by [`decode_cbor`](Self::decode_cbor).
+    ///
+    /// Override this for types with different size constraints.
+    fn max_cbor_bytes() -> usize {
+        MAX_WARRANT_CBOR_BYTES
+    }
+
+    /// Encodes this value as CBOR bytes.
+    fn encode_cbor(&self) -> WireResult<Vec<u8>> {
+        let mut bytes = Vec::new();
+        into_writer(self, &mut bytes)
+            .map_err(|error| WireError::Serialization(error.to_string()))?;
+        Ok(bytes)
+    }
+
+    /// Decodes a value from CBOR bytes, enforcing the size limit.
+    fn decode_cbor(bytes: &[u8]) -> WireResult<Self> {
+        if bytes.len() > Self::max_cbor_bytes() {
+            return Err(WireError::PayloadTooLarge {
+                size: bytes.len(),
+                max: Self::max_cbor_bytes(),
+            });
+        }
+        from_reader(bytes).map_err(|error| WireError::Deserialization(error.to_string()))
+    }
+}
 
 /// Hashes bytes as a lowercase hexadecimal SHA-256 digest with a `sha256:` prefix.
 #[must_use]
@@ -481,6 +532,9 @@ pub struct Warrant {
     pub signature: SignatureEnvelope,
 }
 
+/// Implements the [`CborCodec`] trait for [`Warrant`].
+impl CborCodec for Warrant {}
+
 impl Warrant {
     /// Signs this warrant using the issuer's signing key pair.
     #[must_use]
@@ -497,26 +551,20 @@ impl Warrant {
     }
 
     /// Encodes the warrant as CBOR bytes.
+    ///
+    /// Delegates to [`CborCodec::encode_cbor`].
     pub fn encode_cbor(&self) -> WireResult<Vec<u8>> {
-        let mut bytes = Vec::new();
-        into_writer(self, &mut bytes)
-            .map_err(|error| WireError::Serialization(error.to_string()))?;
-        Ok(bytes)
+        <Self as CborCodec>::encode_cbor(self)
     }
 
     /// Decodes a warrant from CBOR bytes.
+    ///
+    /// Delegates to [`CborCodec::decode_cbor`].
     pub fn decode_cbor(bytes: &[u8]) -> WireResult<Self> {
-        if bytes.len() > MAX_WARRANT_CBOR_BYTES {
-            return Err(WireError::PayloadTooLarge {
-                size: bytes.len(),
-                max: MAX_WARRANT_CBOR_BYTES,
-            });
-        }
-
-        from_reader(bytes).map_err(|error| WireError::Deserialization(error.to_string()))
+        <Self as CborCodec>::decode_cbor(bytes)
     }
 
-    fn canonical_unsigned_payload(&self) -> String {
+    pub(crate) fn canonical_unsigned_payload(&self) -> String {
         let subjects: Vec<String> =
             self.payment_subjects.iter().map(PaymentSubjectRef::canonical).collect();
         let constraints: Vec<String> = self.constraints.iter().map(Constraint::canonical).collect();
@@ -537,7 +585,7 @@ impl Warrant {
         )
     }
 
-    fn canonical_signed_payload(&self) -> String {
+    pub(crate) fn canonical_signed_payload(&self) -> String {
         format!(
             "{};signature={}:{}",
             self.canonical_unsigned_payload(),
@@ -546,7 +594,7 @@ impl Warrant {
         )
     }
 
-    fn verify_signature(&self) -> bool {
+    pub(crate) fn verify_signature(&self) -> bool {
         let message = self.canonical_unsigned_payload();
         self.signature.verify(&self.issuer, message.as_bytes())
     }
@@ -607,7 +655,7 @@ impl Proof {
         )
     }
 
-    fn verify_signature(&self, signer: &SignerRef) -> bool {
+    pub(crate) fn verify_signature(&self, signer: &SignerRef) -> bool {
         self.signer_key == signer.public_key &&
             self.signature.verify(signer, self.preimage().as_bytes())
     }
@@ -728,17 +776,7 @@ pub fn verify_authorization(
         });
     }
 
-    for constraint in &warrant.constraints {
-        match constraint {
-            Constraint::Merchant(constraint) => verify_merchant_constraint(constraint, context)?,
-            Constraint::Resource(constraint) => verify_resource_constraint(constraint, context)?,
-            Constraint::Tool(constraint) => verify_tool_constraint(constraint, context)?,
-            Constraint::Payment(constraint) => verify_payment_constraint(constraint, context)?,
-            Constraint::Sponsorship(constraint) => {
-                verify_sponsorship_constraint(constraint, context)?;
-            }
-        }
-    }
+    verify_all(&warrant.constraints, context)?;
 
     Ok(VerifiedAuthorization {
         merchant_id: context.merchant_id.clone(),
@@ -754,136 +792,6 @@ pub fn verify_authorization(
         payee_id: context.payee_id.clone(),
         rail: context.rail,
     })
-}
-
-fn verify_merchant_constraint(
-    constraint: &MerchantConstraint,
-    context: &AuthorizationContext,
-) -> Result<()> {
-    if !constraint.merchant_ids.is_empty() &&
-        !constraint.merchant_ids.iter().any(|candidate| candidate == &context.merchant_id)
-    {
-        return Err(AuthorizationError::MerchantNotAllowed {
-            merchant_id: context.merchant_id.clone(),
-        });
-    }
-
-    if !constraint.host_suffixes.is_empty() &&
-        !constraint
-            .host_suffixes
-            .iter()
-            .any(|candidate| context.merchant_host.ends_with(candidate))
-    {
-        return Err(AuthorizationError::MerchantNotAllowed {
-            merchant_id: context.merchant_id.clone(),
-        });
-    }
-
-    Ok(())
-}
-
-fn verify_resource_constraint(
-    constraint: &ResourceConstraint,
-    context: &AuthorizationContext,
-) -> Result<()> {
-    let method = context.http_method.to_uppercase();
-
-    if !constraint.http_methods.is_empty() &&
-        !constraint.http_methods.iter().any(|candidate| candidate.eq_ignore_ascii_case(&method))
-    {
-        return Err(AuthorizationError::HttpMethodNotAllowed { method });
-    }
-
-    if !constraint.path_prefixes.is_empty() &&
-        !constraint
-            .path_prefixes
-            .iter()
-            .any(|candidate| context.path_and_query.starts_with(candidate))
-    {
-        return Err(AuthorizationError::ResourcePathNotAllowed {
-            path: context.path_and_query.clone(),
-        });
-    }
-
-    Ok(())
-}
-
-fn verify_tool_constraint(
-    constraint: &ToolConstraint,
-    context: &AuthorizationContext,
-) -> Result<()> {
-    if !constraint.tool_names.is_empty() &&
-        !constraint.tool_names.iter().any(|candidate| candidate == &context.tool_name)
-    {
-        return Err(AuthorizationError::ToolNotAllowed { tool_name: context.tool_name.clone() });
-    }
-
-    if !constraint.model_providers.is_empty() &&
-        !constraint.model_providers.iter().any(|candidate| candidate == &context.model_provider)
-    {
-        return Err(AuthorizationError::ModelProviderNotAllowed {
-            model_provider: context.model_provider.clone(),
-        });
-    }
-
-    if !constraint.action_labels.is_empty() &&
-        !constraint.action_labels.iter().any(|candidate| candidate == &context.action_label)
-    {
-        return Err(AuthorizationError::ActionLabelNotAllowed {
-            action_label: context.action_label.clone(),
-        });
-    }
-
-    Ok(())
-}
-
-fn verify_payment_constraint(
-    constraint: &PaymentConstraint,
-    context: &AuthorizationContext,
-) -> Result<()> {
-    if context.selected_quote_amount > constraint.max_per_request.amount {
-        return Err(AuthorizationError::PaymentAmountExceeded {
-            amount: context.selected_quote_amount,
-            limit: constraint.max_per_request.amount,
-        });
-    }
-
-    if !constraint.allowed_assets.is_empty() &&
-        !constraint.allowed_assets.iter().any(|asset| asset.asset == context.asset)
-    {
-        return Err(AuthorizationError::AssetNotAllowed { asset: context.asset.clone() });
-    }
-
-    if !constraint.allowed_schemes.is_empty() &&
-        !constraint.allowed_schemes.iter().any(|scheme| scheme == &context.scheme)
-    {
-        return Err(AuthorizationError::SchemeNotAllowed { scheme: context.scheme.clone() });
-    }
-
-    if !constraint.allowed_rails.is_empty() &&
-        !constraint.allowed_rails.iter().any(|rail| rail == &context.rail)
-    {
-        return Err(AuthorizationError::RailNotAllowed { rail: context.rail });
-    }
-
-    if !constraint.payee_ids.is_empty() &&
-        !constraint.payee_ids.iter().any(|payee| payee == &context.payee_id)
-    {
-        return Err(AuthorizationError::PayeeNotAllowed { payee_id: context.payee_id.clone() });
-    }
-
-    Ok(())
-}
-
-#[expect(clippy::missing_const_for_fn, reason = "returns Result with non-const error constructors")]
-fn verify_sponsorship_constraint(
-    constraint: &SponsorshipConstraint,
-    _context: &AuthorizationContext,
-) -> Result<()> {
-    if !constraint.allow_sponsored_execution && !constraint.sponsor_ids.is_empty() {
-        return Err(AuthorizationError::SponsorshipNotAllowed);
-    }
-    Ok(())
 }
 
 fn canonical_list(values: &[impl AsRef<str>]) -> String {
@@ -903,7 +811,7 @@ fn canonical_signer(signer: &SignerRef) -> String {
     format!("{}:{}:{key_id}", signer.alg, hex_encode(&signer.public_key))
 }
 
-fn hex_encode(bytes: &[u8]) -> String {
+pub(crate) fn hex_encode(bytes: &[u8]) -> String {
     let mut encoded = String::with_capacity(bytes.len() * 2);
     for byte in bytes {
         let _ = write!(encoded, "{byte:02x}");
