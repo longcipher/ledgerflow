@@ -5,7 +5,7 @@
 
 **The Missing Authz Layer for x402 AI Payments.**
 
-[Website](https://ledgerflow.longcipher.com/) | [Documentation](https://docs.ledgerflow.longcipher.com/) | [Design Document](docs/design.md)
+[Project Home](https://ledgerflow.longcipher.com/) | [Documentation](https://book.longcipher.com/ledgerflow/) | [Design Document](docs/design.md)
 
 LedgerFlow is a **self-hostable / SaaS-deployable, protocol-agnostic generic
 transaction component**. It keeps x402 and MPP as the merchant↔agent wire
