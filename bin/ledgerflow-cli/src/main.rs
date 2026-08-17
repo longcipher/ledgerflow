@@ -90,6 +90,7 @@ fn render_sample_payment_fixture() -> Result<String> {
             created_at_ms: 2_000,
             nonce: "nonce-1".to_string(),
             payment_identifier: Some("payment-1".to_string()),
+            tool_args: std::collections::BTreeMap::new(),
             approvals: Vec::new(),
         },
     )?;

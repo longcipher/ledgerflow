@@ -9,6 +9,12 @@
 //! Capability attenuation is enforced with **runtime conjunction** (I4): a
 //! request must satisfy the constraints of *every* node in the chain. This
 //! avoids undecidable static subset checking of URL patterns.
+//!
+//! A presented chain must not contain the same warrant id twice: duplicate
+//! ids would allow re-arranging nodes (or a same-node-cycle) to confuse the
+//! chain's depth accounting. This is checked before any linkage work.
+
+use std::collections::HashSet;
 
 use crate::{
     constraint::{AuthorizationContext, Verify},
@@ -104,6 +110,18 @@ pub fn verify_chain(
     let root = &chain.warrants[0];
     // Trust anchor: the root issuer must be trusted.
     trusted.verify_root(root)?;
+
+    // Cycle detection: the same warrant id must not appear twice. Duplicate
+    // ids would permit re-ordering nodes (or a self-referencing cycle) that
+    // bypasses the depth accounting below.
+    let mut seen = HashSet::with_capacity(chain.len());
+    for node in &chain.warrants {
+        if !seen.insert(node.id.as_slice()) {
+            return Err(AuthorizationError::DuplicateWarrantInChain {
+                warrant_id: node.id_hex(),
+            });
+        }
+    }
 
     // Per-node checks: envelope signature, time bounds, runtime-conjunction
     // constraints, and delegation capability on non-leaf nodes.

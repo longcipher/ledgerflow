@@ -23,9 +23,11 @@ pub mod approval;
 pub mod chain;
 pub mod constraint;
 pub mod error;
+pub mod issue_bounds;
 pub mod pop;
 pub mod proof_builder;
 pub mod revocation;
+pub mod srl;
 pub mod trust;
 pub mod typestate;
 pub mod verification;
@@ -38,13 +40,16 @@ pub use crate::{
     },
     chain::{VerifiedChainAuthorization, WarrantChain, verify_chain, verify_link},
     constraint::{
-        AuthorizationContext, Constraint, MerchantConstraint, PaymentConstraint,
-        ResourceConstraint, ToolConstraint, Verify, verify_all as verify_all_constraints,
+        validate_attenuation, AuthorizationContext, Constraint, MerchantConstraint,
+        PaymentConstraint, ResourceConstraint, ToolConstraint, Verify,
+        verify_all as verify_all_constraints,
     },
+    issue_bounds::{ISSUE_BOUNDS_EXTENSION, IssueBounds},
     error::{AuthorizationError, Result, WireError, WireResult},
     pop::{POP_SIGN_DOMAIN, PopProof, PopTuple, verify_freshness},
     proof_builder::ProofBuilder,
     revocation::{InMemoryRevocationCheck, RevocationCheck, RevocationDecision},
+    srl::{SRL_SIGN_DOMAIN, SignedRevocationList, SrlEntry, SrlState},
     trust::{TrustedIssuer, TrustedIssuers},
     typestate::{DelegatedWarrantBuilder, WarrantBuilder},
     verification::{
@@ -52,11 +57,11 @@ pub use crate::{
     },
     warrant::{
         AssetRef, CborCodec, DEFAULT_CHALLENGE_TTL_MS, DEFAULT_CLOCK_SKEW_MS, DEFAULT_MAX_DEPTH,
-        DEFAULT_PROOF_FRESHNESS_MS, DEFAULT_WARRANT_TTL_SECS, MAX_DELEGATION_DEPTH,
-        MAX_WARRANT_CBOR_BYTES, MAX_WARRANT_TTL_SECS, PaymentRail, PaymentSubjectKind,
-        PaymentSubjectRef, SignatureEnvelope, SignerRef, SigningAlgorithm, SigningKeyPair,
-        WARRANT_SIGN_DOMAIN, WARRANT_VERSION_V1, Warrant, WarrantMetadata, generate_warrant_id,
-        sha256_prefixed,
+        DEFAULT_PROOF_FRESHNESS_MS, DEFAULT_WARRANT_TTL_SECS, KNOWN_EXTENSION_KEYS,
+        MAX_DELEGATION_DEPTH, MAX_WARRANT_CBOR_BYTES, MAX_WARRANT_TTL_SECS, PaymentRail,
+        PaymentSubjectKind, PaymentSubjectRef, SignatureEnvelope, SignerRef, SigningAlgorithm,
+        SigningKeyPair,         WARRANT_SIGN_DOMAIN, WARRANT_VERSION_V1, Warrant, WarrantMetadata,
+        generate_warrant_id, generate_warrant_id_128, hex_encode_bytes, sha256_prefixed,
     },
 };
 

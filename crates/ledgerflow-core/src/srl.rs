@@ -1,0 +1,188 @@
+//! Signed Revocation List (SRL): auditable, anti-rollback revocation
+//! propagation.
+//!
+//! The SRL is the multi-node revocation primitive (design §6.6, roadmap item
+//! in v0.1, now implemented for SaaS deployments). A control plane signs a
+//! list of revocations; verifier nodes fetch the latest list and apply it to
+//! their local `RevocationCheck`. The list is:
+//!
+//! - **additive**: entries are never removed from the current list
+//!   (revocations are permanent for the warrant's lifetime);
+//! - **anti-rollback**: the `version` is a strictly increasing monotone
+//!   counter; a verifier MUST reject a list whose version is not greater than
+//!   the highest it has already applied.
+//!
+//! The signature covers `SRL_SIGN_DOMAIN || version || encoded_entries`, so
+//! entries and version cannot be swapped in or replayed across lists.
+
+use serde::{Deserialize, Serialize};
+
+use crate::{
+    error::{AuthorizationError, Result, WireError, WireResult},
+    warrant::{CborCodec, SignerRef, SigningKeyPair, sha256_prefixed},
+};
+
+/// Domain-separation prefix for SRL signatures.
+pub const SRL_SIGN_DOMAIN: &[u8] = b"ledgerflow-srl-v1";
+
+/// A single revocation entry.
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SrlEntry {
+    /// A warrant (by 16-byte id) is revoked.
+    Warrant {
+        /// Hex-encoded 16-byte warrant id.
+        id_hex: String,
+    },
+    /// A holder public key is revoked (all its warrants invalid).
+    Holder {
+        /// Hex-encoded 32-byte public key.
+        key_hex: String,
+    },
+}
+
+/// A signed, versioned revocation list.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct SignedRevocationList {
+    /// Monotone version (must increase on each new list).
+    pub version: u64,
+    /// All revocation entries (additive across versions).
+    pub entries: Vec<SrlEntry>,
+    /// The control-plane signer.
+    pub signer: SignerRef,
+    /// Signature over `SRL_SIGN_DOMAIN || version || entries_cbor`.
+    pub signature: Vec<u8>,
+}
+
+impl SignedRevocationList {
+    /// Creates and signs a new SRL.
+    #[must_use]
+    pub fn sign(
+        version: u64,
+        entries: Vec<SrlEntry>,
+        control_keys: &SigningKeyPair,
+    ) -> Self {
+        let preimage = preimage(version, &entries);
+        Self {
+            version,
+            entries,
+            signer: control_keys.signer_ref(),
+            signature: control_keys.sign(&preimage).value,
+        }
+    }
+
+    /// Verifies the SRL signature against the control-plane signer.
+    #[must_use]
+    pub fn verify_signature(&self, signer: &SignerRef) -> bool {
+        if self.signer != *signer {
+            return false;
+        }
+        let envelope = crate::warrant::SignatureEnvelope {
+            alg: crate::warrant::SigningAlgorithm::Ed25519,
+            value: self.signature.clone(),
+        };
+        envelope.verify_strict(signer, &preimage(self.version, &self.entries))
+    }
+
+    /// Returns a canonical digest of the list (for audit records).
+    #[must_use]
+    pub fn digest(&self) -> String {
+        #[allow(clippy::expect_used)]
+        let bytes = self.encode_cbor().expect("srl serialization is infallible");
+        sha256_prefixed(bytes)
+    }
+}
+
+/// Computes the domain-separated signing preimage of an SRL.
+fn preimage(version: u64, entries: &[SrlEntry]) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(SRL_SIGN_DOMAIN.len() + 16 + entries.len() * 64);
+    bytes.extend_from_slice(SRL_SIGN_DOMAIN);
+    bytes.extend_from_slice(&version.to_be_bytes());
+    // Deterministic encoding: entries are encoded in sorted order so the
+    // preimage is canonical regardless of insertion order.
+    let mut sorted = entries.to_vec();
+    sorted.sort_by_key(|e| match e {
+        SrlEntry::Warrant { id_hex } => (0_u8, id_hex.clone()),
+        SrlEntry::Holder { key_hex } => (1_u8, key_hex.clone()),
+    });
+    for entry in sorted {
+        #[allow(clippy::expect_used)]
+        ciborium::ser::into_writer(&entry, &mut bytes)
+            .expect("srl entry serialization is infallible");
+    }
+    bytes
+}
+
+impl CborCodec for SignedRevocationList {}
+
+/// Incremental SRL application state: tracks the highest applied version and
+/// the union of applied entries.
+///
+/// This is the pure-domain counterpart of the verifier node's local
+/// revocation store: a node applies an SRL by advancing this state, then
+/// feeding the entries into its persistent `RevocationCheck`.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct SrlState {
+    /// Highest SRL version applied.
+    pub applied_version: u64,
+    /// All entries seen so far (deduplicated).
+    pub entries: Vec<SrlEntry>,
+}
+
+impl SrlState {
+    /// Creates an empty SRL state.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self { applied_version: 0, entries: Vec::new() }
+    }
+
+    /// Applies a signed SRL.
+    ///
+    /// Fails when the list's version is not strictly greater than the already
+    /// applied version (anti-rollback), or when the signature does not verify
+    /// against the trusted control-plane signer.
+    pub fn apply(
+        &mut self,
+        list: &SignedRevocationList,
+        trusted_signer: &SignerRef,
+    ) -> Result<()> {
+        if list.version <= self.applied_version {
+            return Err(AuthorizationError::SrlVersionRegression {
+                presented: list.version,
+                applied: self.applied_version,
+            });
+        }
+        if !list.verify_signature(trusted_signer) {
+            return Err(AuthorizationError::InvalidSrlSignature);
+        }
+        for entry in &list.entries {
+            if !self.entries.contains(entry) {
+                self.entries.push(entry.clone());
+            }
+        }
+        self.applied_version = list.version;
+        Ok(())
+    }
+
+    /// Checks whether a warrant is revoked per the applied SRL.
+    #[must_use]
+    pub fn is_warrant_revoked(&self, warrant_id: &[u8]) -> bool {
+        let id_hex = crate::warrant::hex_encode_bytes(warrant_id);
+        self.entries.iter().any(|e| matches!(e, SrlEntry::Warrant { id_hex: e } if e == &id_hex))
+    }
+
+    /// Checks whether a holder key is revoked per the applied SRL.
+    #[must_use]
+    pub fn is_holder_revoked(&self, holder: &SignerRef) -> bool {
+        let key_hex = crate::warrant::hex_encode_bytes(&holder.public_key);
+        self.entries.iter().any(|e| matches!(e, SrlEntry::Holder { key_hex: e } if e == &key_hex))
+    }
+
+    /// Serializes the entries for wire transmission (as a new SRL body).
+    pub fn encode_entries(&self) -> WireResult<Vec<u8>> {
+        let mut bytes = Vec::new();
+        ciborium::ser::into_writer(&self.entries, &mut bytes)
+            .map_err(|error| WireError::Serialization(error.to_string()))?;
+        Ok(bytes)
+    }
+}

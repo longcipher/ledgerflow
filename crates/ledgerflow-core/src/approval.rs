@@ -452,6 +452,7 @@ mod tests {
             request_hash: request_hash.to_string(),
             accepted_hash: "accepted-hash".to_string(),
             payment_payload_digest: "payment-digest".to_string(),
+            tool_args_digest: None,
             approvals_digest: Some(PopTuple::approvals_digest(approvals)),
             nonce: "nonce-1".to_string(),
             created_at_ms: 10_000,

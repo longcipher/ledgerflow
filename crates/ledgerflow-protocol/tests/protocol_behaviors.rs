@@ -91,6 +91,7 @@ fn seed() -> PaymentPayloadSeed {
         created_at_ms: 2_000,
         nonce: "nonce-1".to_string(),
         payment_identifier: Some("payment-1".to_string()),
+        tool_args: tool_arguments(),
         approvals: Vec::new(),
     }
 }
@@ -175,6 +176,7 @@ fn merchant_verifier_rejects_replay() {
             created_at_ms: 2_000,
             nonce: "nonce-1".to_string(),
             payment_identifier: Some("payment-1".to_string()),
+            tool_args: tool_arguments(),
             approvals: Vec::new(),
         },
     ).expect("build");
@@ -202,6 +204,7 @@ fn merchant_verifier_rejects_replay() {
             created_at_ms: 2_100,
             nonce: "nonce-1".to_string(),
             payment_identifier: Some("payment-2".to_string()),
+            tool_args: tool_arguments(),
             approvals: Vec::new(),
         },
     ).expect("build");

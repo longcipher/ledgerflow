@@ -172,6 +172,10 @@ pub struct PaymentPayloadSeed {
     pub created_at_ms: u64,
     pub nonce: String,
     pub payment_identifier: Option<String>,
+    /// Tool-call arguments to bind into the PoP (defends against
+    /// confused-deputy at the tool layer). HTTP-only callers may leave this
+    /// empty.
+    pub tool_args: ledgerflow_core::ToolArguments,
     pub approvals: Vec<ledgerflow_core::SignedApproval>,
 }
 
@@ -226,6 +230,7 @@ pub fn build_payment_payload(
         Some(PopTuple::approvals_digest(&seed.approvals))
     };
 
+    let tool_args_digest = PopTuple::tool_args_digest(&seed.tool_args);
     let tuple = PopTuple {
         warrant_id: leaf.id,
         challenge_id: challenge.challenge_id.clone(),
@@ -234,6 +239,7 @@ pub fn build_payment_payload(
         request_hash,
         accepted_hash,
         payment_payload_digest: sha256_prefixed("x402-payment-payload"),
+        tool_args_digest,
         approvals_digest,
         nonce: seed.nonce.clone(),
         created_at_ms: seed.created_at_ms,

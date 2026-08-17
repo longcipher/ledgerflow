@@ -456,6 +456,7 @@ fn approval_gate_requires_m_of_n_signatures() {
         request_hash: ctx.request_hash.clone(),
         accepted_hash: ctx.accepted_hash.clone(),
         payment_payload_digest: sha256_prefixed("x402-payload"),
+        tool_args_digest: None,
         approvals_digest: Some(PopTuple::approvals_digest(std::slice::from_ref(&approval))),
         nonce: "nonce-2".to_string(),
         created_at_ms: ctx.now_ms,

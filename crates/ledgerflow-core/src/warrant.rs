@@ -51,6 +51,27 @@ pub const DEFAULT_CHALLENGE_TTL_MS: u64 = 300_000;
 /// Domain-separation prefix for warrant envelope signatures.
 pub const WARRANT_SIGN_DOMAIN: &[u8] = b"ledgerflow-warrant-v1";
 
+/// Reserved LedgerFlow warrant extension keys (frozen in v1).
+///
+/// The extensions map is fail-closed: any key not listed here is rejected
+/// when a warrant is decoded from the wire. Reserved prefixes are documented
+/// in the design doc (§6.1); applications MUST NOT add new keys without a
+/// protocol-version bump.
+pub const KNOWN_EXTENSION_KEYS: &[&str] = &[
+    // Audit / provenance hints (application metadata, non-authoritative).
+    "ledgerflow.agent_id",
+    "ledgerflow.session_id",
+    "ledgerflow.client_id",
+    // Budget-accounting point (P2+; reserved now so the field is forward
+    // compatible).
+    "ledgerflow.ledger",
+    // Human-readable merchant display name (non-authoritative).
+    "ledgerflow.merchant_display_name",
+    // Issuance bounds constraining what the holder may delegate.
+    // See [`crate::issue_bounds::ISSUE_BOUNDS_EXTENSION`].
+    crate::issue_bounds::ISSUE_BOUNDS_EXTENSION,
+];
+
 // ---------------------------------------------------------------------------
 // CborCodec
 // ---------------------------------------------------------------------------
@@ -95,8 +116,48 @@ pub fn sha256_prefixed<T: AsRef<[u8]>>(input: T) -> String {
 
 /// Generates a 16-byte UUIDv7-style warrant identifier.
 ///
-/// Layout: 48-bit unix-epoch-milliseconds, version bits (0111), variant bits
-/// (10), then 62 bits of randomness supplied by the caller.
+/// Layout: 48-bit unix-epoch-milliseconds (bytes 0-5), version bits `0111`
+/// (byte 6 high nibble), variant bits `10` (byte 8 high nibble), then 62 bits
+/// of randomness supplied by the caller (bytes 6 low nibble, 7, 8 low nibble,
+/// 9-15). All 16 bytes are filled: 48 timestamp + 4 version + 2 variant +
+/// 62 random = 128 bits.
+///
+/// This is the 128-bit-entropy variant; [`generate_warrant_id`] is retained
+/// as a 64-bit-entropy compatibility shim for deterministic fixtures.
+#[must_use]
+pub const fn generate_warrant_id_128(now_ms: u64, random: [u8; 16]) -> [u8; 16] {
+    let mut id = [0_u8; 16];
+    let timestamp = now_ms & 0x0000_FFFF_FFFF_FFFF;
+    id[0] = (timestamp >> 40) as u8;
+    id[1] = (timestamp >> 32) as u8;
+    id[2] = (timestamp >> 24) as u8;
+    id[3] = (timestamp >> 16) as u8;
+    id[4] = (timestamp >> 8) as u8;
+    id[5] = timestamp as u8;
+    // Version 7 (0111) in the high nibble of byte 6; low nibble carries
+    // random bits.
+    id[6] = 0x70 | (random[0] & 0x0F);
+    id[7] = random[1];
+    // Variant 10 in the high two bits of byte 8; remaining six bits random.
+    id[8] = 0x80 | (random[2] & 0x3F);
+    id[9] = random[3];
+    id[10] = random[4];
+    id[11] = random[5];
+    id[12] = random[6];
+    id[13] = random[7];
+    id[14] = random[8];
+    id[15] = random[9];
+    id
+}
+
+/// Generates a 16-byte UUIDv7-style warrant identifier from 8 bytes of
+/// caller-supplied randomness.
+///
+/// The 8 random bytes fill the 62 random bits of the UUIDv7 layout; the
+/// remaining 6 bits (high nibble of byte 6, high two bits of byte 8) are
+/// deterministic version/variant bits. This variant exists for compatibility
+/// with deterministic fixtures; production code should use
+/// [`generate_warrant_id_128`] for full entropy.
 #[must_use]
 pub const fn generate_warrant_id(now_ms: u64, random: [u8; 8]) -> [u8; 16] {
     let mut id = [0_u8; 16];
@@ -476,8 +537,19 @@ impl Warrant {
     }
 
     /// Decodes a warrant from CBOR bytes.
+    ///
+    /// After decoding, the extensions map is validated: only the reserved
+    /// LedgerFlow extension keys (see [`KNOWN_EXTENSION_KEYS`]) are accepted.
+    /// Unknown keys are rejected (fail-closed) because the extensions map is
+    /// frozen in v1.
     pub fn decode_cbor(bytes: &[u8]) -> WireResult<Self> {
-        <Self as CborCodec>::decode_cbor(bytes)
+        let warrant = <Self as CborCodec>::decode_cbor(bytes)?;
+        for key in warrant.extensions.keys() {
+            if !KNOWN_EXTENSION_KEYS.contains(&key.as_str()) {
+                return Err(WireError::UnknownExtension { key: key.clone() });
+            }
+        }
+        Ok(warrant)
     }
 
     /// Returns the human-readable id (hex-encoded).
@@ -540,4 +612,10 @@ pub(crate) fn hex_encode(bytes: &[u8]) -> String {
         let _ = write!(encoded, "{byte:02x}");
     }
     encoded
+}
+
+/// Hex-encodes bytes (lowercase). Public helper used by SRL and audit code.
+#[must_use]
+pub fn hex_encode_bytes(bytes: &[u8]) -> String {
+    hex_encode(bytes)
 }

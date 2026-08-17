@@ -52,6 +52,8 @@ pub enum AuthorizationError {
     DelegationDepthExceeded { presented: u8, allowed: u8 },
     #[error("the warrant chain is empty")]
     EmptyChain,
+    #[error("warrant `{warrant_id}` appears more than once in the chain (cycle detected)")]
+    DuplicateWarrantInChain { warrant_id: String },
     #[error("child issuer does not match parent holder (I1)")]
     DelegationAuthorityMismatch,
     #[error("child depth {actual} does not equal parent depth + 1 (expected {expected}) (I2)")]
@@ -66,6 +68,8 @@ pub enum AuthorizationError {
     ParentHashMismatch,
     #[error("the root issuer is not trusted")]
     UntrustedIssuer { key_id: String },
+    #[error("child constraint violates monotonic attenuation on `{dimension}`: {detail}")]
+    AttenuationViolation { dimension: String, detail: String },
     #[error("the warrant has been revoked")]
     WarrantRevoked,
     #[error("the holder key has been revoked")]
@@ -86,6 +90,10 @@ pub enum AuthorizationError {
     ApprovalsDigestMismatch,
     #[error("unknown warrant extension key `{key}` (extensions are frozen in v1)")]
     UnknownExtension { key: String },
+    #[error("SRL version {presented} does not advance the applied version {applied} (anti-rollback)")]
+    SrlVersionRegression { presented: u64, applied: u64 },
+    #[error("the SRL signature is invalid")]
+    InvalidSrlSignature,
 }
 
 /// Errors returned while encoding or decoding LedgerFlow wire payloads.
@@ -97,4 +105,6 @@ pub enum WireError {
     Serialization(String),
     #[error("failed to decode the payload from CBOR: {0}")]
     Deserialization(String),
+    #[error("unknown warrant extension key `{key}` (extensions are frozen in v1)")]
+    UnknownExtension { key: String },
 }

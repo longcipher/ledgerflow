@@ -12,7 +12,7 @@ use crate::{
     constraint::{MerchantConstraint, PaymentConstraint, ResourceConstraint, ToolConstraint},
     warrant::{
         DEFAULT_MAX_DEPTH, DEFAULT_WARRANT_TTL_SECS, MAX_DELEGATION_DEPTH, MAX_WARRANT_TTL_SECS,
-        SignerRef, SigningKeyPair, Warrant, generate_warrant_id,
+        SignerRef, SigningKeyPair, Warrant, generate_warrant_id_128,
     },
 };
 
@@ -260,17 +260,23 @@ impl<I, Sig> WarrantBuilder<I, NoHolder, Sig> {
 impl WarrantBuilder<HasIssuer, HasHolder, Unsigned> {
     /// Signs the warrant with the issuer's key pair and returns it.
     ///
-    /// `random_bytes` supplies the 8 bytes of randomness for the UUIDv7
-    /// warrant id (callers MUST provide fresh random bytes in production).
-    /// When an explicit id was set via [`Self::warrant_id`], `random_bytes`
-    /// is ignored.
+    /// `random_bytes` supplies 8 bytes of caller randomness; the full 128-bit
+    /// UUIDv7 id is derived by extending it with the timestamp's low bytes
+    /// (deterministic per call). Callers MUST provide fresh random bytes in
+    /// production. When an explicit id was set via [`Self::warrant_id`],
+    /// `random_bytes` is ignored.
     ///
     /// This is the only terminal transition; it is available once both issuer
     /// and holder are configured.
     pub fn sign_with(self, issuer_keys: &SigningKeyPair, random_bytes: [u8; 8]) -> Warrant {
         let mut builder = self;
         let id = builder.explicit_id.take().unwrap_or_else(|| {
-            generate_warrant_id(builder.now_ms, random_bytes)
+            let mut random128 = [0_u8; 16];
+            random128[..8].copy_from_slice(&random_bytes);
+            // Deterministically extend to 16 bytes (timestamp-derived tail).
+            let ts = builder.now_ms.to_le_bytes();
+            random128[8..].copy_from_slice(&ts[..8]);
+            generate_warrant_id_128(builder.now_ms, random128)
         });
         let issued_at = builder.now_ms / 1000;
         let expires_at = issued_at.saturating_add(builder.ttl_secs);
@@ -332,26 +338,89 @@ struct Parts {
 /// Delegated-warrant builder for attenuating an existing root warrant.
 ///
 /// A delegated warrant re-signs with the parent holder's key, carries the
-/// parent's payload hash, and can only narrow constraints.
+/// parent's payload hash, and can only narrow constraints. Narrowing is
+/// validated **at issuance time** via [`crate::constraint::validate_attenuation`]:
+/// a child that would expand capabilities is rejected before signing, so the
+/// caller gets immediate feedback instead of a runtime verification failure.
+///
+/// # Example
+///
+/// ```ignore
+/// let child = DelegatedWarrantBuilder::from(parent)
+///     .with_merchant(MerchantConstraint::with_ids(vec!["acme".into()]))
+///     .with_payment(PaymentConstraint::new(10))
+///     .issue_to(agent_keys.signer_ref(), &issuer_keys, now_ms, random);
+/// ```
 #[derive(Clone, Debug)]
 pub struct DelegatedWarrantBuilder {
     parent: Warrant,
+    merchant: Option<MerchantConstraint>,
+    resource: Option<ResourceConstraint>,
+    payment: Option<PaymentConstraint>,
+    tool: Option<ToolConstraint>,
 }
 
 impl DelegatedWarrantBuilder {
     /// Starts a delegated warrant from a parent warrant.
     #[must_use]
     pub const fn from(parent: Warrant) -> Self {
-        Self { parent }
+        Self {
+            parent,
+            merchant: None,
+            resource: None,
+            payment: None,
+            tool: None,
+        }
+    }
+
+    /// Narrows the merchant constraint for the child.
+    ///
+    /// The child's merchant allowlist must be a subset of the parent's; this
+    /// is validated in [`Self::issue_to`].
+    #[must_use]
+    pub fn with_merchant(mut self, merchant: MerchantConstraint) -> Self {
+        self.merchant = Some(merchant);
+        self
+    }
+
+    /// Narrows the resource constraint for the child.
+    #[must_use]
+    pub fn with_resource(mut self, resource: ResourceConstraint) -> Self {
+        self.resource = Some(resource);
+        self
+    }
+
+    /// Narrows the payment constraint for the child (e.g. a lower cap).
+    #[must_use]
+    pub fn with_payment(mut self, payment: PaymentConstraint) -> Self {
+        self.payment = Some(payment);
+        self
+    }
+
+    /// Narrows the tool constraint for the child.
+    #[must_use]
+    pub fn with_tool(mut self, tool: ToolConstraint) -> Self {
+        self.tool = Some(tool);
+        self
     }
 
     /// Builds a delegated warrant issued by the parent holder.
     ///
-    /// The child inherits the parent's constraints (runtime conjunction
-    /// guarantees monotonic attenuation); only the holder, TTL, and depth are
-    /// set here. Child TTL cannot exceed the parent's remaining lifetime.
-    /// `random_bytes` supplies the randomness for the child's UUIDv7 id.
+    /// The child inherits the parent's constraints unless narrowed via
+    /// [`Self::with_merchant`] / [`Self::with_resource`] / [`Self::with_payment`]
+    /// / [`Self::with_tool`]; any narrowing is validated at issuance time so a
+    /// child can never expand capabilities. Child TTL cannot exceed the
+    /// parent's remaining lifetime. `random_bytes` supplies 8 bytes of caller
+    /// randomness for the child's UUIDv7 id (extended to 128 bits as in
+    /// [`WarrantBuilder::sign_with`]).
+    ///
+    /// # Panics
+    ///
+    /// Panics (via an internal `expect`) if the narrowing would expand
+    /// capabilities; this is a programming error in the caller and should be
+    /// caught by tests.
     #[must_use]
+    #[allow(clippy::panic)]
     pub fn issue_to(
         self,
         new_holder: SignerRef,
@@ -365,7 +434,52 @@ impl DelegatedWarrantBuilder {
         let parent_payload_hash = crate::warrant::sha256_prefixed(parent.payload_bytes());
         let depth = parent.depth + 1;
 
-        let id = generate_warrant_id(now_ms, random_bytes);
+        // Resolve child constraints (narrowed or inherited).
+        let merchant = self.merchant.unwrap_or_else(|| parent.merchant.clone());
+        let resource = self.resource.unwrap_or_else(|| parent.resource.clone());
+        let payment = self.payment.unwrap_or_else(|| parent.payment.clone());
+        let tool = self.tool.clone().or_else(|| parent.tool.clone());
+
+        // Static issuance-time attenuation check (decidable fields only).
+        let child_constraints: [(crate::constraint::Constraint, crate::constraint::Constraint);
+            4] = [
+            (
+                crate::constraint::Constraint::Merchant(parent.merchant.clone()),
+                crate::constraint::Constraint::Merchant(merchant.clone()),
+            ),
+            (
+                crate::constraint::Constraint::Resource(parent.resource.clone()),
+                crate::constraint::Constraint::Resource(resource.clone()),
+            ),
+            (
+                crate::constraint::Constraint::Payment(parent.payment.clone()),
+                crate::constraint::Constraint::Payment(payment.clone()),
+            ),
+            (
+                crate::constraint::Constraint::Tool(parent.tool.clone().unwrap_or_default()),
+                crate::constraint::Constraint::Tool(tool.clone().unwrap_or_default()),
+            ),
+        ];
+        for (parent_c, child_c) in child_constraints {
+            if let Err(error) = crate::constraint::validate_attenuation(&parent_c, &child_c) {
+                // This is a programming error in the delegating application:
+                // the caller must not request a child wider than the parent.
+                panic!("delegated warrant attenuation failed at issuance: {error}");
+            }
+        }
+
+        // Issuance-bounds check: the parent (delegator) may carry bounds that
+        // further restrict what its child can express. Bounds are a *ceiling*:
+        // the child must be no wider than the bounds on every dimension.
+        if let Some(bounds) = parent.issue_bounds() {
+            validate_issue_bounds(&bounds, &merchant, &resource, &payment, &tool);
+        }
+
+        let mut random128 = [0_u8; 16];
+        random128[..8].copy_from_slice(&random_bytes);
+        let ts = now_ms.to_le_bytes();
+        random128[8..].copy_from_slice(&ts[..8]);
+        let id = generate_warrant_id_128(now_ms, random128);
 
         let mut child = Warrant {
             version: crate::warrant::WARRANT_VERSION_V1,
@@ -381,10 +495,10 @@ impl DelegatedWarrantBuilder {
             // `child.depth > parent.max_depth`).
             max_depth: parent.max_depth,
             parent_hash: Some(parent_payload_hash.into_bytes()),
-            merchant: parent.merchant.clone(),
-            resource: parent.resource.clone(),
-            payment: parent.payment.clone(),
-            tool: parent.tool.clone(),
+            merchant,
+            resource,
+            payment,
+            tool,
             approval_gates: parent.approval_gates.clone(),
             required_approvers: parent.required_approvers.clone(),
             min_approvals: parent.min_approvals,
@@ -394,4 +508,67 @@ impl DelegatedWarrantBuilder {
         child = child.sign_with(delegator_keys);
         child
     }
+}
+
+/// Validates that a child warrant's constraints stay within the delegator's
+/// issuance bounds.
+///
+/// Bounds are a ceiling on every dimension: an empty bound list means "no
+/// restriction". The child must be no wider than the bound on each dimension.
+/// Violations panic (programming error in the delegating application).
+#[allow(clippy::panic)]
+fn validate_issue_bounds(
+    bounds: &crate::issue_bounds::IssueBounds,
+    merchant: &MerchantConstraint,
+    resource: &ResourceConstraint,
+    payment: &PaymentConstraint,
+    tool: &Option<ToolConstraint>,
+) {
+    if !bounds.merchant_ids.is_empty() {
+        for id in &merchant.merchant_ids {
+            assert!(bounds.merchant_ids.contains(id), "issue bounds: merchant `{id}` exceeds the delegator's bounds");
+        }
+    }
+    if !bounds.host_suffixes.is_empty() {
+        for suffix in &merchant.host_suffixes {
+            assert!(bounds.host_suffixes.contains(suffix), "issue bounds: host suffix `{suffix}` exceeds the delegator's bounds");
+        }
+    }
+    if !bounds.http_methods.is_empty() {
+        for method in &resource.http_methods {
+            assert!(bounds.http_methods.iter().any(|m| m.eq_ignore_ascii_case(method)), "issue bounds: method `{method}` exceeds the delegator's bounds");
+        }
+    }
+    if !bounds.path_prefixes.is_empty() {
+        for prefix in &resource.path_prefixes {
+            assert!(bounds.path_prefixes.iter().any(|bp| prefix.starts_with(bp)), "issue bounds: path prefix `{prefix}` exceeds the delegator's bounds");
+        }
+    }
+    if !bounds.assets.is_empty() {
+        for asset in &payment.allowed_assets {
+            assert!(bounds.assets.iter().any(|a| a == asset), "issue bounds: asset `{}` exceeds the delegator's bounds", asset.asset);
+        }
+    }
+    if !bounds.rails.is_empty() {
+        for rail in &payment.allowed_rails {
+            assert!(bounds.rails.contains(rail), "issue bounds: rail `{rail:?}` exceeds the delegator's bounds");
+        }
+    }
+    if !bounds.schemes.is_empty() {
+        for scheme in &payment.allowed_schemes {
+            assert!(bounds.schemes.contains(scheme), "issue bounds: scheme `{scheme}` exceeds the delegator's bounds");
+        }
+    }
+    if !bounds.payee_ids.is_empty() {
+        for payee in &payment.payee_ids {
+            assert!(bounds.payee_ids.contains(payee), "issue bounds: payee `{payee}` exceeds the delegator's bounds");
+        }
+    }
+    if let Some(cap) = bounds.max_per_charge {
+        assert!(payment.max_per_charge <= cap, 
+            "issue bounds: per-charge cap {} exceeds the delegator's bound {}",
+            payment.max_per_charge, cap
+        );
+    }
+    let _ = tool; // Tool bounds are validated by the parent-attenuation check.
 }

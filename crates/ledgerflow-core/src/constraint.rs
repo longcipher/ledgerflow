@@ -234,6 +234,151 @@ impl PaymentConstraint {
     }
 }
 
+/// Validates that `child` is a valid static attenuation of `parent`.
+///
+/// This performs a **conservative, decidable** subset check: every value that
+/// `parent` allows must also be allowed by `child`. It is used at issuance
+/// time (in [`crate::typestate::DelegatedWarrantBuilder`]) to reject a child
+/// that would expand capabilities *before* the warrant is signed.
+///
+/// The check is conservative in two ways:
+///
+/// - Empty allowlists mean "any", so a child that adds restrictions to a
+///   parent with an empty list is valid (narrowing), but a child that empties
+///   a parent's non-empty list is rejected (widening).
+/// - Unknown/unbounded dimensions (e.g. arbitrary host names under a suffix)
+///   are judged by the same allow-list semantics, never by pattern-language
+///   containment (which can be undecidable).
+pub fn validate_attenuation(parent: &Constraint, child: &Constraint) -> Result<()> {
+    match (parent, child) {
+        (Constraint::Merchant(p), Constraint::Merchant(c)) => {
+            // Child's allowed merchant ids must be a subset of parent's
+            // (when the parent restricts them).
+            if !p.merchant_ids.is_empty() {
+                for id in &c.merchant_ids {
+                    if !p.merchant_ids.contains(id) {
+                        return Err(AuthorizationError::AttenuationViolation {
+                            dimension: "merchant_ids".to_string(),
+                            detail: format!("merchant `{id}` not allowed by parent"),
+                        });
+                    }
+                }
+            }
+            // Child's host suffixes must be a subset of parent's.
+            if !p.host_suffixes.is_empty() {
+                for suffix in &c.host_suffixes {
+                    if !p.host_suffixes.contains(suffix) {
+                        return Err(AuthorizationError::AttenuationViolation {
+                            dimension: "host_suffixes".to_string(),
+                            detail: format!("host suffix `{suffix}` not allowed by parent"),
+                        });
+                    }
+                }
+            }
+            Ok(())
+        }
+        (Constraint::Resource(p), Constraint::Resource(c)) => {
+            if !p.http_methods.is_empty() {
+                for method in &c.http_methods {
+                    if !p.http_methods.iter().any(|m| m.eq_ignore_ascii_case(method)) {
+                        return Err(AuthorizationError::AttenuationViolation {
+                            dimension: "http_methods".to_string(),
+                            detail: format!("method `{method}` not allowed by parent"),
+                        });
+                    }
+                }
+            }
+            if !p.path_prefixes.is_empty() {
+                for prefix in &c.path_prefixes {
+                    if !p.path_prefixes.iter().any(|pp| prefix.starts_with(pp)) {
+                        return Err(AuthorizationError::AttenuationViolation {
+                            dimension: "path_prefixes".to_string(),
+                            detail: format!("path prefix `{prefix}` not under a parent prefix"),
+                        });
+                    }
+                }
+            }
+            Ok(())
+        }
+        (Constraint::Tool(p), Constraint::Tool(c)) => {
+            for (dimension, parent_list, child_list) in [
+                ("tool_names", &p.tool_names, &c.tool_names),
+                ("model_providers", &p.model_providers, &c.model_providers),
+                ("action_labels", &p.action_labels, &c.action_labels),
+            ] {
+                if parent_list.is_empty() {
+                    continue;
+                }
+                for value in child_list {
+                    if !parent_list.contains(value) {
+                        return Err(AuthorizationError::AttenuationViolation {
+                            dimension: dimension.to_string(),
+                            detail: format!("`{value}` not allowed by parent"),
+                        });
+                    }
+                }
+            }
+            Ok(())
+        }
+        (Constraint::Payment(p), Constraint::Payment(c)) => {
+            // Amount cap can only shrink.
+            if c.max_per_charge > p.max_per_charge {
+                return Err(AuthorizationError::AttenuationViolation {
+                    dimension: "max_per_charge".to_string(),
+                    detail: format!(
+                        "child cap {} exceeds parent cap {}",
+                        c.max_per_charge, p.max_per_charge
+                    ),
+                });
+            }
+            // Child assets must be a subset of parent assets.
+            if !p.allowed_assets.is_empty() {
+                for asset in &c.allowed_assets {
+                    if !p.allowed_assets.iter().any(|pa| pa == asset) {
+                        return Err(AuthorizationError::AttenuationViolation {
+                            dimension: "allowed_assets".to_string(),
+                            detail: format!("asset `{}` not allowed by parent", asset.asset),
+                        });
+                    }
+                }
+            }
+            // Rails are a distinct enum type; check them separately.
+            if !p.allowed_rails.is_empty() {
+                for rail in &c.allowed_rails {
+                    if !p.allowed_rails.contains(rail) {
+                        return Err(AuthorizationError::AttenuationViolation {
+                            dimension: "allowed_rails".to_string(),
+                            detail: format!("rail `{rail:?}` not allowed by parent"),
+                        });
+                    }
+                }
+            }
+            for (dimension, parent_list, child_list) in [
+                ("allowed_schemes", &p.allowed_schemes, &c.allowed_schemes),
+                ("payee_ids", &p.payee_ids, &c.payee_ids),
+            ] {
+                if parent_list.is_empty() {
+                    continue;
+                }
+                for value in child_list {
+                    if !parent_list.contains(value) {
+                        return Err(AuthorizationError::AttenuationViolation {
+                            dimension: dimension.to_string(),
+                            detail: format!("`{value}` not allowed by parent"),
+                        });
+                    }
+                }
+            }
+            Ok(())
+        }
+        // Different constraint kinds are never comparable; treat as invalid.
+        _ => Err(AuthorizationError::AttenuationViolation {
+            dimension: "constraint_kind".to_string(),
+            detail: "parent and child constraint kinds differ".to_string(),
+        }),
+    }
+}
+
 /// Unified `Verify` trait for constraint evaluation.
 pub trait Verify {
     /// Checks this constraint against the given context.

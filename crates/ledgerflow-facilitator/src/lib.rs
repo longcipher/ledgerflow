@@ -17,6 +17,7 @@ pub mod rails;
 pub mod revocation_store;
 pub mod routing;
 pub mod settle;
+pub mod srl_sync;
 pub mod status;
 pub mod subject;
 pub mod verify;
@@ -31,6 +32,7 @@ pub use crate::{
     revocation_store::{FileRevocationStore, InsecureMemoryRevocationStore, RevocationStoreError},
     routing::{Facilitator, RailKind, RouteDecision, RoutingError},
     settle::{SettleRequest, SettlementService},
+    srl_sync::{SrlSync, SrlSyncError},
     status::{RegistryEntry, SettlementRegistry},
     subject::{
         DefaultSubjectResolver, PaymentSubjectResolver, ResolvedSubject, SubjectResolutionError,

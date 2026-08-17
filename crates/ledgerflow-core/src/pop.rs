@@ -39,6 +39,14 @@ pub struct PopTuple {
     pub accepted_hash: String,
     /// Digest of the scheme-specific payment payload.
     pub payment_payload_digest: String,
+    /// Canonical digest of the tool-call arguments (sorted key-value pairs).
+    ///
+    /// Binding the tool arguments into the PoP defends against confused-deputy
+    /// attacks at the tool layer (e.g. MCP calls that never pass through the
+    /// HTTP body that `request_hash` covers). It is required for tool-gated
+    /// scenarios; HTTP-only callers may leave it empty (which is treated as a
+    /// distinct value from any real digest, so omission is unambiguous).
+    pub tool_args_digest: Option<String>,
     /// Digest of the approvals array (present when approvals are attached).
     /// Closing the PoP/approvals ambiguity window.
     pub approvals_digest: Option<String>,
@@ -82,6 +90,31 @@ impl PopTuple {
             bytes.extend_from_slice(&approval.encode_cbor());
         }
         sha256_prefixed(bytes)
+    }
+
+    /// Produces a canonical digest over tool-call arguments.
+    ///
+    /// Arguments are serialized as a sorted list of `(key, value)` pairs
+    /// (sorting by key, then by value) so that semantically identical argument
+    /// maps hash identically across implementations. Empty argument maps yield
+    /// `None` (omission), which is distinct from a real digest of an empty
+    /// map — callers that need to bind "no arguments" explicitly should pass
+    /// a sentinel argument.
+    #[must_use]
+    pub fn tool_args_digest(args: &crate::verification::ToolArguments) -> Option<String> {
+        if args.is_empty() {
+            return None;
+        }
+        let mut entries: Vec<(&String, &String)> = args.iter().collect();
+        entries.sort_by(|(ka, va), (kb, vb)| (ka, va).cmp(&(kb, vb)));
+        let mut bytes = Vec::with_capacity(args.len() * 16);
+        for (key, value) in entries {
+            bytes.extend_from_slice(key.as_bytes());
+            bytes.push(0);
+            bytes.extend_from_slice(value.as_bytes());
+            bytes.push(0xFF);
+        }
+        Some(sha256_prefixed(bytes))
     }
 }
 
@@ -154,6 +187,7 @@ mod tests {
             request_hash: "sha256:req".to_string(),
             accepted_hash: "sha256:acc".to_string(),
             payment_payload_digest: "sha256:pay".to_string(),
+            tool_args_digest: None,
             approvals_digest: None,
             nonce: "nonce-1".to_string(),
             created_at_ms: 2_000,
