@@ -1,10 +1,10 @@
-//! Traditional payment gateway settlement adapter.
+//! Traditional payment gateway settlement adapter (demo implementation).
 
 use ledgerflow_core::VerifiedAuthorization;
 
 use crate::{
-    rails::{RailAdapter, RailQuote, SettlementReceipt, VerificationResult},
-    routing::{RailKind, RoutingError},
+    rails::{RailAdapter, RailError, RailQuote, SettlementReceipt, VerificationResult},
+    routing::RailKind,
     subject::ResolvedSubject,
 };
 
@@ -21,22 +21,28 @@ impl RailAdapter for GatewayRailAdapter {
         matches!(subject.rail, RailKind::Gateway)
     }
 
-    fn quote(&self, _authorization: &VerifiedAuthorization) -> Result<RailQuote, RoutingError> {
-        Ok(RailQuote { rail: RailKind::Gateway, estimated_fee: 10, estimated_time_ms: 5_000 })
+    fn quote(&self, authorization: &VerifiedAuthorization) -> Result<RailQuote, RailError> {
+        Ok(RailQuote {
+            rail: RailKind::Gateway,
+            estimated_fee: 10,
+            estimated_time_ms: 5_000,
+            asset: authorization.asset.clone(),
+        })
     }
 
     fn settle(
         &self,
         authorization: &VerifiedAuthorization,
-    ) -> Result<SettlementReceipt, RoutingError> {
+    ) -> Result<SettlementReceipt, RailError> {
         Ok(SettlementReceipt {
             rail: RailKind::Gateway,
             transaction_id: format!("gw-tx-{}", authorization.warrant_digest),
             settled_amount: authorization.amount,
+            asset: authorization.asset.clone(),
         })
     }
 
-    fn verify(&self, _receipt: &SettlementReceipt) -> Result<VerificationResult, RoutingError> {
+    fn verify(&self, _receipt: &SettlementReceipt) -> Result<VerificationResult, RailError> {
         Ok(VerificationResult { verified: true, confirmations: 1 })
     }
 }

@@ -1,0 +1,25 @@
+[package]
+name = "ledgerflow-wallet"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+base64.workspace = true
+ledgerflow-core = { path = "../ledgerflow-core" }
+serde = { workspace = true, features = ["derive"] }
+serde_json = "1.0.151"
+thiserror.workspace = true
+
+[features]
+# HTTP transport for the local JSON-RPC signer. The transport seam
+# (RpcTransport trait) is always available; the concrete HTTP implementation
+# is wired by the server crate (P3) where the runtime is present.
+http = []
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

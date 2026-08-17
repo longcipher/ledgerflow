@@ -7,6 +7,25 @@
 - `crates/` contains reusable library crates.
 - No frontend/web-framework-specific assumptions.
 
+## Execution Strategy
+
+- Maximize parallelism by dispatching subagents aggressively and consuming tokens freely to complete tasks faster.
+
+## Tool Usage & Commands
+
+- **NEVER execute `cargo` commands in parallel.** Rust's cargo uses strict file locks on the `target/` directory.
+- ALWAYS run `cargo check`, `cargo build`, or `cargo test` sequentially. Wait for one to finish before starting the next.
+- When fixing errors, execute the file `Write`/`Edit` tool FIRST, wait for it to succeed, and only THEN run `cargo` commands to verify. Do not parallelize file edits with cargo builds.
+
+## Build Configuration
+
+- Ensure `.cargo/config.toml` contains:
+  ```toml
+  [build]
+  rustc-wrapper = "kache"
+  ```
+  This wraps `rustc` with [kache](https://github.com/nicholasgasior/kache) to cache compilation artifacts and significantly speed up incremental builds.
+
 ## Cargo Workspace Rules (Critical)
 
 1. Never manually type dependency versions in `Cargo.toml`; use `cargo add`.
@@ -26,30 +45,17 @@
 5. Root `[workspace.dependencies]` must not carry features by default.
 6. Sub-crates must use `workspace = true` for `version`, `edition`, and shared dependencies.
 
-## Preferred Dependencies and Versions
+## Preferred Dependencies
 
-When introducing new dependencies, prefer these versions unless compatibility requires an upgrade:
+When introducing new dependencies, prefer these crates unless compatibility requires a different choice:
 
-- `clap = "4.5.60"`
-- `config = "0.15.19"`
-- `eyre = "0.6.12"`
-- `serde = "1.0.228"`
-- `thiserror = "2.0.18"`
-- `tokio = "1.49.0"`
-- `tracing = "0.1.44"`
-- `tracing-subscriber = "0.3.22"`
-- `tracing-opentelemetry = "0.32.1"`
-- `opentelemetry = "0.31.0"`
-- `opentelemetry-otlp = "0.31.0"`
-- `sqlx = "=0.9.0-alpha.1"`
-- `utoipa = "5.4.0"`
-- `utoipa-swagger-ui = "9.0.2"`
-- `arc-swap = "1.8.2"`
-- `hpx = "2.3.1"`
-- `scc = "3.6.5"`
-- `winnow = "0.7.14"`
-- `shadow-rs = "1.7.0"`
-- `ecdysis = "1.0.1"`
+```
+clap, config, eyre, proptest, serde, thiserror, tokio, tracing, tracing-subscriber,
+tracing-opentelemetry, opentelemetry, opentelemetry-otlp, sqlx, utoipa, utoipa-swagger-ui,
+arc-swap, hpx, scc, winnow, shadow-rs, ecdysis
+```
+
+Always use the latest stable version available on crates.io. Run `cargo add <crate> --workspace` to add dependencies — this automatically resolves to the latest version.
 
 ## Dependency Priority and Forbidden Choices
 
@@ -160,14 +166,17 @@ When introducing new dependencies, prefer these versions unless compatibility re
 
 When fixing failures, identify root cause first, then apply idiomatic fixes instead of suppressing warnings or patching symptoms.
 
-Use outside-in development for behavior changes:
+## Parallelization and Resource Utilization
+
+- **Use as many subagents and as much token budget as needed** to complete tasks efficiently. Parallelize independent work aggressively and maximize context utilization. Spawn subagents for independent research, code exploration, and implementation tasks to reduce latency and improve throughput.
+
+Use test-driven development for behavior changes:
 
 - **Git Restrictions:** NEVER use `git worktree`. All code modifications MUST be made directly on the current branch in the existing working directory.
-- start with a failing Gherkin scenario under `features/`,
 - drive implementation with failing crate-local unit tests and `proptest` properties in the affected crate,
 - keep `proptest` in the normal `cargo test` loop instead of creating a separate property-test command,
 - treat `cargo-fuzz` as conditional planning work rather than baseline template setup,
-- keep `cucumber-rs` steps thin and route business rules through shared Rust crates.
+- after the inner loop is green, run `just mutation` (cargo-mutants) and fix any surviving mutants.
 
 After each feature or bug fix, run:
 
@@ -175,19 +184,19 @@ After each feature or bug fix, run:
 just format
 just lint
 just test
-just bdd
-just test-all
+just mutation
 ```
 
 If any command fails, report the failure and do not claim completion.
 
 ## Testing Requirements
 
-- BDD scenarios: place Gherkin features under `features/` and keep the runner in crate-level `tests/` with `cucumber-rs`.
-- Use BDD to define acceptance behavior first, then use crate-local unit tests and `proptest` properties for the inner TDD loop.
 - Unit tests: colocate with implementation (`#[cfg(test)]`).
+- Use `cargo test` as the TDD inner loop; write a failing test first, then implement the smallest change that makes it pass.
 - Prefer example-based unit tests for named business cases and edge cases, and reserve `proptest` for invariants that should hold across many generated inputs.
 - Property tests: colocate `proptest` coverage with the crate logic it exercises so it runs through the ordinary `cargo test` path.
+- Cover boundary conditions (empty inputs, zero values, maximum sizes) with explicit assertions.
+- Mutation testing: run `just mutation` (cargo-mutants) and fix any surviving mutants to keep the mutation score high.
 - Benchmarks: only plan or add Criterion when the scope includes an explicit latency SLA, throughput target, or known hot path in a specific crate.
 - Benchmark workflow: when benchmarking is justified, add Criterion only in the affected crate instead of pre-seeding benchmark scaffolding across the workspace.
 - Fuzz tests: only plan or add `cargo-fuzz` when a crate parses hostile input, implements protocols, decodes binary formats, or contains meaningful `unsafe` code.

@@ -1,0 +1,30 @@
+[package]
+name = "ledgerflow-protocol-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.ledgerflow-protocol]
+path = ".."
+
+[[bin]]
+name = "parse_challenge"
+path = "fuzz_targets/parse_challenge.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_authorization"
+path = "fuzz_targets/parse_authorization.rs"
+test = false
+doc = false
+bench = false

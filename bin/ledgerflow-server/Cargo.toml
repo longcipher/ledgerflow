@@ -1,0 +1,22 @@
+[package]
+name = "ledgerflow-server-bin"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "ledgerflow-server"
+path = "src/main.rs"
+
+[dependencies]
+axum = "0.8"
+clap = { workspace = true, features = ["derive"] }
+eyre.workspace = true
+ledgerflow-core = { path = "../../crates/ledgerflow-core" }
+ledgerflow-server = { path = "../../crates/ledgerflow-server" }
+tokio = { workspace = true, features = ["full"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+
+[lints]
+workspace = true

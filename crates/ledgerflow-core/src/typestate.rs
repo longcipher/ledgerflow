@@ -1,333 +1,397 @@
-//! TypeState-driven warrant builder with compile-time validation.
+//! Compile-time-safe warrant builder.
 //!
-//! This module demonstrates extreme compile-time safety by encoding warrant
-//! construction states in the type system. Invalid states are impossible to represent.
+//! The builder tracks required fields with type-state markers and validates
+//! protocol invariants (TTL cap, depth cap, required constraints) at
+//! construction time, so illegal warrants cannot be built.
 
+use std::collections::BTreeMap;
 use std::marker::PhantomData;
 
-use crate::warrant::{
-    AudienceScope, Constraint, DelegationPolicy, PaymentSubjectRef, SignatureEnvelope, SignerRef,
-    SigningKeyPair, Warrant, WarrantMetadata,
+use crate::{
+    approval::ApprovalGate,
+    constraint::{MerchantConstraint, PaymentConstraint, ResourceConstraint, ToolConstraint},
+    warrant::{
+        DEFAULT_MAX_DEPTH, DEFAULT_WARRANT_TTL_SECS, MAX_DELEGATION_DEPTH, MAX_WARRANT_TTL_SECS,
+        SignerRef, SigningKeyPair, Warrant, generate_warrant_id,
+    },
 };
 
-// ============================================================================
-// TypeState Markers: Zero-sized types that exist only at compile time
-// ============================================================================
-
-/// Marker: Warrant has no issuer configured yet
+/// Marker: issuer not yet configured.
 #[derive(Debug)]
 pub struct NoIssuer;
-/// Marker: Warrant has an issuer configured
+/// Marker: issuer configured.
 #[derive(Debug)]
 pub struct HasIssuer;
-/// Marker: Warrant has no subject signer configured yet
+/// Marker: holder not yet configured.
 #[derive(Debug)]
-pub struct NoSubject;
-/// Marker: Warrant has a subject signer configured
+pub struct NoHolder;
+/// Marker: holder configured.
 #[derive(Debug)]
-pub struct HasSubject;
-/// Marker: Warrant has no payment subjects configured yet
-#[derive(Debug)]
-pub struct NoPaymentSubjects;
-/// Marker: Warrant has payment subjects configured
-#[derive(Debug)]
-pub struct HasPaymentSubjects;
-/// Marker: Warrant is unsigned
+pub struct HasHolder;
+/// Marker: unsigned.
 #[derive(Debug)]
 pub struct Unsigned;
-/// Marker: Warrant is signed and ready
+/// Marker: signed and ready.
 #[derive(Debug)]
 pub struct Signed;
 
-// ============================================================================
-// Typed Warrant Builder: State transitions enforced at compile time
-// ============================================================================
-
-/// Type-safe warrant builder that enforces construction order at compile time.
-///
-/// The builder uses phantom types to track which fields have been set. The compiler
-/// prevents you from building a warrant until all required fields are provided,
-/// and prevents you from setting the same field twice.
-///
-/// # Design Pattern: TypeState
-///
-/// Each builder method consumes `self` and returns a new builder with updated
-/// type parameters. This is a zero-cost abstraction - the phantom types disappear
-/// at compile time, leaving only the data.
+/// Compile-time-safe warrant builder for root warrants.
 ///
 /// # Example
 ///
 /// ```ignore
-/// let warrant = WarrantBuilder::new()
-///     .version(WARRANT_VERSION_V1)
-///     .warrant_id("warrant-123")
-///     .issuer(issuer_keys.signer_ref())  // Transitions NoIssuer -> HasIssuer
-///     .subject_signer(agent_keys.signer_ref())  // Transitions NoSubject -> HasSubject
-///     .add_payment_subject(subject)  // Transitions NoPaymentSubjects -> HasPaymentSubjects
-///     .audience(AudienceScope::Any)
-///     .not_before_ms(1000)
-///     .expires_at_ms(5000)
-///     .delegation(DelegationPolicy { can_delegate: false, max_depth: 0 })
-///     .sign_with(&issuer_keys);  // Only available when all required fields are set
+/// use ledgerflow_core::typestate::WarrantBuilder;
+/// use ledgerflow_core::constraint::{MerchantConstraint, ResourceConstraint, PaymentConstraint};
+///
+/// let warrant = WarrantBuilder::new(now_ms)
+///     .issuer(issuer_keys.signer_ref())        // NoIssuer -> HasIssuer
+///     .holder(holder_keys.signer_ref())        // NoHolder  -> HasHolder
+///     .merchant(MerchantConstraint::with_ids(vec!["acme".into()]))
+///     .resource(ResourceConstraint::with_path_prefixes(vec!["/v1".into()]))
+///     .payment(PaymentConstraint::new(100).with_asset(asset))
+///     .sign_with(&issuer_keys, &mut rng);
 /// ```
-pub struct WarrantBuilder<I, S, P, Sig> {
-    version: u16,
-    warrant_id: String,
+pub struct WarrantBuilder<I, H, Sig> {
+    now_ms: u64,
+    random_seed: Option<[u8; 8]>,
+    explicit_id: Option<[u8; 16]>,
     issuer: Option<SignerRef>,
-    subject_signer: Option<SignerRef>,
-    payment_subjects: Vec<PaymentSubjectRef>,
-    audience: AudienceScope,
-    not_before_ms: u64,
-    expires_at_ms: u64,
-    delegation: DelegationPolicy,
-    constraints: Vec<Constraint>,
-    metadata: WarrantMetadata,
-    signature: Option<SignatureEnvelope>,
-    _marker: PhantomData<(I, S, P, Sig)>,
+    holder: Option<SignerRef>,
+    ttl_secs: u64,
+    max_depth: u8,
+    merchant: Option<MerchantConstraint>,
+    resource: Option<ResourceConstraint>,
+    payment: Option<PaymentConstraint>,
+    tool: Option<ToolConstraint>,
+    approval_gates: BTreeMap<String, ApprovalGate>,
+    required_approvers: Vec<SignerRef>,
+    min_approvals: u32,
+    extensions: BTreeMap<String, Vec<u8>>,
+    _marker: PhantomData<(I, H, Sig)>,
 }
 
-impl<I, S, P, Sig> std::fmt::Debug for WarrantBuilder<I, S, P, Sig> {
+impl<I, H, Sig> std::fmt::Debug for WarrantBuilder<I, H, Sig> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("WarrantBuilder")
-            .field("version", &self.version)
-            .field("warrant_id", &self.warrant_id)
+            .field("now_ms", &self.now_ms)
+            .field("ttl_secs", &self.ttl_secs)
+            .field("max_depth", &self.max_depth)
             .finish_non_exhaustive()
     }
 }
 
-impl WarrantBuilder<NoIssuer, NoSubject, NoPaymentSubjects, Unsigned> {
-    /// Creates a new warrant builder with sensible defaults.
-    ///
-    /// All required fields must be set before the warrant can be signed.
+impl WarrantBuilder<NoIssuer, NoHolder, Unsigned> {
+    /// Creates a new warrant builder. `now_ms` seeds the warrant's `issued_at`.
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new(now_ms: u64) -> Self {
         Self {
-            version: crate::warrant::WARRANT_VERSION_V1,
-            warrant_id: String::new(),
+            now_ms,
+            random_seed: None,
+            explicit_id: None,
             issuer: None,
-            subject_signer: None,
-            payment_subjects: Vec::new(),
-            audience: AudienceScope::Any,
-            not_before_ms: 0,
-            expires_at_ms: 0,
-            delegation: DelegationPolicy { can_delegate: false, max_depth: 0 },
-            constraints: Vec::new(),
-            metadata: WarrantMetadata::default(),
-            signature: None,
+            holder: None,
+            ttl_secs: DEFAULT_WARRANT_TTL_SECS,
+            max_depth: DEFAULT_MAX_DEPTH,
+            merchant: None,
+            resource: None,
+            payment: None,
+            tool: None,
+            approval_gates: BTreeMap::new(),
+            required_approvers: Vec::new(),
+            min_approvals: 0,
+            extensions: BTreeMap::new(),
             _marker: PhantomData,
         }
     }
 }
 
-impl Default for WarrantBuilder<NoIssuer, NoSubject, NoPaymentSubjects, Unsigned> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-// ============================================================================
-// Builder Methods: Available at all states
-// ============================================================================
-
-impl<I, S, P, Sig> WarrantBuilder<I, S, P, Sig> {
-    /// Sets the warrant schema version.
+impl<I, H, Sig> WarrantBuilder<I, H, Sig> {
+    /// Sets the warrant TTL (defaults to 7 days; hard cap 90 days).
     #[must_use]
-    pub const fn version(mut self, version: u16) -> Self {
-        self.version = version;
+    pub fn ttl_secs(mut self, ttl_secs: u64) -> Self {
+        self.ttl_secs = ttl_secs.min(MAX_WARRANT_TTL_SECS);
         self
     }
 
-    /// Sets the unique warrant identifier.
+    /// Sets the maximum delegation depth (defaults to 4; hard cap 8).
     #[must_use]
-    pub fn warrant_id(mut self, warrant_id: impl Into<String>) -> Self {
-        self.warrant_id = warrant_id.into();
+    pub fn max_depth(mut self, max_depth: u8) -> Self {
+        self.max_depth = max_depth.min(MAX_DELEGATION_DEPTH);
         self
     }
 
-    /// Sets the audience scope for this warrant.
+    /// Sets an explicit 16-byte warrant id (overrides generated UUIDv7).
     #[must_use]
-    pub fn audience(mut self, audience: AudienceScope) -> Self {
-        self.audience = audience;
+    pub const fn warrant_id(mut self, id: [u8; 16]) -> Self {
+        self.explicit_id = Some(id);
         self
     }
 
-    /// Sets the not-before timestamp in milliseconds.
+    /// Sets the merchant constraint.
     #[must_use]
-    pub const fn not_before_ms(mut self, not_before_ms: u64) -> Self {
-        self.not_before_ms = not_before_ms;
+    pub fn merchant(mut self, merchant: MerchantConstraint) -> Self {
+        self.merchant = Some(merchant);
         self
     }
 
-    /// Sets the expiration timestamp in milliseconds.
+    /// Sets the resource constraint.
     #[must_use]
-    pub const fn expires_at_ms(mut self, expires_at_ms: u64) -> Self {
-        self.expires_at_ms = expires_at_ms;
+    pub fn resource(mut self, resource: ResourceConstraint) -> Self {
+        self.resource = Some(resource);
         self
     }
 
-    /// Sets the delegation policy.
+    /// Sets the payment constraint.
     #[must_use]
-    pub const fn delegation(mut self, delegation: DelegationPolicy) -> Self {
-        self.delegation = delegation;
+    pub fn payment(mut self, payment: PaymentConstraint) -> Self {
+        self.payment = Some(payment);
         self
     }
 
-    /// Adds a constraint to the warrant.
+    /// Sets the tool constraint.
     #[must_use]
-    pub fn add_constraint(mut self, constraint: Constraint) -> Self {
-        self.constraints.push(constraint);
+    pub fn tool(mut self, tool: ToolConstraint) -> Self {
+        self.tool = Some(tool);
         self
     }
 
-    /// Sets all constraints at once, replacing any existing constraints.
+    /// Adds an approval gate for a tool.
     #[must_use]
-    pub fn constraints(mut self, constraints: Vec<Constraint>) -> Self {
-        self.constraints = constraints;
+    pub fn approval_gate(mut self, tool: impl Into<String>, gate: ApprovalGate) -> Self {
+        self.approval_gates.insert(tool.into(), gate);
         self
     }
 
-    /// Sets the warrant metadata.
+    /// Adds a required approver key.
     #[must_use]
-    pub fn metadata(mut self, metadata: WarrantMetadata) -> Self {
-        self.metadata = metadata;
+    pub fn approver(mut self, approver: SignerRef) -> Self {
+        self.required_approvers.push(approver);
         self
     }
-}
 
-// ============================================================================
-// State Transition Methods: Change the type state
-// ============================================================================
-
-impl<S, P, Sig> WarrantBuilder<NoIssuer, S, P, Sig> {
-    /// Sets the issuer signer reference.
-    ///
-    /// This method is only available when the issuer has not been set yet.
-    /// After calling this, the builder transitions to `HasIssuer` state.
+    /// Sets the m-of-n approval threshold (0 = all required approvers).
     #[must_use]
-    pub fn issuer(mut self, issuer: SignerRef) -> WarrantBuilder<HasIssuer, S, P, Sig> {
-        self.issuer = Some(issuer);
-        WarrantBuilder {
-            version: self.version,
-            warrant_id: self.warrant_id,
+    pub const fn min_approvals(mut self, min_approvals: u32) -> Self {
+        self.min_approvals = min_approvals;
+        self
+    }
+
+    /// Adds an application extension (frozen in v1).
+    #[must_use]
+    pub fn extension(mut self, key: impl Into<String>, value: Vec<u8>) -> Self {
+        self.extensions.insert(key.into(), value);
+        self
+    }
+
+    /// Extracts the raw builder fields for state transitions.
+    fn into_parts(self) -> Parts {
+        Parts {
+            now_ms: self.now_ms,
+            random_seed: self.random_seed,
+            explicit_id: self.explicit_id,
             issuer: self.issuer,
-            subject_signer: self.subject_signer,
-            payment_subjects: self.payment_subjects,
-            audience: self.audience,
-            not_before_ms: self.not_before_ms,
-            expires_at_ms: self.expires_at_ms,
-            delegation: self.delegation,
-            constraints: self.constraints,
-            metadata: self.metadata,
-            signature: self.signature,
-            _marker: PhantomData,
+            holder: self.holder,
+            ttl_secs: self.ttl_secs,
+            max_depth: self.max_depth,
+            merchant: self.merchant,
+            resource: self.resource,
+            payment: self.payment,
+            tool: self.tool,
+            approval_gates: self.approval_gates,
+            required_approvers: self.required_approvers,
+            min_approvals: self.min_approvals,
+            extensions: self.extensions,
         }
     }
 }
 
-impl<I, P, Sig> WarrantBuilder<I, NoSubject, P, Sig> {
-    /// Sets the subject signer reference.
-    ///
-    /// This method is only available when the subject has not been set yet.
-    /// After calling this, the builder transitions to `HasSubject` state.
+impl<H, Sig> WarrantBuilder<NoIssuer, H, Sig> {
+    /// Sets the issuer. Transitions to `HasIssuer`.
     #[must_use]
-    pub fn subject_signer(
-        mut self,
-        subject_signer: SignerRef,
-    ) -> WarrantBuilder<I, HasSubject, P, Sig> {
-        self.subject_signer = Some(subject_signer);
+    pub fn issuer(self, issuer: SignerRef) -> WarrantBuilder<HasIssuer, H, Sig> {
+        let parts = self.into_parts();
         WarrantBuilder {
-            version: self.version,
-            warrant_id: self.warrant_id,
-            issuer: self.issuer,
-            subject_signer: self.subject_signer,
-            payment_subjects: self.payment_subjects,
-            audience: self.audience,
-            not_before_ms: self.not_before_ms,
-            expires_at_ms: self.expires_at_ms,
-            delegation: self.delegation,
-            constraints: self.constraints,
-            metadata: self.metadata,
-            signature: self.signature,
+            now_ms: parts.now_ms,
+            random_seed: parts.random_seed,
+            explicit_id: parts.explicit_id,
+            issuer: Some(issuer),
+            holder: parts.holder,
+            ttl_secs: parts.ttl_secs,
+            max_depth: parts.max_depth,
+            merchant: parts.merchant,
+            resource: parts.resource,
+            payment: parts.payment,
+            tool: parts.tool,
+            approval_gates: parts.approval_gates,
+            required_approvers: parts.required_approvers,
+            min_approvals: parts.min_approvals,
+            extensions: parts.extensions,
             _marker: PhantomData,
         }
     }
 }
 
-impl<I, S, Sig> WarrantBuilder<I, S, NoPaymentSubjects, Sig> {
-    /// Adds the first payment subject.
-    ///
-    /// This method is only available when no payment subjects have been added yet.
-    /// After calling this, the builder transitions to `HasPaymentSubjects` state.
+impl<I, Sig> WarrantBuilder<I, NoHolder, Sig> {
+    /// Sets the holder. Transitions to `HasHolder`.
     #[must_use]
-    pub fn add_payment_subject(
-        mut self,
-        subject: PaymentSubjectRef,
-    ) -> WarrantBuilder<I, S, HasPaymentSubjects, Sig> {
-        self.payment_subjects.push(subject);
+    pub fn holder(self, holder: SignerRef) -> WarrantBuilder<I, HasHolder, Sig> {
+        let parts = self.into_parts();
         WarrantBuilder {
-            version: self.version,
-            warrant_id: self.warrant_id,
-            issuer: self.issuer,
-            subject_signer: self.subject_signer,
-            payment_subjects: self.payment_subjects,
-            audience: self.audience,
-            not_before_ms: self.not_before_ms,
-            expires_at_ms: self.expires_at_ms,
-            delegation: self.delegation,
-            constraints: self.constraints,
-            metadata: self.metadata,
-            signature: self.signature,
+            now_ms: parts.now_ms,
+            random_seed: parts.random_seed,
+            explicit_id: parts.explicit_id,
+            issuer: parts.issuer,
+            holder: Some(holder),
+            ttl_secs: parts.ttl_secs,
+            max_depth: parts.max_depth,
+            merchant: parts.merchant,
+            resource: parts.resource,
+            payment: parts.payment,
+            tool: parts.tool,
+            approval_gates: parts.approval_gates,
+            required_approvers: parts.required_approvers,
+            min_approvals: parts.min_approvals,
+            extensions: parts.extensions,
             _marker: PhantomData,
         }
     }
 }
 
-impl<I, S, Sig> WarrantBuilder<I, S, HasPaymentSubjects, Sig> {
-    /// Adds an additional payment subject.
+impl WarrantBuilder<HasIssuer, HasHolder, Unsigned> {
+    /// Signs the warrant with the issuer's key pair and returns it.
     ///
-    /// This method is only available after at least one payment subject has been added.
-    #[must_use]
-    pub fn add_payment_subject(mut self, subject: PaymentSubjectRef) -> Self {
-        self.payment_subjects.push(subject);
-        self
-    }
-}
+    /// `random_bytes` supplies the 8 bytes of randomness for the UUIDv7
+    /// warrant id (callers MUST provide fresh random bytes in production).
+    /// When an explicit id was set via [`Self::warrant_id`], `random_bytes`
+    /// is ignored.
+    ///
+    /// This is the only terminal transition; it is available once both issuer
+    /// and holder are configured.
+    pub fn sign_with(self, issuer_keys: &SigningKeyPair, random_bytes: [u8; 8]) -> Warrant {
+        let mut builder = self;
+        let id = builder.explicit_id.take().unwrap_or_else(|| {
+            generate_warrant_id(builder.now_ms, random_bytes)
+        });
+        let issued_at = builder.now_ms / 1000;
+        let expires_at = issued_at.saturating_add(builder.ttl_secs);
+        let merchant = builder.merchant.unwrap_or_default();
+        let resource = builder.resource.unwrap_or_default();
+        #[allow(clippy::expect_used)]
+        let payment = builder
+            .payment
+            .expect("warrant builder: payment constraint is required");
+        #[allow(clippy::expect_used)]
+        let issuer = builder.issuer.expect("warrant builder: issuer is required");
+        #[allow(clippy::expect_used)]
+        let holder = builder.holder.expect("warrant builder: holder is required");
 
-// ============================================================================
-// Terminal Method: Only available when all required fields are set
-// ============================================================================
-
-impl WarrantBuilder<HasIssuer, HasSubject, HasPaymentSubjects, Unsigned> {
-    /// Signs the warrant with the issuer's signing key pair.
-    ///
-    /// This method is only available when:
-    /// - Issuer has been set (HasIssuer)
-    /// - Subject signer has been set (HasSubject)
-    /// - At least one payment subject has been added (HasPaymentSubjects)
-    /// - The warrant is not yet signed (Unsigned)
-    ///
-    /// The compiler prevents calling this method if any required field is missing.
-    #[must_use]
-    #[expect(clippy::expect_used, reason = "typestate guarantees Options are Some at this point")]
-    pub fn sign_with(self, issuer_keys: &SigningKeyPair) -> Warrant {
         let mut warrant = Warrant {
-            version: self.version,
-            warrant_id: self.warrant_id,
-            issuer: self.issuer.expect("issuer must be set"),
-            subject_signer: self.subject_signer.expect("subject must be set"),
-            payment_subjects: self.payment_subjects,
-            audience: self.audience,
-            not_before_ms: self.not_before_ms,
-            expires_at_ms: self.expires_at_ms,
-            delegation: self.delegation,
-            constraints: self.constraints,
-            metadata: self.metadata,
-            signature: SignatureEnvelope {
-                alg: crate::warrant::SigningAlgorithm::Ed25519,
-                value: vec![],
-            },
+            version: crate::warrant::WARRANT_VERSION_V1,
+            id: id.to_vec(),
+            holder,
+            issuer,
+            issued_at,
+            expires_at,
+            depth: 0,
+            max_depth: builder.max_depth,
+            parent_hash: None,
+            merchant,
+            resource,
+            payment,
+            tool: builder.tool,
+            approval_gates: builder.approval_gates,
+            required_approvers: builder.required_approvers,
+            min_approvals: builder.min_approvals,
+            extensions: builder.extensions,
+            signature: issuer_keys.sign(b"placeholder"),
         };
-        warrant.signature = issuer_keys.sign(warrant.canonical_unsigned_payload().as_bytes());
+        warrant = warrant.sign_with(issuer_keys);
         warrant
+    }
+}
+
+/// Raw builder parts used internally for state transitions.
+struct Parts {
+    now_ms: u64,
+    random_seed: Option<[u8; 8]>,
+    explicit_id: Option<[u8; 16]>,
+    issuer: Option<SignerRef>,
+    holder: Option<SignerRef>,
+    ttl_secs: u64,
+    max_depth: u8,
+    merchant: Option<MerchantConstraint>,
+    resource: Option<ResourceConstraint>,
+    payment: Option<PaymentConstraint>,
+    tool: Option<ToolConstraint>,
+    approval_gates: BTreeMap<String, ApprovalGate>,
+    required_approvers: Vec<SignerRef>,
+    min_approvals: u32,
+    extensions: BTreeMap<String, Vec<u8>>,
+}
+
+/// Delegated-warrant builder for attenuating an existing root warrant.
+///
+/// A delegated warrant re-signs with the parent holder's key, carries the
+/// parent's payload hash, and can only narrow constraints.
+#[derive(Clone, Debug)]
+pub struct DelegatedWarrantBuilder {
+    parent: Warrant,
+}
+
+impl DelegatedWarrantBuilder {
+    /// Starts a delegated warrant from a parent warrant.
+    #[must_use]
+    pub const fn from(parent: Warrant) -> Self {
+        Self { parent }
+    }
+
+    /// Builds a delegated warrant issued by the parent holder.
+    ///
+    /// The child inherits the parent's constraints (runtime conjunction
+    /// guarantees monotonic attenuation); only the holder, TTL, and depth are
+    /// set here. Child TTL cannot exceed the parent's remaining lifetime.
+    /// `random_bytes` supplies the randomness for the child's UUIDv7 id.
+    #[must_use]
+    pub fn issue_to(
+        self,
+        new_holder: SignerRef,
+        delegator_keys: &SigningKeyPair,
+        now_ms: u64,
+        random_bytes: [u8; 8],
+    ) -> Warrant {
+        let parent = &self.parent;
+        let issued_at = now_ms / 1000;
+        let expires_at = issued_at.min(parent.expires_at);
+        let parent_payload_hash = crate::warrant::sha256_prefixed(parent.payload_bytes());
+        let depth = parent.depth + 1;
+
+        let id = generate_warrant_id(now_ms, random_bytes);
+
+        let mut child = Warrant {
+            version: crate::warrant::WARRANT_VERSION_V1,
+            id: id.to_vec(),
+            holder: new_holder,
+            issuer: parent.holder.clone(),
+            issued_at,
+            expires_at,
+            depth,
+            // `max_depth` is the ceiling for descendant depth, not a
+            // per-level decrement. It is inherited unchanged so that a chain
+            // can reach `parent.max_depth` levels deep (I4 static check is
+            // `child.depth > parent.max_depth`).
+            max_depth: parent.max_depth,
+            parent_hash: Some(parent_payload_hash.into_bytes()),
+            merchant: parent.merchant.clone(),
+            resource: parent.resource.clone(),
+            payment: parent.payment.clone(),
+            tool: parent.tool.clone(),
+            approval_gates: parent.approval_gates.clone(),
+            required_approvers: parent.required_approvers.clone(),
+            min_approvals: parent.min_approvals,
+            extensions: parent.extensions.clone(),
+            signature: delegator_keys.sign(b"placeholder"),
+        };
+        child = child.sign_with(delegator_keys);
+        child
     }
 }

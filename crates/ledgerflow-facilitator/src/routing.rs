@@ -5,13 +5,13 @@ use thiserror::Error;
 
 use crate::{
     rails::{
-        RailAdapter, RailQuote, custodial::CustodialRailAdapter, evm::EvmRailAdapter,
+        RailAdapter, RailError, RailQuote, custodial::CustodialRailAdapter, evm::EvmRailAdapter,
         exchange::ExchangeRailAdapter, gateway::GatewayRailAdapter,
     },
-    subject::{DefaultSubjectResolver, PaymentSubjectResolver, SubjectResolutionError},
+    subject::{DefaultSubjectResolver, PaymentSubjectResolver, ResolvedSubject, SubjectResolutionError},
 };
 
-/// Supported settlement rails in the MVP.
+/// Supported settlement rails.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RailKind {
     Evm,
@@ -34,6 +34,8 @@ pub struct RouteDecision {
 pub enum RoutingError {
     #[error(transparent)]
     Subject(#[from] SubjectResolutionError),
+    #[error(transparent)]
+    Rail(#[from] RailError),
     #[error("no rail adapter could service the resolved subject")]
     NoCompatibleRail,
 }
@@ -69,10 +71,7 @@ impl<R> Facilitator<R>
 where
     R: PaymentSubjectResolver,
 {
-    pub fn route(
-        &self,
-        authorization: &VerifiedAuthorization,
-    ) -> Result<RouteDecision, RoutingError> {
+    pub fn route(&self, authorization: &VerifiedAuthorization) -> Result<RouteDecision, RoutingError> {
         let resolved = self.resolver.resolve(authorization)?;
         let adapter = self
             .adapters
@@ -89,95 +88,26 @@ where
             quote: Some(quote),
         })
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use ledgerflow_core::{
-        PaymentRail, PaymentSubjectKind, PaymentSubjectRef, SignerRef, SigningAlgorithm,
-        VerifiedAuthorization,
-    };
-
-    use super::{Facilitator, RailKind};
-
-    fn verified_authorization(payment_subject: PaymentSubjectRef) -> VerifiedAuthorization {
-        VerifiedAuthorization {
-            merchant_id: "merchant-a".to_string(),
-            tool_name: "web-search".to_string(),
-            payment_subject,
-            payer: SignerRef::new(SigningAlgorithm::Ed25519, "agent-key"),
-            warrant_digest: "sha256:warrant".to_string(),
-            accepted_hash: "sha256:accepted".to_string(),
-            request_hash: "sha256:request".to_string(),
-            amount: 200,
-            asset: "USDC".to_string(),
-            scheme: "exact".to_string(),
-            payee_id: "merchant-a".to_string(),
-            rail: PaymentRail::Onchain,
-        }
+    /// Settles through the adapter that supports the resolved subject.
+    pub fn settle(
+        &self,
+        authorization: &VerifiedAuthorization,
+    ) -> Result<crate::rails::SettlementReceipt, RoutingError> {
+        let resolved = self.resolver.resolve(authorization)?;
+        let adapter = self
+            .adapters
+            .iter()
+            .find(|adapter| adapter.supports(&resolved))
+            .ok_or(RoutingError::NoCompatibleRail)?;
+        Ok(adapter.settle(authorization)?)
     }
 
-    #[test]
-    fn routes_onchain_subjects_to_the_evm_adapter() {
-        let facilitator = Facilitator::default();
-        let authorization = verified_authorization(PaymentSubjectRef::new(
-            PaymentSubjectKind::Caip10,
-            "caip10:eip155:8453:0xabc123",
-        ));
-
-        let route = facilitator.route(&authorization).expect("route");
-
-        assert_eq!(route.rail, RailKind::Evm);
-        assert!(route.merchant_flow_preserved);
-        assert!(route.quote.is_some());
-    }
-
-    #[test]
-    fn routes_exchange_subjects_to_the_exchange_adapter() {
-        let facilitator = Facilitator::default();
-        let authorization = verified_authorization(PaymentSubjectRef::new(
-            PaymentSubjectKind::ExchangeAccount,
-            "binance:uid:12345678",
-        ));
-
-        let route = facilitator.route(&authorization).expect("route");
-
-        assert_eq!(route.rail, RailKind::Exchange);
-        assert!(route.merchant_flow_preserved);
-        assert!(route.quote.is_some());
-    }
-
-    #[test]
-    fn routes_custodial_subjects_to_the_custodial_adapter() {
-        let facilitator = Facilitator::default();
-        let authorization = verified_authorization(PaymentSubjectRef::new(
-            PaymentSubjectKind::Opaque,
-            "custodial:internal-id-abc",
-        ));
-
-        let route = facilitator.route(&authorization).expect("route");
-
-        assert_eq!(route.rail, RailKind::Custodial);
-        assert!(route.merchant_flow_preserved);
-        let quote = route.quote.expect("quote");
-        assert_eq!(quote.rail, RailKind::Custodial);
-        assert_eq!(quote.estimated_fee, 0);
-    }
-
-    #[test]
-    fn routes_gateway_subjects_to_the_gateway_adapter() {
-        let facilitator = Facilitator::default();
-        let authorization = verified_authorization(PaymentSubjectRef::new(
-            PaymentSubjectKind::Opaque,
-            "gateway:stripe:acct_abc123",
-        ));
-
-        let route = facilitator.route(&authorization).expect("route");
-
-        assert_eq!(route.rail, RailKind::Gateway);
-        assert!(route.merchant_flow_preserved);
-        let quote = route.quote.expect("quote");
-        assert_eq!(quote.rail, RailKind::Gateway);
-        assert_eq!(quote.estimated_fee, 10);
+    /// Resolves the subject without routing (used by tests and tooling).
+    pub fn resolve_subject(
+        &self,
+        authorization: &VerifiedAuthorization,
+    ) -> Result<ResolvedSubject, SubjectResolutionError> {
+        self.resolver.resolve(authorization)
     }
 }

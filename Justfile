@@ -5,7 +5,7 @@ default:
 # Format all code
 format:
   rumdl fmt .
-  taplo fmt
+  cargo sort -w -g
   cargo +nightly fmt --all
 
 # Auto-fix linting issues
@@ -16,22 +16,26 @@ fix:
 lint:
   typos
   rumdl check .
-  taplo fmt --check
+  cargo sort -w -g -c
   cargo +nightly fmt --all -- --check
   cargo +nightly clippy --all -- -D warnings
-  cargo machete
+  cargo shear
 
 # Run tests
 test:
   cargo test --all-features
 
-# Run both TDD and BDD suites
+# Run all test suites
 test-all:
   cargo test --all-features
 
 # Run tests with coverage
 test-coverage:
   cargo tarpaulin --all-features --workspace --timeout 300
+
+# Run mutation testing to validate test quality
+mutate:
+  cargo mutants --all-features
 
 # Benchmark the merchant verification hot path
 bench:
@@ -40,12 +44,13 @@ bench:
 # Type-check the fuzz targets without running an open-ended fuzz session
 fuzz-check:
   cd crates/ledgerflow-core && cargo fuzz check decode_warrant
-  cd crates/ledgerflow-x402 && cargo fuzz check parse_extension
+  cd crates/ledgerflow-protocol && cargo fuzz check parse_challenge
+  cd crates/ledgerflow-protocol && cargo fuzz check parse_authorization
 
 # Run short fuzzing smoke tests for the protocol boundaries
 fuzz-smoke:
   cd crates/ledgerflow-core && cargo fuzz run decode_warrant -- -max_total_time=1
-  cd crates/ledgerflow-x402 && cargo fuzz run parse_extension -- -max_total_time=1
+  cd crates/ledgerflow-protocol && cargo fuzz run parse_challenge -- -max_total_time=1
 
 # Build entire workspace
 build:
@@ -80,8 +85,9 @@ clean:
 
 # Install all required development tools
 setup:
-  cargo install cargo-machete
-  cargo install taplo-cli
+  cargo install cargo-shear
+  cargo install cargo-sort
+  cargo install cargo-mutants
   cargo install typos-cli
 
 # Generate documentation for the workspace

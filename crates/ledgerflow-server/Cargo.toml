@@ -1,0 +1,26 @@
+[package]
+name = "ledgerflow-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+axum = "0.8"
+clap = { workspace = true, features = ["derive"] }
+ledgerflow-core = { path = "../ledgerflow-core" }
+ledgerflow-facilitator = { path = "../ledgerflow-facilitator" }
+ledgerflow-protocol = { path = "../ledgerflow-protocol" }
+ledgerflow-wallet = { path = "../ledgerflow-wallet" }
+serde = { workspace = true, features = ["derive"] }
+serde_json = "1.0"
+thiserror.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tower = "0.5"
+tracing = { workspace = true }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }

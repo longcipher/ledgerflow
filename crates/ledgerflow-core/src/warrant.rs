@@ -1,4 +1,9 @@
-//! Warrant, proof, and verification types for LedgerFlow.
+//! Warrant, proof, and signing types for LedgerFlow.
+//!
+//! This module defines the signed capability token at the heart of the
+//! LedgerFlow authorization layer. A warrant grants a *holder* the right to
+//! pay for specific merchants/resources within stateless limits, for a bounded
+//! lifetime, with an optional delegation chain.
 
 use std::{
     collections::BTreeMap,
@@ -10,44 +15,49 @@ use ed25519_dalek::{Signature, Signer as _, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::{
-    constraint::verify_all,
-    error::{AuthorizationError, Result, WireError, WireResult},
-};
+use crate::error::{WireError, WireResult};
 
-/// Default proof freshness window for merchant verification.
-pub const DEFAULT_PROOF_FRESHNESS_MS: u64 = 60_000;
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
 
-/// Warrant schema version used by the MVP.
-pub const WARRANT_VERSION_V1: u16 = 1;
+/// Warrant schema version used by v1.
+pub const WARRANT_VERSION_V1: u8 = 1;
+
+/// Default delegation depth cap for newly issued warrants.
+pub const DEFAULT_MAX_DEPTH: u8 = 4;
+
+/// Hard ceiling on delegation depth (protocol-enforced).
+pub const MAX_DELEGATION_DEPTH: u8 = 8;
+
+/// Default warrant lifetime (7 days, in seconds).
+pub const DEFAULT_WARRANT_TTL_SECS: u64 = 7 * 24 * 60 * 60;
+
+/// Hard ceiling on warrant lifetime (90 days, in seconds).
+pub const MAX_WARRANT_TTL_SECS: u64 = 90 * 24 * 60 * 60;
 
 /// Maximum accepted size for serialized warrant payloads.
 pub const MAX_WARRANT_CBOR_BYTES: usize = 64 * 1024;
 
+/// Default proof-of-possession freshness window (60 seconds).
+pub const DEFAULT_PROOF_FRESHNESS_MS: u64 = 60_000;
+
+/// Default clock-skew tolerance applied to PoP timestamps (30 seconds).
+pub const DEFAULT_CLOCK_SKEW_MS: u64 = 30_000;
+
+/// Default challenge lifetime (5 minutes).
+pub const DEFAULT_CHALLENGE_TTL_MS: u64 = 300_000;
+
+/// Domain-separation prefix for warrant envelope signatures.
+pub const WARRANT_SIGN_DOMAIN: &[u8] = b"ledgerflow-warrant-v1";
+
 // ---------------------------------------------------------------------------
-// CborCodec: Extension trait for CBOR encode/decode
+// CborCodec
 // ---------------------------------------------------------------------------
 
-/// Extension trait for types that support CBOR serialization with size limits.
-///
-/// # Design Pattern: Extension Trait
-///
-/// Provides a uniform `encode_cbor()` / `decode_cbor()` interface across
-/// domain types. Implementations can override the default max-payload size
-/// via [`max_cbor_bytes`](Self::max_cbor_bytes).
-///
-/// # Example
-///
-/// ```ignore
-/// use ledgerflow_core::warrant::CborCodec;
-///
-/// let bytes = warrant.encode_cbor()?;
-/// let decoded = Warrant::decode_cbor(&bytes)?;
-/// ```
+/// Extension trait for CBOR encode/decode with size limits.
 pub trait CborCodec: serde::Serialize + serde::de::DeserializeOwned {
     /// Maximum payload size accepted by [`decode_cbor`](Self::decode_cbor).
-    ///
-    /// Override this for types with different size constraints.
     fn max_cbor_bytes() -> usize {
         MAX_WARRANT_CBOR_BYTES
     }
@@ -77,13 +87,41 @@ pub trait CborCodec: serde::Serialize + serde::de::DeserializeOwned {
 pub fn sha256_prefixed<T: AsRef<[u8]>>(input: T) -> String {
     let digest = Sha256::digest(input.as_ref());
     let mut encoded = String::with_capacity(digest.len() * 2);
-
     for byte in digest {
         let _ = write!(encoded, "{byte:02x}");
     }
-
     format!("sha256:{encoded}")
 }
+
+/// Generates a 16-byte UUIDv7-style warrant identifier.
+///
+/// Layout: 48-bit unix-epoch-milliseconds, version bits (0111), variant bits
+/// (10), then 62 bits of randomness supplied by the caller.
+#[must_use]
+pub const fn generate_warrant_id(now_ms: u64, random: [u8; 8]) -> [u8; 16] {
+    let mut id = [0_u8; 16];
+    let timestamp = now_ms & 0x0000_FFFF_FFFF_FFFF;
+    id[0] = (timestamp >> 40) as u8;
+    id[1] = (timestamp >> 32) as u8;
+    id[2] = (timestamp >> 24) as u8;
+    id[3] = (timestamp >> 16) as u8;
+    id[4] = (timestamp >> 8) as u8;
+    id[5] = timestamp as u8;
+    id[6] = 0x70 | ((random[0] >> 4) & 0x0F);
+    id[7] = random[1];
+    id[8] = 0x80 | (random[2] >> 4);
+    id[9] = random[3];
+    id[10] = random[4];
+    id[11] = random[5];
+    id[12] = random[6];
+    id[13] = random[7];
+    // Remaining 2 bytes (14, 15) stay zero (variant bits already set).
+    id
+}
+
+// ---------------------------------------------------------------------------
+// Signing
+// ---------------------------------------------------------------------------
 
 /// Supported signer algorithms for warrants and proofs.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
@@ -120,12 +158,18 @@ pub struct SignerRef {
 
 impl SignerRef {
     #[must_use]
-    pub fn new(alg: SigningAlgorithm, public_key: impl Into<Vec<u8>>) -> Self {
-        Self { alg, public_key: public_key.into(), key_id: None }
+    pub const fn new(alg: SigningAlgorithm, public_key: Vec<u8>) -> Self {
+        Self { alg, public_key, key_id: None }
+    }
+
+    #[must_use]
+    pub fn with_key_id(mut self, key_id: String) -> Self {
+        self.key_id = Some(key_id);
+        self
     }
 }
 
-/// Ed25519 signing key pair for warrant issuance and proof creation.
+/// Ed25519 signing key pair for warrant issuance, proof creation, and approvals.
 #[derive(Clone)]
 pub struct SigningKeyPair {
     signing_key: ed25519_dalek::SigningKey,
@@ -140,13 +184,8 @@ impl fmt::Debug for SigningKeyPair {
 }
 
 impl SigningKeyPair {
-    /// Generates a new random Ed25519 key pair.
-    #[must_use]
-    pub fn generate(rng: &mut (impl rand_core::RngCore + rand_core::CryptoRng)) -> Self {
-        Self { signing_key: ed25519_dalek::SigningKey::generate(rng) }
-    }
-
     /// Creates a key pair from raw Ed25519 secret key bytes.
+    #[must_use]
     pub fn from_bytes(secret_key: &[u8; 32]) -> Self {
         Self { signing_key: ed25519_dalek::SigningKey::from_bytes(secret_key) }
     }
@@ -163,7 +202,7 @@ impl SigningKeyPair {
         SignerRef::new(SigningAlgorithm::Ed25519, self.public_key_bytes().to_vec())
     }
 
-    /// Signs a message, producing a `SignatureEnvelope`.
+    /// Signs a message, producing a [`SignatureEnvelope`].
     #[must_use]
     pub fn sign(&self, message: &[u8]) -> SignatureEnvelope {
         let signature = self.signing_key.sign(message);
@@ -171,7 +210,7 @@ impl SigningKeyPair {
     }
 }
 
-/// Signature container for warrants and proofs.
+/// Signature container for warrants, proofs, and approvals.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SignatureEnvelope {
     pub alg: SigningAlgorithm,
@@ -179,8 +218,9 @@ pub struct SignatureEnvelope {
 }
 
 impl SignatureEnvelope {
-    /// Verifies this signature against a signer and message.
-    pub fn verify(&self, signer: &SignerRef, message: &[u8]) -> bool {
+    /// Verifies this signature against a signer and message using Ed25519
+    /// **strict** verification (rejects non-canonical signatures).
+    pub fn verify_strict(&self, signer: &SignerRef, message: &[u8]) -> bool {
         if self.alg != signer.alg || self.alg != SigningAlgorithm::Ed25519 {
             return false;
         }
@@ -225,6 +265,10 @@ impl<'de> Deserialize<'de> for SignatureEnvelope {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Subjects and assets
+// ---------------------------------------------------------------------------
+
 /// Opaque settlement subject that only the Facilitator interprets.
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct PaymentSubjectRef {
@@ -237,14 +281,9 @@ impl PaymentSubjectRef {
     pub fn new(kind: PaymentSubjectKind, value: impl Into<String>) -> Self {
         Self { kind, value: value.into() }
     }
-
-    #[must_use]
-    fn canonical(&self) -> String {
-        format!("{}:{}", self.kind, self.value)
-    }
 }
 
-/// Supported payment subject kinds in the MVP.
+/// Supported payment subject kinds.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[non_exhaustive]
 pub enum PaymentSubjectKind {
@@ -266,55 +305,12 @@ impl Display for PaymentSubjectKind {
     }
 }
 
-/// Narrow merchant audience scope for a warrant.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[non_exhaustive]
-pub enum AudienceScope {
-    MerchantIds(Vec<String>),
-    MerchantHosts(Vec<String>),
-    Any,
-}
-
-impl AudienceScope {
-    #[must_use]
-    pub fn allows(&self, merchant_id: &str, merchant_host: &str) -> bool {
-        match self {
-            Self::MerchantIds(allowed) => allowed.iter().any(|candidate| candidate == merchant_id),
-            Self::MerchantHosts(allowed) => {
-                allowed.iter().any(|candidate| merchant_host.ends_with(candidate))
-            }
-            Self::Any => true,
-        }
-    }
-
-    #[must_use]
-    fn canonical(&self) -> String {
-        match self {
-            Self::MerchantIds(values) => format!("merchant_ids={}", canonical_list(values)),
-            Self::MerchantHosts(values) => format!("merchant_hosts={}", canonical_list(values)),
-            Self::Any => "any".to_string(),
-        }
-    }
-}
-
-/// Delegation policy for a warrant.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct DelegationPolicy {
-    pub can_delegate: bool,
-    pub max_depth: u8,
-}
-
-impl DelegationPolicy {
-    #[must_use]
-    fn canonical(self) -> String {
-        format!("can_delegate={};max_depth={}", u8::from(self.can_delegate), self.max_depth)
-    }
-}
-
-/// A payment asset allowed by the warrant.
+/// A payment asset allowed by the warrant (CAIP-19 when available).
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct AssetRef {
+    /// Asset identifier. Prefer CAIP-19 (`eip155:8453/slip44:60:0x8335...`).
     pub asset: String,
+    /// Optional network hint (kept for compatibility with legacy fixtures).
     pub network: Option<String>,
 }
 
@@ -324,24 +320,17 @@ impl AssetRef {
         Self { asset: asset.into(), network }
     }
 
+    /// Returns `true` when `candidate` matches this asset.
     #[must_use]
-    fn canonical(&self) -> String {
-        let network = self.network.as_deref().unwrap_or("-");
-        format!("{}@{network}", self.asset)
+    pub fn matches(&self, candidate: &str, candidate_network: Option<&str>) -> bool {
+        if self.asset != candidate {
+            return false;
+        }
+        match (&self.network, candidate_network) {
+            (Some(expected), Some(given)) => expected == given,
+            _ => true,
+        }
     }
-}
-
-/// Maximum amount a warrant can authorize per request.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct AmountLimit {
-    pub amount: u64,
-}
-
-/// Windowed spending limit for a warrant.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct PeriodLimit {
-    pub amount: u64,
-    pub window_ms: u64,
 }
 
 /// High-level settlement rails allowed by a warrant.
@@ -366,449 +355,183 @@ impl Display for PaymentRail {
     }
 }
 
-/// Typed warrant constraints for the MVP.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[non_exhaustive]
-pub enum Constraint {
-    Merchant(MerchantConstraint),
-    Resource(ResourceConstraint),
-    Tool(ToolConstraint),
-    Payment(PaymentConstraint),
-    Sponsorship(SponsorshipConstraint),
-}
-
-impl Constraint {
-    #[must_use]
-    fn canonical(&self) -> String {
-        match self {
-            Self::Merchant(constraint) => format!("merchant({})", constraint.canonical()),
-            Self::Resource(constraint) => format!("resource({})", constraint.canonical()),
-            Self::Tool(constraint) => format!("tool({})", constraint.canonical()),
-            Self::Payment(constraint) => format!("payment({})", constraint.canonical()),
-            Self::Sponsorship(constraint) => {
-                format!("sponsorship({})", constraint.canonical())
-            }
-        }
-    }
-}
-
-/// Merchant allowlist constraint.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct MerchantConstraint {
-    pub merchant_ids: Vec<String>,
-    pub host_suffixes: Vec<String>,
-}
-
-impl MerchantConstraint {
-    #[must_use]
-    fn canonical(&self) -> String {
-        format!(
-            "merchant_ids={};host_suffixes={}",
-            canonical_list(&self.merchant_ids),
-            canonical_list(&self.host_suffixes)
-        )
-    }
-}
-
-/// HTTP method and path constraint.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct ResourceConstraint {
-    pub http_methods: Vec<String>,
-    pub path_prefixes: Vec<String>,
-}
-
-impl ResourceConstraint {
-    #[must_use]
-    fn canonical(&self) -> String {
-        format!(
-            "methods={};paths={}",
-            canonical_uppercase_list(&self.http_methods),
-            canonical_list(&self.path_prefixes)
-        )
-    }
-}
-
-/// AI-native tool constraint.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct ToolConstraint {
-    pub tool_names: Vec<String>,
-    pub model_providers: Vec<String>,
-    pub action_labels: Vec<String>,
-}
-
-impl ToolConstraint {
-    #[must_use]
-    fn canonical(&self) -> String {
-        format!(
-            "tools={};providers={};labels={}",
-            canonical_list(&self.tool_names),
-            canonical_list(&self.model_providers),
-            canonical_list(&self.action_labels)
-        )
-    }
-}
-
-/// Payment authorization constraint.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct PaymentConstraint {
-    pub max_per_request: AmountLimit,
-    pub period_limit: Option<PeriodLimit>,
-    pub allowed_assets: Vec<AssetRef>,
-    pub allowed_rails: Vec<PaymentRail>,
-    pub allowed_schemes: Vec<String>,
-    pub payee_ids: Vec<String>,
-}
-
-impl PaymentConstraint {
-    #[must_use]
-    fn canonical(&self) -> String {
-        let period = self.period_limit.map_or_else(
-            || "-".to_string(),
-            |limit| format!("{}@{}", limit.amount, limit.window_ms),
-        );
-        let rails: Vec<String> = self.allowed_rails.iter().map(ToString::to_string).collect();
-        let assets: Vec<String> = self.allowed_assets.iter().map(AssetRef::canonical).collect();
-
-        format!(
-            "max={};period={period};assets={};rails={};schemes={};payees={}",
-            self.max_per_request.amount,
-            canonical_list(&assets),
-            canonical_list(&rails),
-            canonical_list(&self.allowed_schemes),
-            canonical_list(&self.payee_ids)
-        )
-    }
-}
-
-/// Sponsorship constraint for third-party execution payment.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct SponsorshipConstraint {
-    pub allow_sponsored_execution: bool,
-    pub sponsor_ids: Vec<String>,
-}
-
-impl SponsorshipConstraint {
-    #[must_use]
-    fn canonical(&self) -> String {
-        format!(
-            "allow={};sponsors={}",
-            u8::from(self.allow_sponsored_execution),
-            canonical_list(&self.sponsor_ids)
-        )
-    }
-}
-
-/// Additional metadata carried in a warrant.
+/// Additional metadata carried in a warrant (application-specific).
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct WarrantMetadata {
     pub entries: BTreeMap<String, String>,
 }
 
-impl WarrantMetadata {
-    #[must_use]
-    fn canonical(&self) -> String {
-        self.entries
-            .iter()
-            .map(|(key, value)| format!("{key}={value}"))
-            .collect::<Vec<_>>()
-            .join(",")
-    }
-}
+// ---------------------------------------------------------------------------
+// Warrant
+// ---------------------------------------------------------------------------
 
-/// Compact warrant model for the MVP.
+/// Signed capability token granting a holder scoped payment authority.
+///
+/// The signature covers `WARRANT_SIGN_DOMAIN || version || payload_bytes`
+/// where `payload_bytes` is the CBOR encoding of the warrant without its
+/// signature field. `parent_hash` links a delegated warrant to its parent
+/// payload for chain verification (invariant I5).
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Warrant {
-    pub version: u16,
-    pub warrant_id: String,
+    /// Payload schema version (`WARRANT_VERSION_V1`).
+    pub version: u8,
+    /// 16-byte UUIDv7 identifier.
+    #[serde(with = "serde_bytes")]
+    pub id: Vec<u8>,
+    /// Authorized holder of this warrant (the agent).
+    pub holder: SignerRef,
+    /// Issuer who signed this warrant.
     pub issuer: SignerRef,
-    pub subject_signer: SignerRef,
-    pub payment_subjects: Vec<PaymentSubjectRef>,
-    pub audience: AudienceScope,
-    pub not_before_ms: u64,
-    pub expires_at_ms: u64,
-    pub delegation: DelegationPolicy,
-    pub constraints: Vec<Constraint>,
-    pub metadata: WarrantMetadata,
+    /// Unix seconds when the warrant becomes valid.
+    pub issued_at: u64,
+    /// Unix seconds when the warrant expires.
+    pub expires_at: u64,
+    /// Delegation depth of this warrant (0 = root).
+    pub depth: u32,
+    /// Maximum delegation depth allowed for descendants.
+    pub max_depth: u8,
+    /// SHA-256 of the parent's payload bytes (None for root warrants).
+    pub parent_hash: Option<Vec<u8>>,
+    /// Merchant allowlist constraint.
+    pub merchant: crate::constraint::MerchantConstraint,
+    /// Resource (method/path) constraint.
+    pub resource: crate::constraint::ResourceConstraint,
+    /// Payment (asset + per-charge cap) constraint.
+    pub payment: crate::constraint::PaymentConstraint,
+    /// Optional AI tool constraint.
+    pub tool: Option<crate::constraint::ToolConstraint>,
+    /// Approval gates: tool name -> gate configuration.
+    pub approval_gates: BTreeMap<String, crate::approval::ApprovalGate>,
+    /// Keys that may approve gated executions.
+    pub required_approvers: Vec<SignerRef>,
+    /// m-of-n approval threshold (default: all required approvers).
+    pub min_approvals: u32,
+    /// Application extensions. **Frozen in v1: unknown keys are rejected.**
+    pub extensions: BTreeMap<String, Vec<u8>>,
+    /// Envelope signature.
     pub signature: SignatureEnvelope,
 }
 
-/// Implements the [`CborCodec`] trait for [`Warrant`].
 impl CborCodec for Warrant {}
 
 impl Warrant {
     /// Signs this warrant using the issuer's signing key pair.
     #[must_use]
     pub fn sign_with(mut self, issuer_keys: &SigningKeyPair) -> Self {
-        let message = self.canonical_unsigned_payload();
-        self.signature = issuer_keys.sign(message.as_bytes());
+        let message = self.signing_message();
+        self.signature = issuer_keys.sign(message.as_slice());
         self
     }
 
-    /// Returns the SHA-256 digest of the signed warrant.
+    /// Returns the SHA-256 digest of the **signed** warrant (payload + signature).
     #[must_use]
     pub fn digest(&self) -> String {
-        sha256_prefixed(self.canonical_signed_payload())
+        sha256_prefixed(self.full_cbor_bytes())
     }
 
-    /// Encodes the warrant as CBOR bytes.
-    ///
-    /// Delegates to [`CborCodec::encode_cbor`].
+    /// Returns the SHA-256 digest of the **unsigned payload** only.
+    #[must_use]
+    pub fn payload_digest(&self) -> String {
+        sha256_prefixed(self.payload_bytes())
+    }
+
+    /// CBOR-encodes the payload (all fields except `signature`).
+    #[must_use]
+    pub fn payload_bytes(&self) -> Vec<u8> {
+        let payload = WarrantPayloadRef::from(self);
+        let mut bytes = Vec::new();
+        #[allow(clippy::expect_used)]
+        into_writer(&payload, &mut bytes).expect("warrant payload serialization is infallible");
+        bytes
+    }
+
+    /// CBOR-encodes the full warrant (payload + signature).
+    #[must_use]
+    pub fn full_cbor_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        #[allow(clippy::expect_used)]
+        into_writer(self, &mut bytes).expect("warrant serialization is infallible");
+        bytes
+    }
+
+    /// Domain-separated signing message.
+    #[must_use]
+    pub fn signing_message(&self) -> Vec<u8> {
+        let mut message = Vec::with_capacity(WARRANT_SIGN_DOMAIN.len() + 1 + 256);
+        message.extend_from_slice(WARRANT_SIGN_DOMAIN);
+        message.push(self.version);
+        message.extend_from_slice(&self.payload_bytes());
+        message
+    }
+
+    /// Verifies the envelope signature using **strict** Ed25519 verification.
+    #[must_use]
+    pub fn verify_signature(&self) -> bool {
+        self.signature.verify_strict(&self.issuer, &self.signing_message())
+    }
+
+    /// Encodes the warrant as CBOR bytes (delegates to [`CborCodec::encode_cbor`]).
     pub fn encode_cbor(&self) -> WireResult<Vec<u8>> {
         <Self as CborCodec>::encode_cbor(self)
     }
 
     /// Decodes a warrant from CBOR bytes.
-    ///
-    /// Delegates to [`CborCodec::decode_cbor`].
     pub fn decode_cbor(bytes: &[u8]) -> WireResult<Self> {
         <Self as CborCodec>::decode_cbor(bytes)
     }
 
-    pub(crate) fn canonical_unsigned_payload(&self) -> String {
-        let subjects: Vec<String> =
-            self.payment_subjects.iter().map(PaymentSubjectRef::canonical).collect();
-        let constraints: Vec<String> = self.constraints.iter().map(Constraint::canonical).collect();
-
-        format!(
-            "version={};warrant_id={};issuer={};subject_signer={};payment_subjects={};audience={};not_before_ms={};expires_at_ms={};delegation={};constraints={};metadata={}",
-            self.version,
-            self.warrant_id,
-            canonical_signer(&self.issuer),
-            canonical_signer(&self.subject_signer),
-            canonical_list(&subjects),
-            self.audience.canonical(),
-            self.not_before_ms,
-            self.expires_at_ms,
-            self.delegation.canonical(),
-            canonical_list(&constraints),
-            self.metadata.canonical()
-        )
-    }
-
-    pub(crate) fn canonical_signed_payload(&self) -> String {
-        format!(
-            "{};signature={}:{}",
-            self.canonical_unsigned_payload(),
-            self.signature.alg,
-            hex_encode(&self.signature.value)
-        )
-    }
-
-    pub(crate) fn verify_signature(&self) -> bool {
-        let message = self.canonical_unsigned_payload();
-        self.signature.verify(&self.issuer, message.as_bytes())
+    /// Returns the human-readable id (hex-encoded).
+    #[must_use]
+    pub fn id_hex(&self) -> String {
+        hex_encode(&self.id)
     }
 }
 
-/// Proof of authorization bound to one challenge and one x402 quote/request pair.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct Proof {
-    pub challenge_id: String,
-    pub warrant_digest: String,
-    pub accepted_hash: String,
-    pub request_hash: String,
-    pub created_at_ms: u64,
-    pub nonce: String,
+/// Serialization view of the warrant payload (without the signature).
+#[derive(Serialize)]
+struct WarrantPayloadRef<'a> {
+    version: u8,
     #[serde(with = "serde_bytes")]
-    pub signer_key: Vec<u8>,
-    pub signature: SignatureEnvelope,
+    id: &'a [u8],
+    holder: &'a SignerRef,
+    issuer: &'a SignerRef,
+    issued_at: u64,
+    expires_at: u64,
+    depth: u32,
+    max_depth: u8,
+    parent_hash: Option<&'a Vec<u8>>,
+    merchant: &'a crate::constraint::MerchantConstraint,
+    resource: &'a crate::constraint::ResourceConstraint,
+    payment: &'a crate::constraint::PaymentConstraint,
+    tool: Option<&'a crate::constraint::ToolConstraint>,
+    approval_gates: &'a BTreeMap<String, crate::approval::ApprovalGate>,
+    required_approvers: &'a [SignerRef],
+    min_approvals: u32,
+    extensions: &'a BTreeMap<String, Vec<u8>>,
 }
 
-impl Proof {
-    /// Creates a new signed proof using the agent's signing key pair.
-    #[must_use]
-    pub fn new_signed(
-        challenge_id: impl Into<String>,
-        warrant_digest: impl Into<String>,
-        accepted_hash: impl Into<String>,
-        request_hash: impl Into<String>,
-        created_at_ms: u64,
-        nonce: impl Into<String>,
-        signer_keys: &SigningKeyPair,
-    ) -> Self {
-        let mut proof = Self {
-            challenge_id: challenge_id.into(),
-            warrant_digest: warrant_digest.into(),
-            accepted_hash: accepted_hash.into(),
-            request_hash: request_hash.into(),
-            created_at_ms,
-            nonce: nonce.into(),
-            signer_key: signer_keys.public_key_bytes().to_vec(),
-            signature: SignatureEnvelope { alg: SigningAlgorithm::Ed25519, value: vec![] },
-        };
-        proof.signature = signer_keys.sign(proof.preimage().as_bytes());
-        proof
+impl<'a> From<&'a Warrant> for WarrantPayloadRef<'a> {
+    fn from(warrant: &'a Warrant) -> Self {
+        Self {
+            version: warrant.version,
+            id: &warrant.id,
+            holder: &warrant.holder,
+            issuer: &warrant.issuer,
+            issued_at: warrant.issued_at,
+            expires_at: warrant.expires_at,
+            depth: warrant.depth,
+            max_depth: warrant.max_depth,
+            parent_hash: warrant.parent_hash.as_ref(),
+            merchant: &warrant.merchant,
+            resource: &warrant.resource,
+            payment: &warrant.payment,
+            tool: warrant.tool.as_ref(),
+            approval_gates: &warrant.approval_gates,
+            required_approvers: &warrant.required_approvers,
+            min_approvals: warrant.min_approvals,
+            extensions: &warrant.extensions,
+        }
     }
-
-    /// Returns the canonical preimage string for proof signing.
-    #[must_use]
-    pub fn preimage(&self) -> String {
-        format!(
-            "domain=ledgerflow-pop/v1;challenge_id={};warrant_digest={};accepted_hash={};request_hash={};created_at_ms={};nonce={};signer_key={}",
-            self.challenge_id,
-            self.warrant_digest,
-            self.accepted_hash,
-            self.request_hash,
-            self.created_at_ms,
-            self.nonce,
-            hex_encode(&self.signer_key)
-        )
-    }
-
-    pub(crate) fn verify_signature(&self, signer: &SignerRef) -> bool {
-        self.signer_key == signer.public_key &&
-            self.signature.verify(signer, self.preimage().as_bytes())
-    }
-}
-
-/// Merchant-facing context used when verifying a warrant and proof.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct AuthorizationContext {
-    pub merchant_id: String,
-    pub merchant_host: String,
-    pub tool_name: String,
-    pub model_provider: String,
-    pub action_label: String,
-    pub http_method: String,
-    pub path_and_query: String,
-    pub selected_quote_amount: u64,
-    pub asset: String,
-    pub scheme: String,
-    pub payee_id: String,
-    pub rail: PaymentRail,
-    pub challenge_id: String,
-    pub request_hash: String,
-    pub accepted_hash: String,
-    pub now_ms: u64,
-    pub freshness_window_ms: u64,
-    pub presented_delegation_depth: u8,
-    pub payment_subject: PaymentSubjectRef,
-}
-
-/// Normalized authorization output handed to the x402 layer and Facilitator.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct VerifiedAuthorization {
-    pub merchant_id: String,
-    pub tool_name: String,
-    pub payment_subject: PaymentSubjectRef,
-    pub payer: SignerRef,
-    pub warrant_digest: String,
-    pub accepted_hash: String,
-    pub request_hash: String,
-    pub amount: u64,
-    pub asset: String,
-    pub scheme: String,
-    pub payee_id: String,
-    pub rail: PaymentRail,
-}
-
-/// Verifies a warrant and proof against merchant request context.
-pub fn verify_authorization(
-    warrant: &Warrant,
-    proof: &Proof,
-    context: &AuthorizationContext,
-) -> Result<VerifiedAuthorization> {
-    if warrant.version != WARRANT_VERSION_V1 {
-        return Err(AuthorizationError::UnsupportedVersion(warrant.version));
-    }
-
-    if !warrant.verify_signature() {
-        return Err(AuthorizationError::InvalidWarrantSignature);
-    }
-
-    if warrant.not_before_ms > context.now_ms {
-        return Err(AuthorizationError::WarrantNotYetValid { now_ms: context.now_ms });
-    }
-
-    if warrant.expires_at_ms < context.now_ms {
-        return Err(AuthorizationError::WarrantExpired { expires_at_ms: warrant.expires_at_ms });
-    }
-
-    if !warrant.audience.allows(&context.merchant_id, &context.merchant_host) {
-        return Err(AuthorizationError::MerchantNotAllowed {
-            merchant_id: context.merchant_id.clone(),
-        });
-    }
-
-    if !proof.verify_signature(&warrant.subject_signer) {
-        return Err(AuthorizationError::InvalidProofSignature);
-    }
-
-    if proof.challenge_id != context.challenge_id {
-        return Err(AuthorizationError::ChallengeMismatch);
-    }
-
-    if proof.warrant_digest != warrant.digest() {
-        return Err(AuthorizationError::WarrantDigestMismatch);
-    }
-
-    if proof.accepted_hash != context.accepted_hash {
-        return Err(AuthorizationError::AcceptedHashMismatch);
-    }
-
-    if proof.request_hash != context.request_hash {
-        return Err(AuthorizationError::RequestHashMismatch);
-    }
-
-    if proof.signer_key != warrant.subject_signer.public_key {
-        return Err(AuthorizationError::SignerMismatch);
-    }
-
-    let freshest_allowed = proof.created_at_ms.saturating_add(context.freshness_window_ms);
-    if proof.created_at_ms > context.now_ms || freshest_allowed < context.now_ms {
-        return Err(AuthorizationError::ProofOutsideFreshnessWindow);
-    }
-
-    if !warrant.payment_subjects.contains(&context.payment_subject) {
-        return Err(AuthorizationError::PaymentSubjectNotAllowed {
-            subject: context.payment_subject.value.clone(),
-        });
-    }
-
-    if context.presented_delegation_depth > 0 && !warrant.delegation.can_delegate {
-        return Err(AuthorizationError::DelegationNotAllowed);
-    }
-
-    if context.presented_delegation_depth > warrant.delegation.max_depth {
-        return Err(AuthorizationError::DelegationDepthExceeded {
-            presented: context.presented_delegation_depth,
-            allowed: warrant.delegation.max_depth,
-        });
-    }
-
-    verify_all(&warrant.constraints, context)?;
-
-    Ok(VerifiedAuthorization {
-        merchant_id: context.merchant_id.clone(),
-        tool_name: context.tool_name.clone(),
-        payment_subject: context.payment_subject.clone(),
-        payer: warrant.subject_signer.clone(),
-        warrant_digest: warrant.digest(),
-        accepted_hash: context.accepted_hash.clone(),
-        request_hash: context.request_hash.clone(),
-        amount: context.selected_quote_amount,
-        asset: context.asset.clone(),
-        scheme: context.scheme.clone(),
-        payee_id: context.payee_id.clone(),
-        rail: context.rail,
-    })
-}
-
-fn canonical_list(values: &[impl AsRef<str>]) -> String {
-    let mut items = values.iter().map(AsRef::as_ref).collect::<Vec<_>>();
-    items.sort_unstable();
-    items.join("|")
-}
-
-fn canonical_uppercase_list(values: &[String]) -> String {
-    let mut items = values.iter().map(|value| value.to_uppercase()).collect::<Vec<_>>();
-    items.sort_unstable();
-    items.join("|")
-}
-
-fn canonical_signer(signer: &SignerRef) -> String {
-    let key_id = signer.key_id.as_deref().unwrap_or("-");
-    format!("{}:{}:{key_id}", signer.alg, hex_encode(&signer.public_key))
 }
 
 pub(crate) fn hex_encode(bytes: &[u8]) -> String {
@@ -817,339 +540,4 @@ pub(crate) fn hex_encode(bytes: &[u8]) -> String {
         let _ = write!(encoded, "{byte:02x}");
     }
     encoded
-}
-
-#[cfg(test)]
-mod tests {
-    use proptest::prelude::*;
-
-    use super::{
-        AmountLimit, AssetRef, AudienceScope, AuthorizationContext, Constraint, DelegationPolicy,
-        MerchantConstraint, PaymentConstraint, PaymentRail, PaymentSubjectKind, PaymentSubjectRef,
-        Proof, ResourceConstraint, SigningKeyPair, SponsorshipConstraint, ToolConstraint, Warrant,
-        WarrantMetadata, sha256_prefixed, verify_authorization,
-    };
-    use crate::error::AuthorizationError;
-
-    fn issuer_keys() -> SigningKeyPair {
-        let secret: [u8; 32] = *b"issuer-secret-key-32-bytes-long!";
-        SigningKeyPair::from_bytes(&secret)
-    }
-
-    fn agent_keys() -> SigningKeyPair {
-        let secret: [u8; 32] = *b"agent-secret-key--32-bytes-long!";
-        SigningKeyPair::from_bytes(&secret)
-    }
-
-    fn subject_ref() -> PaymentSubjectRef {
-        PaymentSubjectRef::new(PaymentSubjectKind::Caip10, "caip10:eip155:8453:0xabc123")
-    }
-
-    fn base_warrant() -> Warrant {
-        let issuer = issuer_keys();
-        Warrant {
-            version: super::WARRANT_VERSION_V1,
-            warrant_id: "warrant-1".to_string(),
-            issuer: issuer.signer_ref(),
-            subject_signer: agent_keys().signer_ref(),
-            payment_subjects: vec![subject_ref()],
-            audience: AudienceScope::MerchantIds(vec!["merchant-a".to_string()]),
-            not_before_ms: 1_000,
-            expires_at_ms: 5_000,
-            delegation: DelegationPolicy { can_delegate: true, max_depth: 1 },
-            constraints: vec![
-                Constraint::Merchant(MerchantConstraint {
-                    merchant_ids: vec!["merchant-a".to_string()],
-                    host_suffixes: vec![],
-                }),
-                Constraint::Resource(ResourceConstraint {
-                    http_methods: vec!["GET".to_string()],
-                    path_prefixes: vec!["/search".to_string()],
-                }),
-                Constraint::Tool(ToolConstraint {
-                    tool_names: vec!["web-search".to_string()],
-                    model_providers: vec![],
-                    action_labels: vec![],
-                }),
-                Constraint::Payment(PaymentConstraint {
-                    max_per_request: AmountLimit { amount: 200 },
-                    period_limit: None,
-                    allowed_assets: vec![AssetRef::new("USDC", Some("base".to_string()))],
-                    allowed_rails: vec![PaymentRail::Onchain],
-                    allowed_schemes: vec!["exact".to_string()],
-                    payee_ids: vec!["merchant-a".to_string()],
-                }),
-                Constraint::Sponsorship(SponsorshipConstraint {
-                    allow_sponsored_execution: false,
-                    sponsor_ids: vec![],
-                }),
-            ],
-            metadata: WarrantMetadata::default(),
-            signature: issuer_keys().sign(b"placeholder"),
-        }
-        .sign_with(&issuer_keys())
-    }
-
-    fn base_context() -> AuthorizationContext {
-        AuthorizationContext {
-            merchant_id: "merchant-a".to_string(),
-            merchant_host: "merchant-a.example".to_string(),
-            tool_name: "web-search".to_string(),
-            model_provider: String::new(),
-            action_label: String::new(),
-            http_method: "GET".to_string(),
-            path_and_query: "/search?q=ledgerflow".to_string(),
-            selected_quote_amount: 200,
-            asset: "USDC".to_string(),
-            scheme: "exact".to_string(),
-            payee_id: "merchant-a".to_string(),
-            rail: PaymentRail::Onchain,
-            challenge_id: "challenge-1".to_string(),
-            request_hash: sha256_prefixed(
-                "GET\nmerchant-a.example\n/search?q=ledgerflow\nsha256:body",
-            ),
-            accepted_hash: sha256_prefixed("exact:USDC:200:merchant-a"),
-            now_ms: 2_000,
-            freshness_window_ms: 60_000,
-            presented_delegation_depth: 1,
-            payment_subject: subject_ref(),
-        }
-    }
-
-    fn base_proof(warrant: &Warrant, context: &AuthorizationContext) -> Proof {
-        Proof::new_signed(
-            context.challenge_id.clone(),
-            warrant.digest(),
-            context.accepted_hash.clone(),
-            context.request_hash.clone(),
-            context.now_ms,
-            "nonce-1",
-            &agent_keys(),
-        )
-    }
-
-    #[test]
-    fn verifies_a_valid_warrant_and_matching_proof() {
-        let warrant = base_warrant();
-        let context = base_context();
-        let proof = base_proof(&warrant, &context);
-
-        let verified = verify_authorization(&warrant, &proof, &context).expect("valid authz");
-
-        assert_eq!(verified.merchant_id, "merchant-a");
-        assert_eq!(verified.tool_name, "web-search");
-        assert_eq!(verified.payment_subject, subject_ref());
-    }
-
-    #[test]
-    fn rejects_an_expired_warrant() {
-        let mut warrant = base_warrant();
-        warrant.expires_at_ms = 1_999;
-        let warrant = warrant.sign_with(&issuer_keys());
-        let context = base_context();
-        let proof = base_proof(&warrant, &context);
-
-        let error = verify_authorization(&warrant, &proof, &context).expect_err("expired");
-
-        assert_eq!(error, AuthorizationError::WarrantExpired { expires_at_ms: 1_999 });
-    }
-
-    #[test]
-    fn rejects_a_warrant_for_a_different_merchant() {
-        let warrant = base_warrant();
-        let mut context = base_context();
-        context.merchant_id = "merchant-b".to_string();
-        let proof = base_proof(&warrant, &context);
-
-        let error = verify_authorization(&warrant, &proof, &context).expect_err("merchant scope");
-
-        assert_eq!(
-            error,
-            AuthorizationError::MerchantNotAllowed { merchant_id: "merchant-b".to_string() }
-        );
-    }
-
-    #[test]
-    fn rejects_a_quote_above_the_payment_limit() {
-        let warrant = base_warrant();
-        let mut context = base_context();
-        context.selected_quote_amount = 201;
-        let proof = base_proof(&warrant, &context);
-
-        let error = verify_authorization(&warrant, &proof, &context).expect_err("limit");
-
-        assert_eq!(error, AuthorizationError::PaymentAmountExceeded { amount: 201, limit: 200 });
-    }
-
-    #[test]
-    fn rejects_a_delegation_chain_that_exceeds_the_policy() {
-        let warrant = base_warrant();
-        let mut context = base_context();
-        context.presented_delegation_depth = 2;
-        let proof = base_proof(&warrant, &context);
-
-        let error = verify_authorization(&warrant, &proof, &context).expect_err("delegation");
-
-        assert_eq!(error, AuthorizationError::DelegationDepthExceeded { presented: 2, allowed: 1 });
-    }
-
-    #[test]
-    fn rejects_a_disallowed_model_provider() {
-        let mut warrant = base_warrant();
-        warrant.constraints.push(Constraint::Tool(ToolConstraint {
-            tool_names: vec![],
-            model_providers: vec!["openai".to_string()],
-            action_labels: vec![],
-        }));
-        let warrant = warrant.sign_with(&issuer_keys());
-        let mut context = base_context();
-        context.model_provider = "anthropic".to_string();
-        let proof = base_proof(&warrant, &context);
-
-        let error = verify_authorization(&warrant, &proof, &context).expect_err("model provider");
-
-        assert_eq!(
-            error,
-            AuthorizationError::ModelProviderNotAllowed { model_provider: "anthropic".to_string() }
-        );
-    }
-
-    #[test]
-    fn rejects_a_disallowed_action_label() {
-        let mut warrant = base_warrant();
-        warrant.constraints.push(Constraint::Tool(ToolConstraint {
-            tool_names: vec![],
-            model_providers: vec![],
-            action_labels: vec!["read".to_string()],
-        }));
-        let warrant = warrant.sign_with(&issuer_keys());
-        let mut context = base_context();
-        context.action_label = "write".to_string();
-        let proof = base_proof(&warrant, &context);
-
-        let error = verify_authorization(&warrant, &proof, &context).expect_err("action label");
-
-        assert_eq!(
-            error,
-            AuthorizationError::ActionLabelNotAllowed { action_label: "write".to_string() }
-        );
-    }
-
-    #[test]
-    fn rejects_sponsorship_when_not_allowed() {
-        let mut warrant = base_warrant();
-        warrant.constraints = vec![Constraint::Sponsorship(SponsorshipConstraint {
-            allow_sponsored_execution: false,
-            sponsor_ids: vec!["sponsor-1".to_string()],
-        })];
-        let warrant = warrant.sign_with(&issuer_keys());
-        let context = base_context();
-        let proof = base_proof(&warrant, &context);
-
-        let error = verify_authorization(&warrant, &proof, &context).expect_err("sponsorship");
-
-        assert_eq!(error, AuthorizationError::SponsorshipNotAllowed);
-    }
-
-    #[test]
-    fn warrant_cbor_round_trip_preserves_payload_and_digest() {
-        let warrant = base_warrant();
-
-        let encoded = warrant.encode_cbor().expect("encode warrant");
-        let decoded = Warrant::decode_cbor(&encoded).expect("decode warrant");
-
-        assert_eq!(decoded, warrant);
-        assert_eq!(decoded.digest(), warrant.digest());
-    }
-
-    #[test]
-    fn warrant_decode_rejects_oversized_payloads() {
-        let oversized = vec![0_u8; super::MAX_WARRANT_CBOR_BYTES + 1];
-
-        let error = Warrant::decode_cbor(&oversized).expect_err("oversized payload");
-
-        assert_eq!(
-            error,
-            crate::error::WireError::PayloadTooLarge {
-                size: oversized.len(),
-                max: super::MAX_WARRANT_CBOR_BYTES,
-            }
-        );
-    }
-
-    #[test]
-    fn signature_verification_rejects_tampered_message() {
-        let warrant = base_warrant();
-        let mut tampered = warrant.clone();
-        tampered.warrant_id = "tampered-id".to_string();
-
-        assert!(!tampered.verify_signature());
-    }
-
-    proptest! {
-        #[test]
-        fn warrant_digest_is_stable_for_identical_inputs(
-            warrant_id in "[a-z0-9-]{4,16}",
-            merchant_id in "[a-z]{3,12}",
-            tool_name in "[a-z-]{3,12}",
-            amount in 1_u64..10_000,
-        ) {
-            let subject = PaymentSubjectRef::new(PaymentSubjectKind::Opaque, "opaque:test");
-            let issuer = issuer_keys();
-            let warrant = Warrant {
-                version: super::WARRANT_VERSION_V1,
-                warrant_id,
-                issuer: issuer.signer_ref(),
-                subject_signer: agent_keys().signer_ref(),
-                payment_subjects: vec![subject.clone()],
-                audience: AudienceScope::MerchantIds(vec![merchant_id.clone()]),
-                not_before_ms: 1_000,
-                expires_at_ms: 9_000,
-                delegation: DelegationPolicy { can_delegate: false, max_depth: 0 },
-                constraints: vec![
-                    Constraint::Tool(ToolConstraint {
-                        tool_names: vec![tool_name],
-                        model_providers: vec![],
-                        action_labels: vec![],
-                    }),
-                    Constraint::Payment(PaymentConstraint {
-                        max_per_request: AmountLimit { amount },
-                        period_limit: None,
-                        allowed_assets: vec![AssetRef::new("USDC", None)],
-                        allowed_rails: vec![PaymentRail::Exchange],
-                        allowed_schemes: vec!["exact".to_string()],
-                        payee_ids: vec![merchant_id],
-                    }),
-                ],
-                metadata: WarrantMetadata::default(),
-                signature: issuer_keys().sign(b"placeholder"),
-            }.sign_with(&issuer_keys());
-
-            prop_assert_eq!(warrant.digest(), warrant.clone().digest());
-        }
-
-        #[test]
-        fn proof_signature_tracks_binding_inputs(
-            challenge_id in "[a-z0-9-]{4,16}",
-            nonce in "[a-z0-9-]{4,16}",
-            request_value in "[a-z0-9-]{4,16}",
-            accepted_value in "[a-z0-9-]{4,16}",
-        ) {
-            let keys = agent_keys();
-            let signer_ref = keys.signer_ref();
-            let proof = Proof::new_signed(
-                challenge_id,
-                "sha256:digest",
-                accepted_value.clone(),
-                request_value.clone(),
-                4_200,
-                nonce,
-                &keys,
-            );
-
-            prop_assert!(proof.signature.verify(&signer_ref, proof.preimage().as_bytes()));
-            prop_assert_eq!(proof.accepted_hash, accepted_value);
-            prop_assert_eq!(proof.request_hash, request_value);
-        }
-    }
 }

@@ -1,17 +1,16 @@
-//! Development CLI for local LedgerFlow fixtures.
+//! Development CLI for LedgerFlow fixtures and tooling.
 
 #![allow(clippy::print_stdout)]
 
 use clap::{Parser, Subcommand};
 use eyre::{OptionExt, Result};
 use ledgerflow_core::{
-    AmountLimit, AssetRef, AudienceScope, Constraint, DelegationPolicy, MerchantConstraint,
-    PaymentConstraint, PaymentRail, PaymentSubjectKind, PaymentSubjectRef, ResourceConstraint,
-    SigningKeyPair, SponsorshipConstraint, ToolConstraint, WARRANT_VERSION_V1, Warrant,
-    WarrantMetadata,
+    ApprovalGate, AssetRef, MerchantConstraint, PaymentConstraint, PaymentRail,
+    PaymentSubjectKind, PaymentSubjectRef, ResourceConstraint, SigningKeyPair, SignedApproval,
+    TrustedIssuer, TrustedIssuers, WarrantBuilder, WarrantChain,
 };
-use ledgerflow_x402::{
-    AcceptedQuote, HttpRequest, PaymentPayloadSeed, WarrantTransport, build_payment_payload,
+use ledgerflow_protocol::{
+    AcceptedQuote, HttpRequest, PaymentPayloadSeed, build_payment_payload,
     merchant_payment_required,
 };
 
@@ -28,6 +27,16 @@ enum Command {
     SampleWarrant,
     /// Print a deterministic sample x402 payment payload with LedgerFlow authz data.
     SamplePayment,
+    /// Sign an m-of-n approval for a request hash (for demos).
+    Approve {
+        /// The request hash to approve.
+        request_hash: String,
+        /// Approver secret key hex (64 hex chars = 32 bytes).
+        #[arg(long)]
+        secret_hex: Option<String>,
+    },
+    /// Show the trusted-issuer anchor configuration hint.
+    TrustAnchors,
 }
 
 fn main() -> Result<()> {
@@ -40,6 +49,10 @@ fn run(command: Command) -> Result<String> {
     let output = match command {
         Command::SampleWarrant => render_sample_warrant_fixture(),
         Command::SamplePayment => render_sample_payment_fixture()?,
+        Command::Approve { request_hash, secret_hex } => {
+            render_approval(&request_hash, secret_hex.as_deref())
+        }
+        Command::TrustAnchors => render_trust_anchors(),
     };
 
     Ok(output)
@@ -49,8 +62,8 @@ fn render_sample_warrant_fixture() -> String {
     let warrant = sample_warrant();
     format!(
         "warrant_id={}\nmerchant_id=merchant-a\ntool_name=web-search\namount=200\npayment_subject={}\ndigest={}",
-        warrant.warrant_id,
-        warrant.payment_subjects[0].value,
+        warrant.id_hex(),
+        warrant.merchant.merchant_ids.first().map_or("-", String::as_str),
         warrant.digest(),
     )
 }
@@ -70,29 +83,69 @@ fn render_sample_payment_fixture() -> Result<String> {
         &challenge,
         &request,
         sample_quote(),
-        WarrantTransport::inline(sample_warrant()),
+        WarrantChain::single(sample_warrant()),
         PaymentPayloadSeed {
             payment_subject: sample_subject(),
             signer: agent_keys(),
             created_at_ms: 2_000,
             nonce: "nonce-1".to_string(),
             payment_identifier: Some("payment-1".to_string()),
+            approvals: Vec::new(),
         },
-    );
-    let extension = payload.ledgerflow.ok_or_eyre("missing sample payment ledgerflow extension")?;
+    )?;
+    let extension =
+        payload.ledgerflow.ok_or_eyre("missing sample payment ledgerflow extension")?;
     let payment_identifier =
         payload.payment_identifier.as_deref().ok_or_eyre("missing sample payment identifier")?;
+    let warrant_digest = match extension.warrant_chain.last() {
+        Some(warrant) => warrant.digest(),
+        None => "-".to_string(),
+    };
 
     Ok(format!(
         "challenge_id={}\npayment_identifier={}\naccepted_amount={}\nwarrant_digest={}\nrequest_hash={}\naccepted_hash={}\npayment_subject={}",
         extension.challenge_id,
         payment_identifier,
         payload.accepted.amount,
-        extension.warrant.digest,
-        extension.proof.request_hash,
-        extension.proof.accepted_hash,
+        warrant_digest,
+        extension.proof.tuple.request_hash,
+        extension.proof.tuple.accepted_hash,
         extension.payment_subject.value,
     ))
+}
+
+fn render_approval(request_hash: &str, secret_hex: Option<&str>) -> String {
+    let approver = match secret_hex {
+        Some(hex) => SigningKeyPair::from_bytes(&hex_bytes(hex)),
+        None => approver_keys(),
+    };
+    const DEFAULT_APPROVAL_TTL_SECS: u64 = 300;
+    let approval = SignedApproval::sign(
+        request_hash,
+        &approver.signer_ref(),
+        DEFAULT_APPROVAL_TTL_SECS,
+        &approver,
+    );
+    format!(
+        "request_hash={}\napprover={}\nexpires_at={}\nsignature_hex={}",
+        approval.request_hash,
+        hex_encode(&approval.approver.public_key),
+        approval.expires_at,
+        hex_encode(&approval.signature.value),
+    )
+}
+
+fn render_trust_anchors() -> String {
+    let issuer = issuer_keys();
+    let mut set = TrustedIssuers::new();
+    set.add(TrustedIssuer::new("issuer-1".to_string(), issuer.signer_ref()));
+    let anchor = &set.issuers[0];
+    format!(
+        "key_id={}\npublic_key_hex={}\nalg={}",
+        anchor.key_id,
+        hex_encode(&anchor.issuer.public_key),
+        anchor.issuer.alg.as_str(),
+    )
 }
 
 fn sample_request() -> HttpRequest {
@@ -117,53 +170,58 @@ fn agent_keys() -> SigningKeyPair {
     SigningKeyPair::from_bytes(&secret)
 }
 
-fn sample_warrant() -> Warrant {
+fn approver_keys() -> SigningKeyPair {
+    let secret: [u8; 32] = *b"approver-key-32-bytes-long!00000";
+    SigningKeyPair::from_bytes(&secret)
+}
+
+fn sample_warrant() -> ledgerflow_core::Warrant {
     let issuer = issuer_keys();
-    Warrant {
-        version: WARRANT_VERSION_V1,
-        warrant_id: "warrant-1".to_string(),
-        issuer: issuer.signer_ref(),
-        subject_signer: agent_keys().signer_ref(),
-        payment_subjects: vec![sample_subject()],
-        audience: AudienceScope::MerchantIds(vec!["merchant-a".to_string()]),
-        not_before_ms: 1_000,
-        expires_at_ms: 10_000,
-        delegation: DelegationPolicy { can_delegate: true, max_depth: 1 },
-        constraints: vec![
-            Constraint::Merchant(MerchantConstraint {
-                merchant_ids: vec!["merchant-a".to_string()],
-                host_suffixes: vec![],
-            }),
-            Constraint::Resource(ResourceConstraint {
-                http_methods: vec!["POST".to_string()],
-                path_prefixes: vec!["/pay".to_string()],
-            }),
-            Constraint::Tool(ToolConstraint {
-                tool_names: vec!["web-search".to_string()],
-                model_providers: vec![],
-                action_labels: vec![],
-            }),
-            Constraint::Payment(PaymentConstraint {
-                max_per_request: AmountLimit { amount: 200 },
-                period_limit: None,
-                allowed_assets: vec![AssetRef::new("USDC", Some("base".to_string()))],
-                allowed_rails: vec![PaymentRail::Onchain],
-                allowed_schemes: vec!["exact".to_string()],
-                payee_ids: vec!["merchant-a".to_string()],
-            }),
-            Constraint::Sponsorship(SponsorshipConstraint {
-                allow_sponsored_execution: false,
-                sponsor_ids: vec![],
-            }),
-        ],
-        metadata: WarrantMetadata::default(),
-        signature: issuer.sign(b"placeholder"),
+    let holder = agent_keys();
+    WarrantBuilder::new(2_000)
+        .warrant_id(*b"lfw-000000000001")
+        .ttl_secs(10)
+        .max_depth(1)
+        .issuer(issuer.signer_ref())
+        .holder(holder.signer_ref())
+        .merchant(MerchantConstraint::with_ids(vec!["merchant-a".to_string()]))
+        .resource(ResourceConstraint {
+            http_methods: vec!["POST".to_string()],
+            path_prefixes: vec!["/pay".to_string()],
+        })
+        .payment(
+            PaymentConstraint::new(200)
+                .with_asset(AssetRef::new("USDC", Some("base".to_string())))
+                .with_rails(vec![PaymentRail::Onchain])
+                .with_schemes(vec!["exact".to_string()])
+                .with_payees(vec!["merchant-a".to_string()]),
+        )
+        .approval_gate("web-search", ApprovalGate::unconditional())
+        .sign_with(&issuer, [0_u8; 8])
+}
+
+fn hex_bytes(hex: &str) -> [u8; 32] {
+    let mut out = [0_u8; 32];
+    for (i, chunk) in hex.as_bytes().chunks(2).take(32).enumerate() {
+        let text = std::str::from_utf8(chunk).unwrap_or("00");
+        out[i] = u8::from_str_radix(text, 16).unwrap_or(0);
     }
-    .sign_with(&issuer)
+    out
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut encoded = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        encoded.push(HEX[(byte >> 4) as usize] as char);
+        encoded.push(HEX[(byte & 0x0F) as usize] as char);
+    }
+    encoded
 }
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used)]
     use super::{Cli, Command, run};
 
     #[test]
@@ -176,7 +234,7 @@ mod tests {
         let first = super::render_sample_warrant_fixture();
         let second = super::render_sample_warrant_fixture();
         assert_eq!(first, second);
-        assert!(first.contains("warrant_id=warrant-1"));
+        assert!(first.contains("warrant_id="));
         assert!(first.contains("digest=sha256:"));
     }
 
@@ -190,11 +248,54 @@ mod tests {
     }
 
     #[test]
+    fn approval_fixture_is_deterministic() {
+        let first = super::render_approval("sha256:request", None);
+        let second = super::render_approval("sha256:request", None);
+        assert_eq!(first, second);
+        assert!(first.contains("request_hash=sha256:request"));
+    }
+
+    #[test]
+    fn trust_anchor_output_is_deterministic() {
+        let first = super::render_trust_anchors();
+        let second = super::render_trust_anchors();
+        assert_eq!(first, second);
+        assert!(first.contains("key_id=issuer-1"));
+    }
+
+    #[test]
     fn run_returns_fixture_text_for_each_subcommand() {
         let warrant_output = run(Command::SampleWarrant).expect("warrant output");
         let payment_output = run(Command::SamplePayment).expect("payment output");
-
         assert!(warrant_output.contains("warrant_id="));
         assert!(payment_output.contains("challenge_id="));
+    }
+
+    #[test]
+    fn hex_bytes_and_hex_encode_round_trip() {
+        let source = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let bytes = super::hex_bytes(source);
+        assert_eq!(super::hex_encode(&bytes), source);
+
+        // Odd-length input is padded/truncated defensively (32 bytes max).
+        let short = super::hex_bytes("aabb");
+        assert_eq!(super::hex_encode(&short[..2]), "aabb");
+        // Invalid hex falls back to zero.
+        let invalid = super::hex_bytes("zzzz");
+        assert_eq!(invalid[0], 0);
+        assert_eq!(invalid[1], 0);
+    }
+
+    #[test]
+    fn approval_fixture_with_explicit_secret_is_deterministic() {
+        let secret_hex = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let first = super::render_approval("sha256:req", Some(secret_hex));
+        let second = super::render_approval("sha256:req", Some(secret_hex));
+        assert_eq!(first, second);
+        // The approver is the Ed25519 public key DERIVED from the secret, so
+        // it is not the raw secret bytes; the line still has the right shape.
+        assert!(first.contains("request_hash=sha256:req"));
+        assert!(first.contains("approver="));
+        assert!(first.contains("signature_hex="));
     }
 }

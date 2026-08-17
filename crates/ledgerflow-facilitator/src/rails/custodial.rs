@@ -1,10 +1,10 @@
-//! Custodial ledger settlement adapter.
+//! Custodial ledger settlement adapter (demo implementation).
 
 use ledgerflow_core::VerifiedAuthorization;
 
 use crate::{
-    rails::{RailAdapter, RailQuote, SettlementReceipt, VerificationResult},
-    routing::{RailKind, RoutingError},
+    rails::{RailAdapter, RailError, RailQuote, SettlementReceipt, VerificationResult},
+    routing::RailKind,
     subject::ResolvedSubject,
 };
 
@@ -21,22 +21,28 @@ impl RailAdapter for CustodialRailAdapter {
         matches!(subject.rail, RailKind::Custodial)
     }
 
-    fn quote(&self, _authorization: &VerifiedAuthorization) -> Result<RailQuote, RoutingError> {
-        Ok(RailQuote { rail: RailKind::Custodial, estimated_fee: 0, estimated_time_ms: 1_000 })
+    fn quote(&self, authorization: &VerifiedAuthorization) -> Result<RailQuote, RailError> {
+        Ok(RailQuote {
+            rail: RailKind::Custodial,
+            estimated_fee: 0,
+            estimated_time_ms: 1_000,
+            asset: authorization.asset.clone(),
+        })
     }
 
     fn settle(
         &self,
         authorization: &VerifiedAuthorization,
-    ) -> Result<SettlementReceipt, RoutingError> {
+    ) -> Result<SettlementReceipt, RailError> {
         Ok(SettlementReceipt {
             rail: RailKind::Custodial,
             transaction_id: format!("custodial-tx-{}", authorization.warrant_digest),
             settled_amount: authorization.amount,
+            asset: authorization.asset.clone(),
         })
     }
 
-    fn verify(&self, _receipt: &SettlementReceipt) -> Result<VerificationResult, RoutingError> {
+    fn verify(&self, _receipt: &SettlementReceipt) -> Result<VerificationResult, RailError> {
         Ok(VerificationResult { verified: true, confirmations: 0 })
     }
 }

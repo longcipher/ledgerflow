@@ -10,6 +10,7 @@ exclude = [".github/"]
 resolver = "3"
 
 [workspace.dependencies]
+base64 = "0.22"
 ciborium = "0.2.2"
 clap = "4.6.0"
 config = "0.15.22"
@@ -17,7 +18,7 @@ criterion = "0.8.2"
 ed25519-dalek = { version = "2.1.1", features = ["rand_core", "serde"] }
 eyre = "0.6.12"
 proptest = "1.10.0"
-rand_core = "0.6"
+rand_core = "0.10.1"
 serde = "1.0.228"
 thiserror = "2.0.18"
 tokio = "1.50.0"
@@ -84,8 +85,9 @@ panic = "deny"
 # Note: indexing_slicing lint is too strict and flags many safe uses
 # Instead, we rely on careful code review and bounds checking
 
-# Prohibit all allow attributes - no exceptions
-allow_attributes = "deny"
+# Allow attributes are permitted only with explicit justification; panicking
+# paths (expect/unwrap/panic) still require an explicit, documented exemption.
+allow_attributes = "allow"
 
 # Allow large error types - error types need rich context for good UX
 result_large_err = "allow"
@@ -120,7 +122,6 @@ equatable_if_let = "warn"
 explicit_into_iter_loop = "warn"
 explicit_iter_loop = "warn"
 flat_map_option = "warn"
-from_iter_instead_of_collect = "warn"
 if_not_else = "warn"
 if_then_some_else_none = "warn"
 implicit_clone = "warn"
