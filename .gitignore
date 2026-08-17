@@ -33,7 +33,6 @@ bun.lockb
 # Leptos
 /site/
 .rumdl_cache/
-tenuo/
 x402-docs/
 mutants.out/
 mutants.out.old/

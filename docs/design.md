@@ -107,12 +107,13 @@ services.
 
 ## 3. Research and Benchmarking
 
-### 3.1 Deep Reference: tenuo (Authz-layer template)
+### 3.1 Authz-Layer Design Principles
 
-`/home/akagi201/tmp/tenuo` is the **primary reference** for the Authz-layer
-design, but the protocol and brand are independent (LedgerFlow naming).
+The Authz-layer design builds on well-established capability-token patterns
+(attenuating capability systems and signed-delegation chains) and adapts them
+to payment semantics under the LedgerFlow naming.
 
-| tenuo design | LedgerFlow adoption / adaptation |
+| Established pattern | LedgerFlow adaptation |
 |---|---|
 | Warrant: signed envelope (CBOR payload + Ed25519 signature), UUIDv7 id | adopted; fields redefined for payment semantics (§6.1) |
 | Delegation chain: `parent_hash` cryptographic link + `depth/max_depth`, six invariants I1–I6 | adopted and adapted; **attenuation now uses runtime conjunction** (§6.2), avoiding the undecidable static-subset problem |
@@ -124,10 +125,10 @@ design, but the protocol and brand are independent (LedgerFlow naming).
 | Control/Data plane separation (feature gated) | adopted as deployment modes rather than crate splits (§5.3) |
 | IETF AAT draft alignment | conceptual alignment only; no spec-chasing |
 
-**Deliberately not done** (tenuo has it, LedgerFlow does not need it): 16+
-constraint types, CEL expressions, language-binding matrix (Python/WASM),
-orchestrator, gateway templates. LedgerFlow converges to the minimal complete
-set for payment semantics.
+**Deliberately not done** (other capability systems have it, LedgerFlow does
+not need it): 16+ constraint types, CEL expressions, language-binding matrix
+(Python/WASM), orchestrator, gateway templates. LedgerFlow converges to the
+minimal complete set for payment semantics.
 
 ### 3.2 Protocol Implementation References
 
@@ -330,8 +331,8 @@ sponsorship deferred, extensions frozen):
 
 ### 6.2 Delegation and Attenuation (protocol invariants)
 
-Adopts tenuo I1–I6 adapted for payment semantics; **attenuation uses runtime
-conjunction** (v0.2 revision):
+Defines invariants I1–I6 adapted for payment semantics; **attenuation uses
+runtime conjunction** (v0.2 revision):
 
 | ID | Invariant |
 |---|---|
@@ -355,10 +356,9 @@ conjunction** (v0.2 revision):
 - fail-closed: unknown constraint types, unknown constraint fields, and
   unknown warrant extensions are all rejected.
 
-> Design trade-off note: tenuo implements a full constraint lattice (partial
-> order + monotonic attenuation judgment), but its correctness depends on a
-> decidable subset of a custom DSL and is complex to implement
-> (constraints.rs ~224 KB). LedgerFlow trades static containment for
+> Design trade-off note: a full constraint lattice (partial order +
+> monotonic attenuation judgment) depends on a decidable subset of a custom
+> DSL and is complex to implement. LedgerFlow trades static containment for
 > decidability and interop via runtime conjunction; the cost is the loss of
 > immediate "static rejection of over-limit child at issuance". Since every
 > payment still verifies node-by-node, the security semantics are equivalent
@@ -421,7 +421,7 @@ paymaster (roadmap).
 
 ### 6.5 Approval Gates (m-of-n human approval)
 
-For high-value / high-risk payments (inspired by tenuo approvals):
+For high-value / high-risk payments (m-of-n approval pattern):
 
 ```
 Agent initiates payment (no approval)
@@ -461,7 +461,7 @@ Agent initiates payment (no approval)
 
 ### 6.7 Signatures and Domain Separation
 
-Reuses tenuo's domain-separation idea to prevent cross-purpose replay:
+Uses domain-separated signing to prevent cross-purpose replay:
 
 | Domain prefix | Purpose |
 |---|---|
@@ -816,7 +816,7 @@ persistent implementation lives in `ledgerflow-facilitator` /
 | Clock-skew TTL/PoP bypass | time-server drift | expired tokens replayed | bidirectional clock-tolerance window (§6.3) |
 | MPP session revocation delay | streaming payments | continued consumption inside the pre-revocation window | next-tick effect + active stream close (§6.6) |
 
-### 12.3 Explicitly Not Protected (aligned with tenuo)
+### 12.3 Explicitly Not Protected
 
 - A fully compromised agent process (RCE) — requires sidecar/gateway
   deployment isolation (deployment docs);

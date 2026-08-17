@@ -77,29 +77,33 @@ a real wallet (OneCipher) signing the payment credentials.
 ### x402 exact (EIP-3009) on Arc Testnet
 
 - **Network**: `https://rpc.testnet.arc.io` (chainId 5042002); native USDC
-  with an ERC-20 interface at `0x3600...` (6 decimals; gas token is the
-  18-decimal native USDC).
+  with an ERC-20 interface at `0x3600000000000000000000000000000000000000`
+  (6 decimals; gas token is the 18-decimal native USDC).
 - **Flow**: merchant issues a 402 `PaymentRequired` (advertising
   `scheme=exact, asset=USDC@eip155:5042002, payTo=merchant`) → OneCipher signs
   an EIP-3009 `TransferWithAuthorization` typed-data message → merchant settles
   on-chain via `transferWithAuthorization`.
-- **On-chain confirmation**: tx `0x38a531c9...` status=0x1 with both
-  `AuthorizationUsed` and `Transfer` (10000 units) events.
+- **On-chain confirmation**: tx
+  `0x38a531c917b44c2bceec7cf9d2bbe9f9a7c8e696fc5bcf4926d9a034038abb5f`
+  status=0x1 with both `AuthorizationUsed` and `Transfer` (10000 units)
+  events.
 - **Signature correctness**: OneCipher's EIP-712 signature is byte-identical
-  to `cast wallet sign --data` (`66a4352d...`), proving standards-compliant
-  EIP-712 signing.
+  to `cast wallet sign --data` (signature prefix `66a4352d...`), proving
+  standards-compliant EIP-712 signing.
 
 ### MPP charge on Tempo Moderato
 
 - **Network**: `https://rpc.moderato.tempo.xyz` (chainId 42431); escrow
-  contract `0xe1c4d3dc...`, pathUSD `0x20c0...`.
+  contract `0xe1c4d3dce17bc111181ddf716f75bae49e61a336`, pathUSD
+  `0x20c0000000000000000000000000000000000000`.
 - **Flow**: server issues a `WWW-Authenticate: Payment` challenge (realm
   "MPP Payment", intent charge, method tempo) → the client signs a TIP-20
   transfer transaction → the server broadcasts a fee-sponsored transaction
   (Tempo type-0x76 with `feePayerSignature` / `feeToken` / `calls`).
-- **On-chain confirmation**: tx `0xa678fb46...` status=0x1, sender is the
-  payer account, 3 logs (2× `Transfer` + fee event), pathUSD balance decreased
-  by exactly 0.01 + a small fee.
+- **On-chain confirmation**: tx
+  `0xa678fb46754092655ef8a3f2587ccfc1c61764ab3b31deb34b88a90190ea5f38`
+  status=0x1, sender is the payer account, 3 logs (2× `Transfer` + fee event),
+  pathUSD balance decreased by exactly 0.01 + a small fee.
 
 Reusable live-test scripts live in [`testnet-tests/`](testnet-tests/); the
 gaps found and fixes applied to the wallet are tracked in
