@@ -19,6 +19,53 @@ traditional gateways) through a small Facilitator layer.
 > protocols / standard APIs. See [docs/design.md](docs/design.md) for the
 > full design.
 
+## Target Architecture
+
+LedgerFlow is the **payment-protocol + authz** layer in a two-project sibling
+architecture with [OneCipher](https://github.com/longcipher/onecipher). The
+two projects are decoupled by responsibility and communicate only through
+standard protocols:
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│  LedgerFlow  (this repo) — payment protocol + authz        │  │
+│                                                              │
+│  x402 / MPP wire protocols  ·  Warrant authz + delegation    │
+│  PoP  ·  approval gates  ·  revocation  ·  Facilitator rails  │
+│                                                              │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │  WalletSigner (ledgerflow-wallet) — a WalletSigner     │  │
+│  │  consumer via loopback JSON-RPC 2.0 (127.0.0.1:18080)  │  │
+│  └──────────────────────────┬─────────────────────────────┘  │
+└─────────────────────────────┼────────────────────────────────┘
+                              │ ledgerflow_sign / ledgerflow_keys
+                              │ ledgerflow_sign_payment (base64, JSON-RPC 2.0)
+┌─────────────────────────────┼────────────────────────────────┐
+│  OneCipher  (sibling repo) — the WALLET, a WalletSigner     │
+│                                                        provider │
+│  Key custody · hardened memory · local signing · policy ·     │
+│  audit · WebUI approvals                                      │
+│  wallet-rpc server: 127.0.0.1:18080 (loopback-only)           │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**Design split (keep OneCipher simple & effective):**
+
+- **LedgerFlow owns payments & authorization**: the x402/MPP wire protocols,
+  warrant/delegation/PoP/approval/revocation authz, and settlement routing.
+- **OneCipher owns wallet concerns only**: key custody, hardened local
+  signing, the policy engine, audit, and human approval flows — it does **not**
+  implement payment-protocol logic.
+- **Decoupling contract**: OneCipher exposes the LedgerFlow `WalletSigner`
+  interface over loopback JSON-RPC 2.0 (`ledgerflow_sign`,
+  `ledgerflow_keys`, `ledgerflow_sign_payment`) via its `wallet-rpc serve`.
+  LedgerFlow consumes it as a plain `WalletSigner`. There is no compile-time
+  dependency between the two repositories.
+- LedgerFlow's `ledgerflow-wallet` crate ships the `HttpJsonRpcTransport`
+  (real HTTP client) and an `EmbeddedWalletServer` / loopback JSON-RPC server
+  for end-to-end use against any wallet that speaks the same wire protocol
+  (including OneCipher).
+
 ## Architecture
 
 ```mermaid

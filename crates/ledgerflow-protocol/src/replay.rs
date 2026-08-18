@@ -95,12 +95,12 @@ impl ReplayStore for InMemoryReplayStore {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
-    use super::*;
     use ledgerflow_core::{PaymentSubjectKind, PaymentSubjectRef, SignerRef, SigningAlgorithm};
+
+    use super::*;
 
     fn fingerprint(challenge: &str, nonce: &str) -> ReplayFingerprint {
         ReplayFingerprint {
@@ -195,7 +195,10 @@ mod tests {
         VerifiedAuthorization {
             merchant_id: "merchant-a".to_string(),
             tool_name: "web-search".to_string(),
-            payment_subject: PaymentSubjectRef::new(PaymentSubjectKind::Caip10, "caip10:eip155:8453:0xabc123"),
+            payment_subject: PaymentSubjectRef::new(
+                PaymentSubjectKind::Caip10,
+                "caip10:eip155:8453:0xabc123",
+            ),
             holder,
             leaf_warrant: warrant.clone(),
             root_warrant: warrant,

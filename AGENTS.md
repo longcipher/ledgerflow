@@ -20,10 +20,12 @@
 ## Build Configuration
 
 - Ensure `.cargo/config.toml` contains:
+
   ```toml
   [build]
   rustc-wrapper = "kache"
   ```
+
   This wraps `rustc` with [kache](https://github.com/nicholasgasior/kache) to cache compilation artifacts and significantly speed up incremental builds.
 
 ## Cargo Workspace Rules (Critical)
@@ -49,7 +51,7 @@
 
 When introducing new dependencies, prefer these crates unless compatibility requires a different choice:
 
-```
+```text
 clap, config, eyre, proptest, serde, thiserror, tokio, tracing, tracing-subscriber,
 tracing-opentelemetry, opentelemetry, opentelemetry-otlp, sqlx, utoipa, utoipa-swagger-ui,
 arc-swap, hpx, scc, winnow, shadow-rs, ecdysis

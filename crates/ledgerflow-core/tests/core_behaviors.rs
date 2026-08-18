@@ -40,7 +40,6 @@ fn subject_ref() -> PaymentSubjectRef {
     PaymentSubjectRef::new(PaymentSubjectKind::Caip10, "caip10:eip155:8453:0xabc123")
 }
 
-
 fn fixed_id(tag: &str) -> [u8; 16] {
     let mut id = [0_u8; 16];
     for (i, b) in tag.bytes().take(16).enumerate() {
@@ -218,11 +217,13 @@ fn delegation_chain_passes_when_fully_valid() {
     let ctx = context(2_000);
 
     // Delegated warrant: holder of root delegates to the agent key.
-    let child = DelegatedWarrantBuilder::from(root.clone())
-        .issue_to(delegate_keys().signer_ref(), &holder_keys(), 2_000, [0_u8; 8]);
-    let chain = WarrantChain {
-        warrants: vec![root, child],
-    };
+    let child = DelegatedWarrantBuilder::from(root.clone()).issue_to(
+        delegate_keys().signer_ref(),
+        &holder_keys(),
+        2_000,
+        [0_u8; 8],
+    );
+    let chain = WarrantChain { warrants: vec![root, child] };
     // The leaf holder is now delegate_keys; re-sign proof with it.
     let leaf = chain.leaf().expect("leaf");
     let proof = ProofBuilder::new()
@@ -275,17 +276,18 @@ fn delegated_chain_with_excessive_amount_is_rejected_by_runtime_conjunction() {
     let revocation = InMemoryRevocationCheck::new();
 
     let error = authorize(&chain, &proof, &ctx, &[], &revocation).expect_err("I7 violation");
-    assert!(matches!(
-        error,
-        ledgerflow_core::AuthorizationError::AmountMonotonicityViolation
-    ));
+    assert!(matches!(error, ledgerflow_core::AuthorizationError::AmountMonotonicityViolation));
 }
 
 #[test]
 fn tampered_chain_node_is_rejected() {
     let root = root_warrant();
-    let child = DelegatedWarrantBuilder::from(root.clone())
-        .issue_to(delegate_keys().signer_ref(), &holder_keys(), 2_000, [0_u8; 8]);
+    let child = DelegatedWarrantBuilder::from(root.clone()).issue_to(
+        delegate_keys().signer_ref(),
+        &holder_keys(),
+        2_000,
+        [0_u8; 8],
+    );
     // Tamper: change merchant on the child without re-signing.
     let mut tampered = child;
     tampered.merchant = MerchantConstraint::with_ids(vec!["evil".to_string()]);
@@ -310,8 +312,8 @@ fn tampered_chain_node_is_rejected() {
     assert!(
         matches!(
             error,
-            ledgerflow_core::AuthorizationError::InvalidWarrantSignature
-                | ledgerflow_core::AuthorizationError::MerchantNotAllowed { .. }
+            ledgerflow_core::AuthorizationError::InvalidWarrantSignature |
+                ledgerflow_core::AuthorizationError::MerchantNotAllowed { .. }
         ),
         "unexpected error: {error}"
     );
@@ -325,8 +327,8 @@ fn revoked_warrant_is_rejected_even_with_valid_signatures() {
     let mut revocation = InMemoryRevocationCheck::new();
     revocation.revoke_warrant(&warrant.id);
 
-    let error =
-        authorize(&WarrantChain::single(warrant), &proof, &ctx, &[], &revocation).expect_err("revoked");
+    let error = authorize(&WarrantChain::single(warrant), &proof, &ctx, &[], &revocation)
+        .expect_err("revoked");
     assert_eq!(error, ledgerflow_core::AuthorizationError::WarrantRevoked);
 }
 
@@ -338,8 +340,8 @@ fn revoked_holder_is_rejected() {
     let mut revocation = InMemoryRevocationCheck::new();
     revocation.revoke_holder(&holder_keys().signer_ref());
 
-    let error =
-        authorize(&WarrantChain::single(warrant), &proof, &ctx, &[], &revocation).expect_err("holder revoked");
+    let error = authorize(&WarrantChain::single(warrant), &proof, &ctx, &[], &revocation)
+        .expect_err("holder revoked");
     assert_eq!(error, ledgerflow_core::AuthorizationError::HolderRevoked);
 }
 
@@ -474,14 +476,9 @@ fn approval_gate_requires_m_of_n_signatures() {
         .created_at_ms(tuple.created_at_ms)
         .sign_with(&holder_keys());
 
-    let verified = authorize(
-        &WarrantChain::single(warrant),
-        &approved_proof,
-        &ctx,
-        &[approval],
-        &revocation,
-    )
-    .expect("approved");
+    let verified =
+        authorize(&WarrantChain::single(warrant), &approved_proof, &ctx, &[approval], &revocation)
+            .expect("approved");
     assert_eq!(verified.chain_len, 1);
 }
 
@@ -495,10 +492,7 @@ fn excessive_amount_is_rejected_by_payment_constraint() {
 
     let error = authorize(&WarrantChain::single(warrant), &proof, &ctx, &[], &revocation)
         .expect_err("over limit");
-    assert!(matches!(
-        error,
-        ledgerflow_core::AuthorizationError::PaymentAmountExceeded { .. }
-    ));
+    assert!(matches!(error, ledgerflow_core::AuthorizationError::PaymentAmountExceeded { .. }));
 }
 
 #[test]
@@ -511,10 +505,7 @@ fn wrong_merchant_is_rejected() {
 
     let error = authorize(&WarrantChain::single(warrant), &proof, &ctx, &[], &revocation)
         .expect_err("merchant");
-    assert!(matches!(
-        error,
-        ledgerflow_core::AuthorizationError::MerchantNotAllowed { .. }
-    ));
+    assert!(matches!(error, ledgerflow_core::AuthorizationError::MerchantNotAllowed { .. }));
 }
 
 #[test]

@@ -90,7 +90,9 @@ pub enum AuthorizationError {
     ApprovalsDigestMismatch,
     #[error("unknown warrant extension key `{key}` (extensions are frozen in v1)")]
     UnknownExtension { key: String },
-    #[error("SRL version {presented} does not advance the applied version {applied} (anti-rollback)")]
+    #[error(
+        "SRL version {presented} does not advance the applied version {applied} (anti-rollback)"
+    )]
     SrlVersionRegression { presented: u64, applied: u64 },
     #[error("the SRL signature is invalid")]
     InvalidSrlSignature,

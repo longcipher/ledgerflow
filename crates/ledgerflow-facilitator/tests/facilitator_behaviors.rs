@@ -9,13 +9,13 @@
 use ledgerflow_core::{
     AssetRef, AuthorizationContext, AuthorizationInput, InMemoryRevocationCheck,
     MerchantConstraint, PaymentConstraint, PaymentRail, PaymentSubjectKind, PaymentSubjectRef,
-    PopProof, ProofBuilder, ResourceConstraint, RevocationCheck, SignerRef, SigningKeyPair,
-    SignedApproval, TrustedIssuer, TrustedIssuers, Warrant, WarrantBuilder, WarrantChain,
+    PopProof, ProofBuilder, ResourceConstraint, RevocationCheck, SignedApproval, SignerRef,
+    SigningKeyPair, TrustedIssuer, TrustedIssuers, Warrant, WarrantBuilder, WarrantChain,
     sha256_prefixed, verify_authorization,
 };
 use ledgerflow_facilitator::{
     DefaultSubjectResolver, EvmRailAdapter, FileRevocationStore, SettlementRegistry,
-    SettlementService, VerificationService, VerifyStatus, VerifyRequest,
+    SettlementService, VerificationService, VerifyRequest, VerifyStatus,
 };
 
 fn issuer_keys() -> SigningKeyPair {
@@ -251,7 +251,8 @@ fn settle_succeeds_when_reverification_passes() {
     let authorization = outcome.authorization.expect("authorized");
 
     // Then settle with atomic re-verification.
-    let settlement = SettlementService::new(revocation, DefaultSubjectResolver, vec![EvmRailAdapter]);
+    let settlement =
+        SettlementService::new(revocation, DefaultSubjectResolver, vec![EvmRailAdapter]);
     let settle_request = ledgerflow_facilitator::SettleRequest {
         authorization: &authorization,
         chain: &chain,
@@ -337,7 +338,11 @@ fn settlement_registry_is_idempotent() {
         settled_amount: 100,
         asset: "USDC".to_string(),
     };
-    registry.record("sha256:warrant", receipt.clone(), ledgerflow_facilitator::SettlementStatus::Settled);
+    registry.record(
+        "sha256:warrant",
+        receipt.clone(),
+        ledgerflow_facilitator::SettlementStatus::Settled,
+    );
     registry.record("sha256:warrant", receipt, ledgerflow_facilitator::SettlementStatus::Settled);
 
     let query = registry.query("tx-1").expect("found");
@@ -367,7 +372,8 @@ fn settle_rejects_when_warrant_expired_between_verify_and_settle() {
     let authorization = outcome.authorization.expect("authorized");
 
     // Warrant TTL is 60s (issued at t=5s => expires 65s). Settle at t=66s.
-    let settlement = SettlementService::new(revocation, DefaultSubjectResolver, vec![EvmRailAdapter]);
+    let settlement =
+        SettlementService::new(revocation, DefaultSubjectResolver, vec![EvmRailAdapter]);
     let settle_request = ledgerflow_facilitator::SettleRequest {
         authorization: &authorization,
         chain: &chain,

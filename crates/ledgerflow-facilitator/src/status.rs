@@ -1,12 +1,8 @@
 //! Settlement status registry (idempotent `/status` queries).
 
-use std::collections::BTreeMap;
-use std::sync::Mutex;
+use std::{collections::BTreeMap, sync::Mutex};
 
-use crate::{
-    outcome::SettlementStatus,
-    rails::SettlementReceipt,
-};
+use crate::{outcome::SettlementStatus, rails::SettlementReceipt};
 
 /// A single registry entry.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -45,7 +41,12 @@ impl SettlementRegistry {
     }
 
     /// Records a settlement outcome (idempotent by transaction id).
-    pub fn record(&self, warrant_digest: &str, receipt: SettlementReceipt, status: SettlementStatus) {
+    pub fn record(
+        &self,
+        warrant_digest: &str,
+        receipt: SettlementReceipt,
+        status: SettlementStatus,
+    ) {
         let transaction_id = receipt.transaction_id.clone();
         if let Ok(mut map) = self.inner.by_transaction.lock() {
             map.insert(transaction_id.clone(), RegistryEntry { receipt, status });
@@ -60,11 +61,7 @@ impl SettlementRegistry {
 
     /// Queries a single settlement by transaction id.
     pub fn query(&self, transaction_id: &str) -> Option<RegistryEntry> {
-        self.inner
-            .by_transaction
-            .lock()
-            .ok()
-            .and_then(|map| map.get(transaction_id).cloned())
+        self.inner.by_transaction.lock().ok().and_then(|map| map.get(transaction_id).cloned())
     }
 
     /// Queries all settlements for a warrant digest.

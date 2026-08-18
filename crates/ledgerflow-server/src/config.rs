@@ -1,9 +1,8 @@
 //! Server configuration with fail-fast semantics (design §5.3).
 //!
 //! - An absent `[saas]` section is an **explicit default** to standalone.
-//! - A present-but-invalid `[saas]` section (bad mode, missing service
-//!   token, missing tenant) is a **startup error** — never a silent
-//!   downgrade.
+//! - A present-but-invalid `[saas]` section (bad mode, missing service token, missing tenant) is a
+//!   **startup error** — never a silent downgrade.
 
 /// SaaS deployment mode.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -44,7 +43,8 @@ impl ServerConfig {
     /// Invalid `saas` mode or a missing service token in `saas` mode is a
     /// hard error (fail-fast).
     pub fn from_env() -> Result<Self, ConfigError> {
-        let bind_addr = std::env::var("LEDGERFLOW_BIND").unwrap_or_else(|_| "127.0.0.1:8080".to_string());
+        let bind_addr =
+            std::env::var("LEDGERFLOW_BIND").unwrap_or_else(|_| "127.0.0.1:8080".to_string());
         let mode_raw = std::env::var("LEDGERFLOW_SAAS_MODE").ok();
         let mode = match mode_raw.as_deref() {
             None | Some("standalone") => SaasMode::Standalone,
@@ -62,10 +62,7 @@ impl ServerConfig {
         }
         let tenant_id =
             std::env::var("LEDGERFLOW_TENANT_ID").unwrap_or_else(|_| "default".to_string());
-        Ok(Self {
-            bind_addr,
-            saas: SaasConfig { mode, service_token, tenant_id },
-        })
+        Ok(Self { bind_addr, saas: SaasConfig { mode, service_token, tenant_id } })
     }
 }
 

@@ -9,12 +9,12 @@
 #![allow(clippy::expect_used)]
 
 use ledgerflow_core::{
-    IssueBounds, MerchantConstraint, PaymentConstraint, PaymentRail, PopTuple,
-    ResourceConstraint, SignerRef, SigningKeyPair, SignedRevocationList, SrlEntry, SrlState,
-    ToolArguments, TrustedIssuer, TrustedIssuers, Warrant, WarrantBuilder, WarrantChain,
+    IssueBounds, MerchantConstraint, PaymentConstraint, PaymentRail, PopTuple, ResourceConstraint,
+    SignedRevocationList, SignerRef, SigningKeyPair, SrlEntry, SrlState, ToolArguments,
+    TrustedIssuer, TrustedIssuers, Warrant, WarrantBuilder, WarrantChain,
+    constraint::{AuthorizationContext, Constraint},
     generate_warrant_id_128, hex_encode_bytes, validate_attenuation, verify_chain,
 };
-use ledgerflow_core::constraint::{AuthorizationContext, Constraint};
 
 fn issuer_keys() -> SigningKeyPair {
     SigningKeyPair::from_bytes(&[0x11; 32])
@@ -82,10 +82,7 @@ fn duplicate_warrant_id_in_chain_is_rejected() {
     let ctx = context(2_000, &holder_keys().signer_ref());
     let proof = proof_for(&root, &ctx, &holder_keys());
     let error = verify_chain(&chain, &trusted(), &proof, &ctx).expect_err("cycle");
-    assert!(matches!(
-        error,
-        ledgerflow_core::AuthorizationError::DuplicateWarrantInChain { .. }
-    ));
+    assert!(matches!(error, ledgerflow_core::AuthorizationError::DuplicateWarrantInChain { .. }));
 }
 
 #[test]
@@ -93,11 +90,19 @@ fn distinct_ids_same_node_are_allowed() {
     // A -> B -> A (different ids) is allowed by tenuo's rule: the ids differ,
     // even though the holder patterns may repeat.
     let root = root_warrant(2_000, 86_400, 3);
-    let first = ledgerflow_core::typestate::DelegatedWarrantBuilder::from(root.clone())
-        .issue_to(delegate_keys().signer_ref(), &holder_keys(), 2_000, [1_u8; 8]);
+    let first = ledgerflow_core::typestate::DelegatedWarrantBuilder::from(root.clone()).issue_to(
+        delegate_keys().signer_ref(),
+        &holder_keys(),
+        2_000,
+        [1_u8; 8],
+    );
     // Issue a second child from the first (different id via different seed).
-    let second = ledgerflow_core::typestate::DelegatedWarrantBuilder::from(first.clone())
-        .issue_to(holder_keys().signer_ref(), &delegate_keys(), 2_000, [2_u8; 8]);
+    let second = ledgerflow_core::typestate::DelegatedWarrantBuilder::from(first.clone()).issue_to(
+        holder_keys().signer_ref(),
+        &delegate_keys(),
+        2_000,
+        [2_u8; 8],
+    );
     let chain = WarrantChain { warrants: vec![root, first, second] };
     let leaf = chain.leaf().expect("leaf");
     let ctx = context(2_000, &holder_keys().signer_ref());
@@ -224,10 +229,7 @@ fn tool_args_digest_differs_for_different_values() {
     args1.insert("model".to_string(), "gpt-4o".to_string());
     let mut args2: ToolArguments = std::collections::BTreeMap::new();
     args2.insert("model".to_string(), "gpt-4o-mini".to_string());
-    assert_ne!(
-        PopTuple::tool_args_digest(&args1),
-        PopTuple::tool_args_digest(&args2)
-    );
+    assert_ne!(PopTuple::tool_args_digest(&args1), PopTuple::tool_args_digest(&args2));
 }
 
 // ---------------------------------------------------------------------------
@@ -242,10 +244,7 @@ fn validate_attenuation_rejects_wider_merchant() {
         "merchant-b".to_string(),
     ]));
     let error = validate_attenuation(&parent, &child).expect_err("widening");
-    assert!(matches!(
-        error,
-        ledgerflow_core::AuthorizationError::AttenuationViolation { .. }
-    ));
+    assert!(matches!(error, ledgerflow_core::AuthorizationError::AttenuationViolation { .. }));
 }
 
 #[test]
@@ -263,10 +262,7 @@ fn validate_attenuation_rejects_wider_amount_cap() {
     let parent = Constraint::Payment(payment(100));
     let child = Constraint::Payment(payment(200));
     let error = validate_attenuation(&parent, &child).expect_err("cap widening");
-    assert!(matches!(
-        error,
-        ledgerflow_core::AuthorizationError::AttenuationViolation { .. }
-    ));
+    assert!(matches!(error, ledgerflow_core::AuthorizationError::AttenuationViolation { .. }));
 }
 
 #[test]
@@ -285,10 +281,8 @@ fn delegated_builder_narrowing_is_checked_at_issuance() {
 
 #[test]
 fn issue_bounds_restrict_delegated_merchants() {
-    let bounds = IssueBounds {
-        merchant_ids: vec!["merchant-a".to_string()],
-        ..IssueBounds::unrestricted()
-    };
+    let bounds =
+        IssueBounds { merchant_ids: vec!["merchant-a".to_string()], ..IssueBounds::unrestricted() };
     let encoded = bounds.encode_cbor().expect("encode");
     let decoded = IssueBounds::decode_cbor(&encoded).expect("decode");
     assert_eq!(decoded, bounds);
@@ -297,10 +291,7 @@ fn issue_bounds_restrict_delegated_merchants() {
 
 #[test]
 fn warrant_carries_issue_bounds_extension() {
-    let bounds = IssueBounds {
-        max_per_charge: Some(500),
-        ..IssueBounds::unrestricted()
-    };
+    let bounds = IssueBounds { max_per_charge: Some(500), ..IssueBounds::unrestricted() };
     let bytes = bounds.encode_cbor().expect("encode");
     let warrant = WarrantBuilder::new(2_000)
         .warrant_id(fixed_id("bounds-root-0000"))
@@ -372,10 +363,7 @@ fn srl_anti_rollback_rejects_old_version() {
         &control,
     );
     let error = state.apply(&v1, &control.signer_ref()).expect_err("rollback");
-    assert!(matches!(
-        error,
-        ledgerflow_core::AuthorizationError::SrlVersionRegression { .. }
-    ));
+    assert!(matches!(error, ledgerflow_core::AuthorizationError::SrlVersionRegression { .. }));
 }
 
 #[test]
@@ -389,10 +377,7 @@ fn srl_rejects_invalid_signature() {
     );
     let mut state = SrlState::new();
     let error = state.apply(&list, &control.signer_ref()).expect_err("bad sig");
-    assert!(matches!(
-        error,
-        ledgerflow_core::AuthorizationError::InvalidSrlSignature
-    ));
+    assert!(matches!(error, ledgerflow_core::AuthorizationError::InvalidSrlSignature));
 }
 
 #[test]

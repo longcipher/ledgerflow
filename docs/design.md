@@ -193,7 +193,7 @@ minimal complete set for payment semantics.
   interface + local JSON-RPC; SaaS via the gateway internal-header protocol;
   rails via CAIP-2/19 standardized identifiers;
 - **Honest verification model**: authorization verification (signature chains
-  + PoP + stateless constraints) is offline; revocation and budget are online
+  - PoP + stateless constraints) is offline; revocation and budget are online
   (§1.1); never overstate the "offline" promise;
 - **fail-closed**: unknown constraints, unknown extensions, and unknown
   warrant extensions are all rejected; invalid configuration = startup
@@ -221,7 +221,7 @@ minimal complete set for payment semantics.
 
 ### 5.1 Layered Architecture
 
-```
+```text
 ┌────────────────────────────────────────────────────────────────┐
 │ Application Layer (host applications, not owned by LedgerFlow) │
 │   Merchant API · Agent Runtime · SaaS Platform · Wallet UI      │
@@ -262,7 +262,7 @@ minimal complete set for payment semantics.
 
 ### 5.3 Deployment Modes (dual-mode, one codebase)
 
-```
+```text
                     standalone (default)                     saas
 Identity source   none (local keys / configured anchors)     gateway-injected x-internal-* headers + service token
 Tenant context    fixed default                              isolated by x-internal-tenant-id
@@ -293,7 +293,7 @@ Revocation        persisted (SQLite/file); in-memory demo     persisted (same DB
 
 Signed envelope (keeps the existing implementation, minor field tweaks):
 
-```
+```text
 SignedWarrant {
     envelope_version: u8,          // = 1
     payload: bytes,                // CBOR(WarrantPayload)
@@ -373,7 +373,7 @@ runtime conjunction** (v0.2 revision):
   canonicalization; CBOR deterministic encoding, RFC 8949 Core Deterministic
   Encoding):
 
-```
+```text
 b"ledgerflow-pop-v1" ‖ CBOR{
     warrant_id, challenge_id, method, uri, payment_payload_digest,
     approvals_digest,   // required when approvals exist (closes the §2.6 concat ambiguity)
@@ -423,7 +423,7 @@ paymaster (roadmap).
 
 For high-value / high-risk payments (m-of-n approval pattern):
 
-```
+```text
 Agent initiates payment (no approval)
   → merchant/Facilitator hits an approval_gate while verifying the warrant
   → returns approval_required (with request_hash = binding-tuple hash)
@@ -499,7 +499,7 @@ reserved for EVM-side wallet direct signing (roadmap).
 Uses x402 v2 **native extensions** (server advertises `info` + `schema`,
 client echoes):
 
-```
+```text
 In the 402 PaymentRequired extensions:
   "ledgerflow": {
     "info": {
@@ -550,7 +550,7 @@ MPP is based on `draft-ietf-httpauth-payment`:
 parameters + auth-scheme parameters**, without invading charge/session
 semantics:
 
-```
+```text
 WWW-Authenticate: Payment
   method="charge",
   params="...",                            // original MPP params
@@ -592,7 +592,7 @@ session lifetime; revocation semantics per §6.6.
 
 ### 8.1 Responsibilities and API
 
-```
+```text
 POST /verify    input: PaymentPayload(x402) or Payment response(MPP) + ticket context
                 → stateless authz verification (warrant chain + PoP + stateless
                   constraints + approvals + trust anchors)
@@ -734,7 +734,7 @@ network policy; the service must never be exposed on a direct public path.
 
 ### 11.1 Target Layout
 
-```
+```text
 ledgerflow/
 ├── bin/
 │   ├── ledgerflow-cli/          # fixtures, issuance/revocation tooling, demos (kept)
@@ -886,7 +886,7 @@ persistent implementation lives in `ledgerflow-facilitator` /
   binding tuple's CBOR deterministic encoding and Ed25519 canonical
   signatures;
 - **Wallet integration**: test against the first integrated wallet (local RPC
-  + in-process signer modes).
+  - in-process signer modes).
 
 ### 13.5 Mutation Testing
 

@@ -10,8 +10,8 @@
 use std::collections::BTreeMap;
 
 use ledgerflow_core::{
-    AuthorizationContext, AuthorizationInput, PaymentRail, RevocationCheck, ToolArguments, TrustedIssuers, VerifiedAuthorization, Warrant, WarrantChain,
-    DEFAULT_PROOF_FRESHNESS_MS,
+    AuthorizationContext, AuthorizationInput, DEFAULT_PROOF_FRESHNESS_MS, PaymentRail,
+    RevocationCheck, ToolArguments, TrustedIssuers, VerifiedAuthorization, Warrant, WarrantChain,
 };
 use thiserror::Error;
 
@@ -162,8 +162,8 @@ where
             scheme: payload.accepted.scheme.clone(),
             payee_id: payload.accepted.payee_id.clone(),
             rail: match extension.payment_subject.kind {
-                ledgerflow_core::PaymentSubjectKind::ExchangeAccount
-                | ledgerflow_core::PaymentSubjectKind::FacilitatorAccount => PaymentRail::Exchange,
+                ledgerflow_core::PaymentSubjectKind::ExchangeAccount |
+                ledgerflow_core::PaymentSubjectKind::FacilitatorAccount => PaymentRail::Exchange,
                 _ => PaymentRail::Onchain,
             },
             challenge_id: challenge.challenge_id.clone(),
@@ -238,19 +238,18 @@ where
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
+    use ledgerflow_core::{
+        AuthorizationContext, MerchantConstraint, PaymentConstraint, ProofBuilder, SigningKeyPair,
+        TrustedIssuer, TrustedIssuers, Warrant, WarrantBuilder, sha256_prefixed,
+    };
+
     use super::*;
     use crate::{
         replay::{InMemoryReplayStore, ReplayFingerprint},
         x402::{LedgerFlowAuthorizationExtension, LedgerFlowChallenge},
-    };
-    use ledgerflow_core::{
-        AuthorizationContext, MerchantConstraint, PaymentConstraint,
-        ProofBuilder, SigningKeyPair, TrustedIssuer, TrustedIssuers, Warrant, WarrantBuilder,
-        sha256_prefixed,
     };
 
     fn issuer_keys() -> SigningKeyPair {
@@ -301,12 +300,8 @@ mod tests {
     fn extension() -> LedgerFlowAuthorizationExtension {
         let w = warrant();
         let req = request();
-        let quote = crate::x402::AcceptedQuote::exact(
-            "USDC",
-            100,
-            "merchant-a",
-            Some("base".to_string()),
-        );
+        let quote =
+            crate::x402::AcceptedQuote::exact("USDC", 100, "merchant-a", Some("base".to_string()));
         let request_hash = crate::x402::canonical_request_hash(&req);
         let accepted_hash = crate::x402::canonical_accepted_hash(&quote);
         let ctx = AuthorizationContext {
@@ -378,7 +373,12 @@ mod tests {
         let req = request();
         let ext = extension();
         let payload = crate::x402::PaymentPayload {
-            accepted: crate::x402::AcceptedQuote::exact("USDC", 100, "merchant-a", Some("base".to_string())),
+            accepted: crate::x402::AcceptedQuote::exact(
+                "USDC",
+                100,
+                "merchant-a",
+                Some("base".to_string()),
+            ),
             settlement_payload: "0xabc".to_string(),
             payment_identifier: Some("payment-1".to_string()),
             ledgerflow: Some(ext),
@@ -401,7 +401,12 @@ mod tests {
         let req = request();
         let ext = extension();
         let payload = crate::x402::PaymentPayload {
-            accepted: crate::x402::AcceptedQuote::exact("USDC", 100, "merchant-a", Some("base".to_string())),
+            accepted: crate::x402::AcceptedQuote::exact(
+                "USDC",
+                100,
+                "merchant-a",
+                Some("base".to_string()),
+            ),
             settlement_payload: "0xabc".to_string(),
             payment_identifier: Some("payment-1".to_string()),
             ledgerflow: Some(ext),
@@ -430,7 +435,12 @@ mod tests {
         let req = request();
         let ext = extension();
         let payload = crate::x402::PaymentPayload {
-            accepted: crate::x402::AcceptedQuote::exact("USDC", 100, "merchant-a", Some("base".to_string())),
+            accepted: crate::x402::AcceptedQuote::exact(
+                "USDC",
+                100,
+                "merchant-a",
+                Some("base".to_string()),
+            ),
             settlement_payload: "0xabc".to_string(),
             payment_identifier: None,
             ledgerflow: Some(ext),
@@ -452,7 +462,12 @@ mod tests {
         let req = request();
         let ext = extension();
         let payload = crate::x402::PaymentPayload {
-            accepted: crate::x402::AcceptedQuote::exact("USDC", 100, "merchant-a", Some("base".to_string())),
+            accepted: crate::x402::AcceptedQuote::exact(
+                "USDC",
+                100,
+                "merchant-a",
+                Some("base".to_string()),
+            ),
             settlement_payload: "0xabc".to_string(),
             payment_identifier: None,
             ledgerflow: Some(ext),
@@ -495,8 +510,8 @@ mod tests {
         );
         assert_eq!(
             match subject.kind {
-                ledgerflow_core::PaymentSubjectKind::ExchangeAccount
-                | ledgerflow_core::PaymentSubjectKind::FacilitatorAccount => PaymentRail::Exchange,
+                ledgerflow_core::PaymentSubjectKind::ExchangeAccount |
+                ledgerflow_core::PaymentSubjectKind::FacilitatorAccount => PaymentRail::Exchange,
                 _ => PaymentRail::Onchain,
             },
             PaymentRail::Exchange
@@ -507,12 +522,11 @@ mod tests {
         );
         assert_eq!(
             match opaque.kind {
-                ledgerflow_core::PaymentSubjectKind::ExchangeAccount
-                | ledgerflow_core::PaymentSubjectKind::FacilitatorAccount => PaymentRail::Exchange,
+                ledgerflow_core::PaymentSubjectKind::ExchangeAccount |
+                ledgerflow_core::PaymentSubjectKind::FacilitatorAccount => PaymentRail::Exchange,
                 _ => PaymentRail::Onchain,
             },
             PaymentRail::Onchain
         );
     }
-
 }

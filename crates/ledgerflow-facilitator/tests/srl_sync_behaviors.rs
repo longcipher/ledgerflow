@@ -36,16 +36,10 @@ fn srl_apply_persists_revocations_to_store() {
     sync.apply(&list).expect("apply");
 
     assert_eq!(sync.applied_version(), 1);
-    assert_eq!(
-        store.check_warrant(&warrant_id),
-        RevocationDecision::RevokedWarrant
-    );
+    assert_eq!(store.check_warrant(&warrant_id), RevocationDecision::RevokedWarrant);
     // Persisted across restart.
     let reloaded = FileRevocationStore::open(&path).expect("reopen");
-    assert_eq!(
-        reloaded.check_warrant(&warrant_id),
-        RevocationDecision::RevokedWarrant
-    );
+    assert_eq!(reloaded.check_warrant(&warrant_id), RevocationDecision::RevokedWarrant);
 
     let _ = std::fs::remove_file(&path);
     let _ = std::fs::remove_dir(&dir);
@@ -85,10 +79,7 @@ fn srl_apply_rejects_rollback_and_bad_sig() {
     ));
     assert!(forged.is_err(), "forged signature must be rejected");
     // The forged entry was NOT persisted.
-    assert_eq!(
-        store.check_warrant(&[0xCC; 16]),
-        RevocationDecision::Ok
-    );
+    assert_eq!(store.check_warrant(&[0xCC; 16]), RevocationDecision::Ok);
 
     let _ = std::fs::remove_file(&path);
     let _ = std::fs::remove_dir(&dir);

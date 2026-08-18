@@ -6,19 +6,16 @@
 //! [`SignedRevocationList`] / [`SrlState`] domain (in `ledgerflow-core`) with
 //! the persistent [`FileRevocationStore`] used at verification time:
 //!
-//! - [`SrlSync`] tracks the highest applied version (anti-rollback) and the
-//!   union of entries.
-//! - [`SrlSync::apply`] validates signature + version, then persists the new
-//!   entries into the store (each entry becomes an ordinary revocation
-//!   record, so it survives restarts through the existing JSON-Lines store).
+//! - [`SrlSync`] tracks the highest applied version (anti-rollback) and the union of entries.
+//! - [`SrlSync::apply`] validates signature + version, then persists the new entries into the store
+//!   (each entry becomes an ordinary revocation record, so it survives restarts through the
+//!   existing JSON-Lines store).
 //!
 //! The HTTP transport of SRLs (a control-plane endpoint that verifiers poll)
 //! is a deployment concern left to `ledgerflow-server` (P4); this module owns
 //! the application semantics.
 
-use ledgerflow_core::{
-    RevocationCheck, SignerRef, SignedRevocationList, SrlEntry, SrlState,
-};
+use ledgerflow_core::{RevocationCheck, SignedRevocationList, SignerRef, SrlEntry, SrlState};
 
 use crate::revocation_store::{FileRevocationStore, RevocationStoreError};
 
@@ -54,10 +51,7 @@ impl SrlSync {
     /// Applies a signed SRL: verifies the signature, enforces anti-rollback,
     /// and persists every new entry into the store.
     pub fn apply(&self, list: &SignedRevocationList) -> Result<(), SrlSyncError> {
-        let mut state = self
-            .state
-            .lock()
-            .map_err(|_| SrlSyncError::Poisoned)?;
+        let mut state = self.state.lock().map_err(|_| SrlSyncError::Poisoned)?;
         // Validate before mutating anything.
         state.apply(list, &self.trusted_control_plane).map_err(SrlSyncError::Core)?;
 
@@ -69,29 +63,23 @@ impl SrlSync {
             match entry {
                 SrlEntry::Warrant { id_hex } => {
                     let id = hex_decode(id_hex).ok_or_else(|| {
-                        SrlSyncError::Store(RevocationStoreError::Corrupt(
-                            format!("invalid warrant id hex `{id_hex}`"),
-                        ))
+                        SrlSyncError::Store(RevocationStoreError::Corrupt(format!(
+                            "invalid warrant id hex `{id_hex}`"
+                        )))
                     })?;
-                    if self.store.check_warrant(&id) == ledgerflow_core::RevocationDecision::Ok
-                    {
+                    if self.store.check_warrant(&id) == ledgerflow_core::RevocationDecision::Ok {
                         self.store.revoke_warrant(&id)?;
                         store_updated = true;
                     }
                 }
                 SrlEntry::Holder { key_hex } => {
                     let key = hex_decode(key_hex).ok_or_else(|| {
-                        SrlSyncError::Store(RevocationStoreError::Corrupt(
-                            format!("invalid holder key hex `{key_hex}`"),
-                        ))
+                        SrlSyncError::Store(RevocationStoreError::Corrupt(format!(
+                            "invalid holder key hex `{key_hex}`"
+                        )))
                     })?;
-                    let holder = SignerRef::new(
-                        ledgerflow_core::SigningAlgorithm::Ed25519,
-                        key,
-                    );
-                    if self.store.check_holder(&holder)
-                        == ledgerflow_core::RevocationDecision::Ok
-                    {
+                    let holder = SignerRef::new(ledgerflow_core::SigningAlgorithm::Ed25519, key);
+                    if self.store.check_holder(&holder) == ledgerflow_core::RevocationDecision::Ok {
                         self.store.revoke_holder(&holder)?;
                         store_updated = true;
                     }
@@ -122,8 +110,5 @@ fn hex_decode(hex: &str) -> Option<Vec<u8>> {
     if !hex.len().is_multiple_of(2) {
         return None;
     }
-    (0..hex.len())
-        .step_by(2)
-        .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).ok())
-        .collect()
+    (0..hex.len()).step_by(2).map(|i| u8::from_str_radix(&hex[i..i + 2], 16).ok()).collect()
 }

@@ -9,7 +9,7 @@ use ledgerflow_core::{
 };
 use ledgerflow_protocol::{
     AcceptedQuote, HttpRequest, InMemoryReplayStore, InMemoryWarrantRepository,
-    LedgerFlowCarrier, LedgerFlowChallenge, LedgerFlowAuthorizationExtension, MerchantVerifier,
+    LedgerFlowAuthorizationExtension, LedgerFlowCarrier, LedgerFlowChallenge, MerchantVerifier,
     PaymentPayloadSeed, SlimAuthorization, build_payment_payload, canonical_accepted_hash,
     canonical_request_hash, decode_authorization_param, decode_challenge_param,
     encode_authorization_param, encode_challenge_param, merchant_payment_required,
@@ -114,7 +114,8 @@ fn authorization_extension_cbor_round_trip_preserves_fields() {
         accepted,
         WarrantChain::single(root_warrant()),
         seed(),
-    ).expect("build");
+    )
+    .expect("build");
     let extension = payload.ledgerflow.expect("extension");
     let encoded = extension.encode_cbor().expect("encode");
     let decoded = LedgerFlowAuthorizationExtension::decode_cbor(&encoded).expect("decode");
@@ -131,7 +132,8 @@ fn merchant_verifier_accepts_a_valid_inline_warrant() {
         accepted,
         WarrantChain::single(root_warrant()),
         seed(),
-    ).expect("build");
+    )
+    .expect("build");
     let mut verifier = MerchantVerifier::new(
         InMemoryReplayStore::default(),
         InMemoryWarrantRepository::default(),
@@ -179,7 +181,8 @@ fn merchant_verifier_rejects_replay() {
             tool_args: tool_arguments(),
             approvals: Vec::new(),
         },
-    ).expect("build");
+    )
+    .expect("build");
     verifier
         .verify_payment(
             &challenge,
@@ -207,7 +210,8 @@ fn merchant_verifier_rejects_replay() {
             tool_args: tool_arguments(),
             approvals: Vec::new(),
         },
-    ).expect("build");
+    )
+    .expect("build");
 
     let error = verifier
         .verify_payment(
@@ -234,7 +238,8 @@ fn merchant_verifier_reuses_cached_payment_identifier() {
         accepted,
         WarrantChain::single(root_warrant()),
         seed(),
-    ).expect("build");
+    )
+    .expect("build");
     let mut verifier = MerchantVerifier::new(
         InMemoryReplayStore::default(),
         InMemoryWarrantRepository::default(),
@@ -242,10 +247,26 @@ fn merchant_verifier_reuses_cached_payment_identifier() {
     );
 
     verifier
-        .verify_payment(&challenge, &request(), &payload, &trusted(), "web-search", &tool_arguments(), 2_000)
+        .verify_payment(
+            &challenge,
+            &request(),
+            &payload,
+            &trusted(),
+            "web-search",
+            &tool_arguments(),
+            2_000,
+        )
         .expect("first");
     let second = verifier
-        .verify_payment(&challenge, &request(), &payload, &trusted(), "web-search", &tool_arguments(), 2_500)
+        .verify_payment(
+            &challenge,
+            &request(),
+            &payload,
+            &trusted(),
+            "web-search",
+            &tool_arguments(),
+            2_500,
+        )
         .expect("cached");
 
     assert!(second.settlement_reused);
@@ -271,7 +292,8 @@ fn merchant_verifier_rejects_challenge_mismatch() {
         accepted,
         WarrantChain::single(root_warrant()),
         seed(),
-    ).expect("build");
+    )
+    .expect("build");
     let mut verifier = MerchantVerifier::new(
         InMemoryReplayStore::default(),
         InMemoryWarrantRepository::default(),
@@ -310,7 +332,8 @@ fn mpp_authorization_param_round_trips_as_slim_payload() {
         accepted,
         WarrantChain::single(root_warrant()),
         seed(),
-    ).expect("build");
+    )
+    .expect("build");
     let extension = payload.ledgerflow.expect("extension");
     let encoded = encode_authorization_param(
         &extension.warrant_chain,
@@ -357,7 +380,8 @@ fn proof_binds_leaf_warrant_id_and_hashes() {
         accepted,
         WarrantChain::single(root_warrant()),
         seed(),
-    ).expect("build");
+    )
+    .expect("build");
     let extension = payload.ledgerflow.expect("extension");
     assert_eq!(extension.proof.tuple.warrant_id, root_warrant().id);
     assert_eq!(extension.proof.tuple.accepted_hash, canonical_accepted_hash(&payload.accepted));

@@ -6,7 +6,9 @@
 use crate::{
     approval::ApprovalGate,
     constraint::{MerchantConstraint, PaymentConstraint, ResourceConstraint, ToolConstraint},
-    warrant::{AssetRef, PaymentRail, PaymentSubjectKind, PaymentSubjectRef, SigningKeyPair, Warrant},
+    warrant::{
+        AssetRef, PaymentRail, PaymentSubjectKind, PaymentSubjectRef, SigningKeyPair, Warrant,
+    },
 };
 
 /// Deterministic issuer keys used across tests.

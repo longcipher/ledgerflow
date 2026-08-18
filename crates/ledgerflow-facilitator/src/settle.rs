@@ -63,11 +63,7 @@ where
             Ok(subject) => subject,
             Err(error) => return SettlementOutcome::failed(error.to_string()),
         };
-        let adapter = match self
-            .adapters
-            .iter()
-            .find(|adapter| adapter.supports(&resolved))
-        {
+        let adapter = match self.adapters.iter().find(|adapter| adapter.supports(&resolved)) {
             Some(adapter) => adapter,
             None => {
                 return SettlementOutcome::failed(RoutingError::NoCompatibleRail.to_string());

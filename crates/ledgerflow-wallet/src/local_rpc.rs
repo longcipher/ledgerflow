@@ -70,7 +70,10 @@ impl MockJsonRpcTransport {
     /// Creates a mock transport with a handler closure.
     #[must_use]
     pub fn new(
-        handler: impl Fn(&str, serde_json::Value) -> Result<serde_json::Value, WalletError> + Send + Sync + 'static,
+        handler: impl Fn(&str, serde_json::Value) -> Result<serde_json::Value, WalletError>
+        + Send
+        + Sync
+        + 'static,
     ) -> Self {
         Self { handler: Box::new(handler) }
     }
@@ -128,7 +131,11 @@ where
         Self { transport, descriptor }
     }
 
-    fn call(&self, method: &str, params: serde_json::Value) -> Result<serde_json::Value, WalletError> {
+    fn call(
+        &self,
+        method: &str,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value, WalletError> {
         let request = JsonRpcRequest {
             jsonrpc: "2.0".to_string(),
             id: 1,
@@ -214,7 +221,9 @@ where
 }
 
 fn parse_sign_result(value: &serde_json::Value) -> Result<SignResult, WalletError> {
-    let signer = value.get("signer").ok_or_else(|| WalletError::InvalidPayload("missing signer".to_string()))?;
+    let signer = value
+        .get("signer")
+        .ok_or_else(|| WalletError::InvalidPayload("missing signer".to_string()))?;
     let alg = signer.get("alg").and_then(|v| v.as_str()).unwrap_or("ed25519");
     let public_key = signer
         .get("public_key")
@@ -243,12 +252,12 @@ fn parse_sign_result(value: &serde_json::Value) -> Result<SignResult, WalletErro
     })
 }
 
-fn base64_encode(bytes: &[u8]) -> String {
+pub(crate) fn base64_encode(bytes: &[u8]) -> String {
     use base64::Engine as _;
     base64::engine::general_purpose::STANDARD.encode(bytes)
 }
 
-fn base64_decode(value: &str) -> Result<Vec<u8>, WalletError> {
+pub(crate) fn base64_decode(value: &str) -> Result<Vec<u8>, WalletError> {
     use base64::Engine as _;
     base64::engine::general_purpose::STANDARD
         .decode(value)
@@ -256,18 +265,65 @@ fn base64_decode(value: &str) -> Result<Vec<u8>, WalletError> {
 }
 
 /// HTTP JSON-RPC transport (feature-gated; uses hpx).
+///
+/// Bridges the synchronous [`RpcTransport::call`] seam to hpx's async HTTP
+/// client via a single process-wide current-thread tokio runtime (see
+/// [`blocking_runtime`]). The runtime is created lazily and reused for every
+/// one-shot call, avoiding the cost of spinning up a fresh runtime per
+/// request.
 #[cfg(feature = "http")]
 pub struct HttpJsonRpcTransport {
     config: LocalRpcConfig,
 }
 
 #[cfg(feature = "http")]
+impl std::fmt::Debug for HttpJsonRpcTransport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HttpJsonRpcTransport")
+            .field("url", &self.config.url)
+            .field("timeout_ms", &self.config.timeout_ms)
+            .finish()
+    }
+}
+
+#[cfg(feature = "http")]
 impl HttpJsonRpcTransport {
     /// Creates an HTTP transport for a local wallet daemon.
     #[must_use]
-    pub fn new(config: LocalRpcConfig) -> Self {
+    pub const fn new(config: LocalRpcConfig) -> Self {
         Self { config }
     }
+}
+
+/// Process-wide current-thread tokio runtime bridging the synchronous
+/// [`RpcTransport`] seam to hpx's async HTTP client.
+///
+/// Built lazily via [`OnceLock`] and reused for the lifetime of the process.
+/// Using `new_current_thread` keeps the overhead minimal: hpx's connection
+/// pool and the JSON-RPC request finish within the same task, so no
+/// multi-threaded scheduler is required.
+#[cfg(feature = "http")]
+static WALLET_HTTP_RUNTIME: std::sync::OnceLock<tokio::runtime::Runtime> =
+    std::sync::OnceLock::new();
+
+/// Returns the process-wide blocking runtime, creating it on first use.
+///
+/// A fast-path `get()` avoids re-acquiring the initialization lock on the
+/// common path; on a rare concurrent init race one extra runtime may be
+/// built and discarded, which is harmless.
+#[cfg(feature = "http")]
+fn blocking_runtime() -> Result<&'static tokio::runtime::Runtime, WalletError> {
+    if let Some(runtime) = WALLET_HTTP_RUNTIME.get() {
+        return Ok(runtime);
+    }
+    let runtime =
+        tokio::runtime::Builder::new_current_thread().enable_all().build().map_err(|error| {
+            WalletError::Transport(format!("failed to build HTTP blocking runtime: {error}"))
+        })?;
+    let _ = WALLET_HTTP_RUNTIME.set(runtime);
+    WALLET_HTTP_RUNTIME
+        .get()
+        .ok_or_else(|| WalletError::Transport("HTTP blocking runtime unavailable".to_string()))
 }
 
 #[cfg(feature = "http")]
@@ -277,13 +333,78 @@ impl RpcTransport for HttpJsonRpcTransport {
         method: &str,
         params: serde_json::Value,
     ) -> Result<serde_json::Value, WalletError> {
-        // hpx is a low-level HTTP client; a full integration would build the
-        // request and parse the response here. v1 keeps the transport seam
-        // and defers the concrete HTTP implementation (hpx wiring) to the
-        // server crate (P3), where the runtime is present.
-        let _ = (method, params, &self.config);
-        Err(WalletError::Unreachable(
-            "HTTP JSON-RPC transport is not yet wired; use MockJsonRpcTransport or implement RpcTransport".to_string(),
-        ))
+        let runtime = blocking_runtime()?;
+        let body = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": method,
+            "params": params,
+        });
+        let url = self.config.url.clone();
+        let timeout = std::time::Duration::from_millis(self.config.timeout_ms);
+
+        runtime.block_on(async move {
+            let client = hpx::Client::new();
+            let fut = async {
+                let resp = client
+                    .post(&url)
+                    .header("content-type", "application/json")
+                    .body(body.to_string())
+                    .send()
+                    .await
+                    .map_err(|error| {
+                        WalletError::Unreachable(format!(
+                            "wallet JSON-RPC request to {url} failed: {error}"
+                        ))
+                    })?;
+
+                if !resp.status().is_success() {
+                    let status = resp.status();
+                    let text =
+                        resp.text().await.unwrap_or_else(|_| "<unreadable body>".to_string());
+                    return Err(WalletError::Transport(format!(
+                        "wallet JSON-RPC server returned HTTP {status}: {text}"
+                    )));
+                }
+
+                let value: serde_json::Value = resp.json().await.map_err(|error| {
+                    WalletError::InvalidPayload(format!("invalid JSON-RPC response body: {error}"))
+                })?;
+                let response: JsonRpcResponse = serde_json::from_value(value).map_err(|error| {
+                    WalletError::InvalidPayload(format!(
+                        "response is not a valid JSON-RPC 2.0 object: {error}"
+                    ))
+                })?;
+
+                if let Some(error) = response.error {
+                    return Err(WalletError::Rejected(format!(
+                        "wallet JSON-RPC error {}: {}",
+                        error.code, error.message
+                    )));
+                }
+
+                response.result.ok_or_else(|| {
+                    WalletError::InvalidPayload(
+                        "JSON-RPC response has neither result nor error".to_string(),
+                    )
+                })
+            };
+            tokio::time::timeout(timeout, fut).await.map_err(|_| {
+                WalletError::Unreachable(format!(
+                    "wallet JSON-RPC request to {url} timed out after {} ms",
+                    timeout.as_millis()
+                ))
+            })?
+        })
+    }
+}
+
+#[cfg(feature = "http")]
+impl LocalRpcSigner<HttpJsonRpcTransport> {
+    /// Creates a local RPC signer that talks HTTP to the given wallet daemon
+    /// URL, using the JSON-RPC wiring this crate defines.
+    #[must_use]
+    pub fn new_http(config: LocalRpcConfig) -> Self {
+        Self::new(HttpJsonRpcTransport::new(config))
     }
 }

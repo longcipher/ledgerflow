@@ -5,7 +5,7 @@
 //! produced by the wallet (domain [`SignDomain::Approval`]) rather than by
 //! the caller directly.
 
-use ledgerflow_core::{SignerRef, SignedApproval};
+use ledgerflow_core::{SignedApproval, SignerRef};
 
 use crate::{
     error::WalletError,
@@ -53,13 +53,13 @@ fn approval_preimage(request_hash: &str, approver: &SignerRef, expires_at: u64) 
     preimage
 }
 
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
+    use ledgerflow_core::SigningKeyPair;
+
     use super::*;
     use crate::embedded::EmbeddedSigner;
-    use ledgerflow_core::SigningKeyPair;
 
     #[test]
     fn request_approval_computes_expiry_from_now() {
@@ -79,13 +79,15 @@ mod tests {
         let wallet = EmbeddedSigner::new(key.clone());
         let approval =
             request_approval(&wallet, key.signer_ref(), "sha256:req", 5_000).expect("approval");
-        assert!(ledgerflow_core::SignedApproval {
-            request_hash: approval.request_hash.clone(),
-            approver: approval.approver.clone(),
-            expires_at: approval.expires_at,
-            signature: approval.signature,
-        }
-        .verify_signature());
+        assert!(
+            ledgerflow_core::SignedApproval {
+                request_hash: approval.request_hash.clone(),
+                approver: approval.approver.clone(),
+                expires_at: approval.expires_at,
+                signature: approval.signature,
+            }
+            .verify_signature()
+        );
     }
 
     #[test]

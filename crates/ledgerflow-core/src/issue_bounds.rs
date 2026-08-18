@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     error::WireResult,
-    warrant::{AssetRef, PaymentRail, CborCodec, Warrant},
+    warrant::{AssetRef, CborCodec, PaymentRail, Warrant},
 };
 
 /// Reserved extension key carrying the issuance bounds.

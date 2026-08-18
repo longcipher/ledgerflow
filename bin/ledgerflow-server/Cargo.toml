@@ -10,7 +10,7 @@ name = "ledgerflow-server"
 path = "src/main.rs"
 
 [dependencies]
-axum = "0.8"
+axum.workspace = true
 clap = { workspace = true, features = ["derive"] }
 eyre.workspace = true
 ledgerflow-core = { path = "../../crates/ledgerflow-core" }

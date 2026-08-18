@@ -5,21 +5,22 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
-[dependencies]
-base64.workspace = true
-ledgerflow-core = { path = "../ledgerflow-core" }
-serde = { workspace = true, features = ["derive"] }
-serde_json = "1.0.151"
-thiserror.workspace = true
-
 [features]
 # HTTP transport for the local JSON-RPC signer. The transport seam
 # (RpcTransport trait) is always available; the concrete HTTP implementation
-# is wired by the server crate (P3) where the runtime is present.
-http = []
+# (HttpJsonRpcTransport) plus the embedded loopback JSON-RPC HTTP server are
+# enabled here.
+default = []
+http = ["dep:hpx", "dep:tokio"]
+
+[dependencies]
+base64.workspace = true
+hpx = { workspace = true, optional = true, features = ["rustls-tls", "http1", "json"] }
+ledgerflow-core = { path = "../ledgerflow-core" }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, optional = true, features = ["rt", "time"] }
 
 [lints]
 workspace = true
-
-[dev-dependencies]
-proptest.workspace = true

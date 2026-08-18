@@ -5,8 +5,7 @@
 //!
 //! - [`x402`]: x402 v2 extensions (challenge + payment payload).
 //! - [`mpp`]: MPP Payment HTTP authentication scheme parameters.
-//! - [`middleware`]: merchant-side verification (trust anchor, revocation,
-//!   replay, approvals).
+//! - [`middleware`]: merchant-side verification (trust anchor, revocation, replay, approvals).
 //! - [`replay`]: nonce replay protection and payment-id idempotency.
 //! - [`carrier`]: transport carrier size policy.
 
@@ -28,14 +27,14 @@ pub use crate::{
         MerchantVerifier, WarrantRepository,
     },
     mpp::{
-        LEDGERFLOW_PARAM, SlimAuthorization, decode_authorization_param,
-        decode_challenge_param, encode_authorization_param, encode_challenge_param,
+        LEDGERFLOW_PARAM, SlimAuthorization, decode_authorization_param, decode_challenge_param,
+        encode_authorization_param, encode_challenge_param,
     },
     replay::{InMemoryReplayStore, NonceClaim, ReplayConflict, ReplayFingerprint, ReplayStore},
     x402::{
-        AcceptedQuote, HttpRequest, LEDGERFLOW_EXTENSION_VERSION,
-        MAX_LEDGERFLOW_EXTENSION_BYTES, LedgerFlowAuthorizationExtension, LedgerFlowChallenge,
-        PaymentPayload, PaymentPayloadSeed, PaymentRequiredResponse, build_payment_payload,
-        canonical_accepted_hash, canonical_request_hash, merchant_payment_required,
+        AcceptedQuote, HttpRequest, LEDGERFLOW_EXTENSION_VERSION, LedgerFlowAuthorizationExtension,
+        LedgerFlowChallenge, MAX_LEDGERFLOW_EXTENSION_BYTES, PaymentPayload, PaymentPayloadSeed,
+        PaymentRequiredResponse, build_payment_payload, canonical_accepted_hash,
+        canonical_request_hash, merchant_payment_required,
     },
 };

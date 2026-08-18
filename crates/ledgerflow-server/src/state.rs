@@ -1,8 +1,6 @@
 //! Application state shared by handlers.
 
-use ledgerflow_core::{
-    RevocationCheck, SignerRef, SigningKeyPair, TrustedIssuers,
-};
+use ledgerflow_core::{RevocationCheck, SignerRef, SigningKeyPair, TrustedIssuers};
 use ledgerflow_facilitator::{
     DefaultSubjectResolver, EvmRailAdapter, FileRevocationStore, SettlementRegistry,
     SettlementService, VerificationService,
@@ -68,18 +66,15 @@ impl NewAppState {
             .map_err(|error| ServerStateError::Issuer(error.to_string()))?;
         let issuer = SigningKeyPair::from_bytes(&[1_u8; 32]);
         let mut trusted = TrustedIssuers::new();
-        trusted.add(ledgerflow_core::TrustedIssuer::new(
-            "issuer-1".to_string(),
-            issuer.signer_ref(),
-        ));
+        trusted
+            .add(ledgerflow_core::TrustedIssuer::new("issuer-1".to_string(), issuer.signer_ref()));
         // Use a process-unique directory so parallel tests do not share a
         // revocation file.
-        let dir = std::env::temp_dir().join(format!(
-            "ledgerflow-server-demo-{}",
-            std::process::id()
-        ));
-        std::fs::create_dir_all(&dir)
-            .map_err(|error| ServerStateError::Issuer(format!("cannot create demo dir: {error}")))?;
+        let dir =
+            std::env::temp_dir().join(format!("ledgerflow-server-demo-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).map_err(|error| {
+            ServerStateError::Issuer(format!("cannot create demo dir: {error}"))
+        })?;
         AppState::new(config, &dir.join("revocations.jsonl"), trusted)
     }
 }

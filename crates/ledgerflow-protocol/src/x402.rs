@@ -41,7 +41,13 @@ impl AcceptedQuote {
         payee_id: impl Into<String>,
         network: Option<String>,
     ) -> Self {
-        Self { scheme: "exact".to_string(), asset: asset.into(), amount, payee_id: payee_id.into(), network }
+        Self {
+            scheme: "exact".to_string(),
+            asset: asset.into(),
+            amount,
+            payee_id: payee_id.into(),
+            network,
+        }
     }
 
     /// Canonical representation used for the accepted-quote binding hash.

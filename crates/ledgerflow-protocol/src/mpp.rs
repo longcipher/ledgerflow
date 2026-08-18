@@ -10,7 +10,7 @@
 //! single-node or digest reference; the full chain travels in the body. See
 //! [`crate::carrier`].
 
-use ledgerflow_core::{PaymentSubjectRef, PopProof, SignerRef, SignedApproval, Warrant};
+use ledgerflow_core::{PaymentSubjectRef, PopProof, SignedApproval, SignerRef, Warrant};
 
 use crate::{
     carrier::MAX_HEADER_CBOR_BYTES,

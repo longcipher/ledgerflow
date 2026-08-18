@@ -15,10 +15,7 @@ pub mod gateway;
 use ledgerflow_core::VerifiedAuthorization;
 use thiserror::Error;
 
-use crate::{
-    routing::RailKind,
-    subject::ResolvedSubject,
-};
+use crate::{routing::RailKind, subject::ResolvedSubject};
 
 /// Settlement quote returned by a rail adapter.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -62,10 +59,8 @@ pub trait RailAdapter: Send + Sync {
     fn kind(&self) -> RailKind;
     fn supports(&self, subject: &ResolvedSubject) -> bool;
     fn quote(&self, authorization: &VerifiedAuthorization) -> Result<RailQuote, RailError>;
-    fn settle(
-        &self,
-        authorization: &VerifiedAuthorization,
-    ) -> Result<SettlementReceipt, RailError>;
+    fn settle(&self, authorization: &VerifiedAuthorization)
+    -> Result<SettlementReceipt, RailError>;
     fn verify(&self, receipt: &SettlementReceipt) -> Result<VerificationResult, RailError>;
 }
 
@@ -73,7 +68,13 @@ pub trait RailAdapter: Send + Sync {
 mod tests {
     #![allow(clippy::expect_used)]
     use super::*;
-    use crate::{rails::{custodial::CustodialRailAdapter, evm::EvmRailAdapter, exchange::ExchangeRailAdapter, gateway::GatewayRailAdapter}, routing::RailKind};
+    use crate::{
+        rails::{
+            custodial::CustodialRailAdapter, evm::EvmRailAdapter, exchange::ExchangeRailAdapter,
+            gateway::GatewayRailAdapter,
+        },
+        routing::RailKind,
+    };
 
     fn subject(rail: RailKind) -> ResolvedSubject {
         ResolvedSubject { rail, value: "sub-1".to_string() }
@@ -186,7 +187,13 @@ mod tests {
     #[test]
     fn rail_error_messages_are_meaningful() {
         assert!(RailError::Unsupported.to_string().contains("does not support"));
-        assert!(RailError::SettlementFailed("x".to_string()).to_string().contains("settlement failed"));
-        assert!(RailError::VerificationFailed("x".to_string()).to_string().contains("verification failed"));
+        assert!(
+            RailError::SettlementFailed("x".to_string()).to_string().contains("settlement failed")
+        );
+        assert!(
+            RailError::VerificationFailed("x".to_string())
+                .to_string()
+                .contains("verification failed")
+        );
     }
 }

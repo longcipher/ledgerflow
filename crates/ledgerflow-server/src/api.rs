@@ -124,14 +124,8 @@ async fn issue_warrant(
     let warrant_id = warrant.id_hex();
     let digest = warrant.digest();
     let expires_at = warrant.expires_at;
-    state.webhook.emit(WebhookEvent::WarrantIssued {
-        warrant_id: warrant_id.clone(),
-    });
-    Ok(Json(ApiResponse::ok(IssueWarrantResponse {
-        warrant_id,
-        digest,
-        expires_at,
-    })))
+    state.webhook.emit(WebhookEvent::WarrantIssued { warrant_id: warrant_id.clone() });
+    Ok(Json(ApiResponse::ok(IssueWarrantResponse { warrant_id, digest, expires_at })))
 }
 
 /// Revoke request body.
@@ -151,24 +145,19 @@ async fn revoke(
     if let Some(warrant_id) = &request.warrant_id {
         let bytes: [u8; 16] = decode_hex(warrant_id)
             .ok_or_else(|| ApiError::BadRequest("warrant_id must be 16-byte hex".to_string()))?;
-        revocation
-            .revoke_warrant(&bytes)
-            .map_err(|error| ApiError::Internal(error.to_string()))?;
-        state.webhook.emit(WebhookEvent::WarrantRevoked {
-            warrant_id: warrant_id.clone(),
-        });
+        revocation.revoke_warrant(&bytes).map_err(|error| ApiError::Internal(error.to_string()))?;
+        state.webhook.emit(WebhookEvent::WarrantRevoked { warrant_id: warrant_id.clone() });
         return Ok(Json(ApiResponse::ok(format!("warrant {warrant_id} revoked"))));
     }
     if let Some(holder_key) = &request.holder_public_key {
-        let bytes: [u8; 32] = decode_hex(holder_key)
-            .ok_or_else(|| ApiError::BadRequest("holder_public_key must be 32-byte hex".to_string()))?;
+        let bytes: [u8; 32] = decode_hex(holder_key).ok_or_else(|| {
+            ApiError::BadRequest("holder_public_key must be 32-byte hex".to_string())
+        })?;
         let holder = ledgerflow_core::SignerRef::new(
             ledgerflow_core::SigningAlgorithm::Ed25519,
             bytes.to_vec(),
         );
-        revocation
-            .revoke_holder(&holder)
-            .map_err(|error| ApiError::Internal(error.to_string()))?;
+        revocation.revoke_holder(&holder).map_err(|error| ApiError::Internal(error.to_string()))?;
         return Ok(Json(ApiResponse::ok(format!("holder {holder_key} revoked"))));
     }
     Err(ApiError::BadRequest("provide warrant_id or holder_public_key".to_string()))
@@ -196,9 +185,7 @@ async fn query_settlement(
     }
 }
 
-async fn audit(
-    State(state): State<AppState>,
-) -> Json<ApiResponse<Vec<String>>> {
+async fn audit(State(state): State<AppState>) -> Json<ApiResponse<Vec<String>>> {
     let events = state
         .webhook
         .buffered()
@@ -246,12 +233,12 @@ fn decode_hex<const N: usize>(hex: &str) -> Option<[u8; N]> {
     Some(out)
 }
 
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
-    use super::*;
     use axum::response::IntoResponse;
+
+    use super::*;
 
     #[test]
     fn api_error_maps_to_http_status() {

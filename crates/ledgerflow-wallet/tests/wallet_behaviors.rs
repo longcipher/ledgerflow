@@ -2,9 +2,7 @@
 
 #![allow(clippy::expect_used)]
 
-use ledgerflow_core::{
-    SignerRef, SigningAlgorithm, SigningKeyPair,
-};
+use ledgerflow_core::{SignerRef, SigningAlgorithm, SigningKeyPair};
 use ledgerflow_wallet::{
     EmbeddedSigner, LocalRpcSigner, MockJsonRpcTransport, SignDomain, SignPaymentRequest,
     SignRequest, WalletSigner, request_approval,
@@ -35,11 +33,8 @@ fn embedded_signer_signs_and_verifies() {
 fn embedded_signer_rejects_mismatched_key_request() {
     let signer = EmbeddedSigner::from_bytes(&[71u8; 32]);
     let wrong_key = SignerRef::new(SigningAlgorithm::Ed25519, vec![9; 32]);
-    let request = SignRequest {
-        domain: SignDomain::Warrant,
-        message: b"msg".to_vec(),
-        key: Some(wrong_key),
-    };
+    let request =
+        SignRequest { domain: SignDomain::Warrant, message: b"msg".to_vec(), key: Some(wrong_key) };
     let error = signer.sign(&request).expect_err("mismatch");
     assert!(matches!(error, ledgerflow_wallet::WalletError::NoMatchingKey));
 }
@@ -90,11 +85,8 @@ fn local_rpc_signer_proxies_calls_through_transport() {
         }))
     });
     let signer = LocalRpcSigner::new(transport);
-    let request = SignRequest {
-        domain: SignDomain::Approval,
-        message: b"approve me".to_vec(),
-        key: None,
-    };
+    let request =
+        SignRequest { domain: SignDomain::Approval, message: b"approve me".to_vec(), key: None };
     let result = signer.sign(&request).expect("sign");
     assert_eq!(result.signer.public_key, vec![3_u8; 32]);
     assert_eq!(result.signature.value, vec![7_u8; 64]);
@@ -120,8 +112,7 @@ fn request_approval_produces_verifiable_approval() {
     // can be verified with core's SignedApproval::verify_signature.
     let wallet = EmbeddedSigner::new(approver_keys());
     let approver = approver_keys().signer_ref();
-    let approval = request_approval(&wallet, approver, "sha256:request", 2_000)
-        .expect("approval");
+    let approval = request_approval(&wallet, approver, "sha256:request", 2_000).expect("approval");
     assert!(approval.verify_signature());
     assert_eq!(approval.request_hash, "sha256:request");
 }

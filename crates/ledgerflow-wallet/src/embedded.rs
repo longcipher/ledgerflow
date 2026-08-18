@@ -78,11 +78,7 @@ impl WalletSigner for EmbeddedSigner {
         );
         let signature = self.keypair.sign(canonical.as_bytes());
         let raw_transaction = format!("{canonical}:{}", hex_encode(&signature.value));
-        Ok(SignedPayment {
-            signer: self.keypair.signer_ref(),
-            raw_transaction,
-            tx_hash: None,
-        })
+        Ok(SignedPayment { signer: self.keypair.signer_ref(), raw_transaction, tx_hash: None })
     }
 }
 
@@ -104,7 +100,6 @@ impl SignDomain {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -123,12 +118,9 @@ mod tests {
 
     #[test]
     fn all_domains_are_supported_by_embedded() {
-        for domain in [
-            SignDomain::Warrant,
-            SignDomain::Proof,
-            SignDomain::Approval,
-            SignDomain::Payment,
-        ] {
+        for domain in
+            [SignDomain::Warrant, SignDomain::Proof, SignDomain::Approval, SignDomain::Payment]
+        {
             assert!(domain.supported_by_embedded(), "{domain:?} should be supported");
         }
     }

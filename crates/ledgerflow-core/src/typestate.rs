@@ -4,8 +4,7 @@
 //! protocol invariants (TTL cap, depth cap, required constraints) at
 //! construction time, so illegal warrants cannot be built.
 
-use std::collections::BTreeMap;
-use std::marker::PhantomData;
+use std::{collections::BTreeMap, marker::PhantomData};
 
 use crate::{
     approval::ApprovalGate,
@@ -283,9 +282,7 @@ impl WarrantBuilder<HasIssuer, HasHolder, Unsigned> {
         let merchant = builder.merchant.unwrap_or_default();
         let resource = builder.resource.unwrap_or_default();
         #[allow(clippy::expect_used)]
-        let payment = builder
-            .payment
-            .expect("warrant builder: payment constraint is required");
+        let payment = builder.payment.expect("warrant builder: payment constraint is required");
         #[allow(clippy::expect_used)]
         let issuer = builder.issuer.expect("warrant builder: issuer is required");
         #[allow(clippy::expect_used)]
@@ -364,13 +361,7 @@ impl DelegatedWarrantBuilder {
     /// Starts a delegated warrant from a parent warrant.
     #[must_use]
     pub const fn from(parent: Warrant) -> Self {
-        Self {
-            parent,
-            merchant: None,
-            resource: None,
-            payment: None,
-            tool: None,
-        }
+        Self { parent, merchant: None, resource: None, payment: None, tool: None }
     }
 
     /// Narrows the merchant constraint for the child.
@@ -441,8 +432,7 @@ impl DelegatedWarrantBuilder {
         let tool = self.tool.clone().or_else(|| parent.tool.clone());
 
         // Static issuance-time attenuation check (decidable fields only).
-        let child_constraints: [(crate::constraint::Constraint, crate::constraint::Constraint);
-            4] = [
+        let child_constraints: [(crate::constraint::Constraint, crate::constraint::Constraint); 4] = [
             (
                 crate::constraint::Constraint::Merchant(parent.merchant.clone()),
                 crate::constraint::Constraint::Merchant(merchant.clone()),
@@ -526,48 +516,75 @@ fn validate_issue_bounds(
 ) {
     if !bounds.merchant_ids.is_empty() {
         for id in &merchant.merchant_ids {
-            assert!(bounds.merchant_ids.contains(id), "issue bounds: merchant `{id}` exceeds the delegator's bounds");
+            assert!(
+                bounds.merchant_ids.contains(id),
+                "issue bounds: merchant `{id}` exceeds the delegator's bounds"
+            );
         }
     }
     if !bounds.host_suffixes.is_empty() {
         for suffix in &merchant.host_suffixes {
-            assert!(bounds.host_suffixes.contains(suffix), "issue bounds: host suffix `{suffix}` exceeds the delegator's bounds");
+            assert!(
+                bounds.host_suffixes.contains(suffix),
+                "issue bounds: host suffix `{suffix}` exceeds the delegator's bounds"
+            );
         }
     }
     if !bounds.http_methods.is_empty() {
         for method in &resource.http_methods {
-            assert!(bounds.http_methods.iter().any(|m| m.eq_ignore_ascii_case(method)), "issue bounds: method `{method}` exceeds the delegator's bounds");
+            assert!(
+                bounds.http_methods.iter().any(|m| m.eq_ignore_ascii_case(method)),
+                "issue bounds: method `{method}` exceeds the delegator's bounds"
+            );
         }
     }
     if !bounds.path_prefixes.is_empty() {
         for prefix in &resource.path_prefixes {
-            assert!(bounds.path_prefixes.iter().any(|bp| prefix.starts_with(bp)), "issue bounds: path prefix `{prefix}` exceeds the delegator's bounds");
+            assert!(
+                bounds.path_prefixes.iter().any(|bp| prefix.starts_with(bp)),
+                "issue bounds: path prefix `{prefix}` exceeds the delegator's bounds"
+            );
         }
     }
     if !bounds.assets.is_empty() {
         for asset in &payment.allowed_assets {
-            assert!(bounds.assets.iter().any(|a| a == asset), "issue bounds: asset `{}` exceeds the delegator's bounds", asset.asset);
+            assert!(
+                bounds.assets.iter().any(|a| a == asset),
+                "issue bounds: asset `{}` exceeds the delegator's bounds",
+                asset.asset
+            );
         }
     }
     if !bounds.rails.is_empty() {
         for rail in &payment.allowed_rails {
-            assert!(bounds.rails.contains(rail), "issue bounds: rail `{rail:?}` exceeds the delegator's bounds");
+            assert!(
+                bounds.rails.contains(rail),
+                "issue bounds: rail `{rail:?}` exceeds the delegator's bounds"
+            );
         }
     }
     if !bounds.schemes.is_empty() {
         for scheme in &payment.allowed_schemes {
-            assert!(bounds.schemes.contains(scheme), "issue bounds: scheme `{scheme}` exceeds the delegator's bounds");
+            assert!(
+                bounds.schemes.contains(scheme),
+                "issue bounds: scheme `{scheme}` exceeds the delegator's bounds"
+            );
         }
     }
     if !bounds.payee_ids.is_empty() {
         for payee in &payment.payee_ids {
-            assert!(bounds.payee_ids.contains(payee), "issue bounds: payee `{payee}` exceeds the delegator's bounds");
+            assert!(
+                bounds.payee_ids.contains(payee),
+                "issue bounds: payee `{payee}` exceeds the delegator's bounds"
+            );
         }
     }
     if let Some(cap) = bounds.max_per_charge {
-        assert!(payment.max_per_charge <= cap, 
+        assert!(
+            payment.max_per_charge <= cap,
             "issue bounds: per-charge cap {} exceeds the delegator's bound {}",
-            payment.max_per_charge, cap
+            payment.max_per_charge,
+            cap
         );
     }
     let _ = tool; // Tool bounds are validated by the parent-attenuation check.

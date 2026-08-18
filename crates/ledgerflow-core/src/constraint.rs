@@ -83,8 +83,8 @@ impl MerchantConstraint {
 
     /// Returns `true` when this constraint is satisfied by the context.
     pub fn allows(&self, merchant_id: &str, merchant_host: &str) -> bool {
-        let id_ok = self.merchant_ids.is_empty() ||
-            self.merchant_ids.iter().any(|id| id == merchant_id);
+        let id_ok =
+            self.merchant_ids.is_empty() || self.merchant_ids.iter().any(|id| id == merchant_id);
         let host_ok = self.host_suffixes.is_empty() ||
             self.host_suffixes.iter().any(|suffix| merchant_host.ends_with(suffix));
         id_ok && host_ok
@@ -143,8 +143,8 @@ impl ToolConstraint {
         let tool_ok = self.tool_names.is_empty() || self.tool_names.iter().any(|t| t == tool_name);
         let provider_ok = self.model_providers.is_empty() ||
             self.model_providers.iter().any(|p| p == model_provider);
-        let action_ok = self.action_labels.is_empty() ||
-            self.action_labels.iter().any(|a| a == action_label);
+        let action_ok =
+            self.action_labels.is_empty() || self.action_labels.iter().any(|a| a == action_label);
         tool_ok && provider_ok && action_ok
     }
 }
@@ -185,7 +185,10 @@ impl PaymentConstraint {
     }
 
     #[must_use]
-    pub fn with_rails(mut self, rails: impl IntoIterator<Item = crate::warrant::PaymentRail>) -> Self {
+    pub fn with_rails(
+        mut self,
+        rails: impl IntoIterator<Item = crate::warrant::PaymentRail>,
+    ) -> Self {
         self.allowed_rails.extend(rails);
         self
     }
@@ -195,7 +198,6 @@ impl PaymentConstraint {
         self.allowed_schemes.extend(schemes);
         self
     }
-
 
     #[must_use]
     pub fn with_payees(mut self, payees: impl IntoIterator<Item = String>) -> Self {
@@ -243,12 +245,11 @@ impl PaymentConstraint {
 ///
 /// The check is conservative in two ways:
 ///
-/// - Empty allowlists mean "any", so a child that adds restrictions to a
-///   parent with an empty list is valid (narrowing), but a child that empties
-///   a parent's non-empty list is rejected (widening).
-/// - Unknown/unbounded dimensions (e.g. arbitrary host names under a suffix)
-///   are judged by the same allow-list semantics, never by pattern-language
-///   containment (which can be undecidable).
+/// - Empty allowlists mean "any", so a child that adds restrictions to a parent with an empty list
+///   is valid (narrowing), but a child that empties a parent's non-empty list is rejected
+///   (widening).
+/// - Unknown/unbounded dimensions (e.g. arbitrary host names under a suffix) are judged by the same
+///   allow-list semantics, never by pattern-language containment (which can be undecidable).
 pub fn validate_attenuation(parent: &Constraint, child: &Constraint) -> Result<()> {
     match (parent, child) {
         (Constraint::Merchant(p), Constraint::Merchant(c)) => {
@@ -422,9 +423,7 @@ impl Verify for ResourceConstraint {
 impl Verify for ToolConstraint {
     fn verify(&self, context: &AuthorizationContext) -> Result<()> {
         if !self.allows(&context.tool_name, &context.model_provider, &context.action_label) {
-            return Err(AuthorizationError::ToolNotAllowed {
-                tool_name: context.tool_name.clone(),
-            });
+            return Err(AuthorizationError::ToolNotAllowed { tool_name: context.tool_name.clone() });
         }
         Ok(())
     }
@@ -465,9 +464,11 @@ pub fn verify_all(constraints: &[Constraint], context: &AuthorizationContext) ->
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
-    use crate::error::AuthorizationError;
-    use crate::warrant::{PaymentRail, PaymentSubjectRef, SignerRef};
     use super::*;
+    use crate::{
+        error::AuthorizationError,
+        warrant::{PaymentRail, PaymentSubjectRef, SignerRef},
+    };
 
     #[test]
     fn merchant_with_host_suffixes_rejects_other_hosts() {
@@ -551,8 +552,22 @@ mod tests {
     fn payment_allows_exact_cap() {
         let payment = PaymentConstraint::new(100);
         // amount == max is allowed (strict >).
-        assert!(payment.allows(100, "USDC", None, &crate::warrant::PaymentRail::Onchain, "exact", "merchant-a"));
-        assert!(!payment.allows(101, "USDC", None, &crate::warrant::PaymentRail::Onchain, "exact", "merchant-a"));
+        assert!(payment.allows(
+            100,
+            "USDC",
+            None,
+            &crate::warrant::PaymentRail::Onchain,
+            "exact",
+            "merchant-a"
+        ));
+        assert!(!payment.allows(
+            101,
+            "USDC",
+            None,
+            &crate::warrant::PaymentRail::Onchain,
+            "exact",
+            "merchant-a"
+        ));
     }
 
     #[test]
@@ -563,15 +578,50 @@ mod tests {
             .with_schemes(vec!["exact".to_string()])
             .with_payees(vec!["merchant-a".to_string()]);
         // Asset mismatch.
-        assert!(!payment.allows(100, "DAI", None, &crate::warrant::PaymentRail::Onchain, "exact", "merchant-a"));
+        assert!(!payment.allows(
+            100,
+            "DAI",
+            None,
+            &crate::warrant::PaymentRail::Onchain,
+            "exact",
+            "merchant-a"
+        ));
         // Rail mismatch.
-        assert!(!payment.allows(100, "USDC", Some("base"), &crate::warrant::PaymentRail::Exchange, "exact", "merchant-a"));
+        assert!(!payment.allows(
+            100,
+            "USDC",
+            Some("base"),
+            &crate::warrant::PaymentRail::Exchange,
+            "exact",
+            "merchant-a"
+        ));
         // Scheme mismatch.
-        assert!(!payment.allows(100, "USDC", Some("base"), &crate::warrant::PaymentRail::Onchain, "upto", "merchant-a"));
+        assert!(!payment.allows(
+            100,
+            "USDC",
+            Some("base"),
+            &crate::warrant::PaymentRail::Onchain,
+            "upto",
+            "merchant-a"
+        ));
         // Payee mismatch.
-        assert!(!payment.allows(100, "USDC", Some("base"), &crate::warrant::PaymentRail::Onchain, "exact", "merchant-b"));
+        assert!(!payment.allows(
+            100,
+            "USDC",
+            Some("base"),
+            &crate::warrant::PaymentRail::Onchain,
+            "exact",
+            "merchant-b"
+        ));
         // All match.
-        assert!(payment.allows(100, "USDC", Some("base"), &crate::warrant::PaymentRail::Onchain, "exact", "merchant-a"));
+        assert!(payment.allows(
+            100,
+            "USDC",
+            Some("base"),
+            &crate::warrant::PaymentRail::Onchain,
+            "exact",
+            "merchant-a"
+        ));
     }
 
     fn context_for(amount: u128, method: &str, path: &str, tool: &str) -> AuthorizationContext {
@@ -595,7 +645,10 @@ mod tests {
             now_ms: 2_000,
             freshness_window_ms: 60_000,
             clock_skew_ms: 30_000,
-            payment_subject: PaymentSubjectRef::new(crate::warrant::PaymentSubjectKind::Caip10, "caip10:eip155:8453:0xabc123"),
+            payment_subject: PaymentSubjectRef::new(
+                crate::warrant::PaymentSubjectKind::Caip10,
+                "caip10:eip155:8453:0xabc123",
+            ),
             presenter: SignerRef::new(crate::warrant::SigningAlgorithm::Ed25519, vec![1; 32]),
         }
     }
@@ -653,11 +706,13 @@ mod tests {
 
     #[test]
     fn constraint_enum_dispatches_to_variants() {
-        let merchant = Constraint::Merchant(MerchantConstraint::with_ids(vec!["merchant-a".to_string()]));
+        let merchant =
+            Constraint::Merchant(MerchantConstraint::with_ids(vec!["merchant-a".to_string()]));
         let ctx = context_for(100, "POST", "/pay", "web-search");
         assert!(merchant.verify(&ctx).is_ok());
 
-        let resource = Constraint::Resource(ResourceConstraint::with_methods(vec!["GET".to_string()]));
+        let resource =
+            Constraint::Resource(ResourceConstraint::with_methods(vec!["GET".to_string()]));
         let error = resource.verify(&ctx).expect_err("method mismatch");
         assert!(matches!(error, AuthorizationError::ResourceNotAllowed { .. }));
     }
@@ -679,6 +734,4 @@ mod tests {
         let error = crate::constraint::verify_all(&over_limit, &ctx).expect_err("over limit");
         assert!(matches!(error, AuthorizationError::PaymentAmountExceeded { .. }));
     }
-
-
 }

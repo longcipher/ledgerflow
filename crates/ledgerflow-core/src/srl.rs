@@ -6,11 +6,10 @@
 //! list of revocations; verifier nodes fetch the latest list and apply it to
 //! their local `RevocationCheck`. The list is:
 //!
-//! - **additive**: entries are never removed from the current list
-//!   (revocations are permanent for the warrant's lifetime);
-//! - **anti-rollback**: the `version` is a strictly increasing monotone
-//!   counter; a verifier MUST reject a list whose version is not greater than
-//!   the highest it has already applied.
+//! - **additive**: entries are never removed from the current list (revocations are permanent for
+//!   the warrant's lifetime);
+//! - **anti-rollback**: the `version` is a strictly increasing monotone counter; a verifier MUST
+//!   reject a list whose version is not greater than the highest it has already applied.
 //!
 //! The signature covers `SRL_SIGN_DOMAIN || version || encoded_entries`, so
 //! entries and version cannot be swapped in or replayed across lists.
@@ -57,11 +56,7 @@ pub struct SignedRevocationList {
 impl SignedRevocationList {
     /// Creates and signs a new SRL.
     #[must_use]
-    pub fn sign(
-        version: u64,
-        entries: Vec<SrlEntry>,
-        control_keys: &SigningKeyPair,
-    ) -> Self {
+    pub fn sign(version: u64, entries: Vec<SrlEntry>, control_keys: &SigningKeyPair) -> Self {
         let preimage = preimage(version, &entries);
         Self {
             version,
@@ -141,11 +136,7 @@ impl SrlState {
     /// Fails when the list's version is not strictly greater than the already
     /// applied version (anti-rollback), or when the signature does not verify
     /// against the trusted control-plane signer.
-    pub fn apply(
-        &mut self,
-        list: &SignedRevocationList,
-        trusted_signer: &SignerRef,
-    ) -> Result<()> {
+    pub fn apply(&mut self, list: &SignedRevocationList, trusted_signer: &SignerRef) -> Result<()> {
         if list.version <= self.applied_version {
             return Err(AuthorizationError::SrlVersionRegression {
                 presented: list.version,

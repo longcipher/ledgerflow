@@ -35,17 +35,17 @@ pub mod warrant;
 
 pub use crate::{
     approval::{
-        ApprovalGate, ApprovalVerification, SignedApproval, verify_approvals,
-        verify_approval_threshold,
+        ApprovalGate, ApprovalVerification, SignedApproval, verify_approval_threshold,
+        verify_approvals,
     },
     chain::{VerifiedChainAuthorization, WarrantChain, verify_chain, verify_link},
     constraint::{
-        validate_attenuation, AuthorizationContext, Constraint, MerchantConstraint,
-        PaymentConstraint, ResourceConstraint, ToolConstraint, Verify,
+        AuthorizationContext, Constraint, MerchantConstraint, PaymentConstraint,
+        ResourceConstraint, ToolConstraint, Verify, validate_attenuation,
         verify_all as verify_all_constraints,
     },
-    issue_bounds::{ISSUE_BOUNDS_EXTENSION, IssueBounds},
     error::{AuthorizationError, Result, WireError, WireResult},
+    issue_bounds::{ISSUE_BOUNDS_EXTENSION, IssueBounds},
     pop::{POP_SIGN_DOMAIN, PopProof, PopTuple, verify_freshness},
     proof_builder::ProofBuilder,
     revocation::{InMemoryRevocationCheck, RevocationCheck, RevocationDecision},
@@ -60,7 +60,7 @@ pub use crate::{
         DEFAULT_PROOF_FRESHNESS_MS, DEFAULT_WARRANT_TTL_SECS, KNOWN_EXTENSION_KEYS,
         MAX_DELEGATION_DEPTH, MAX_WARRANT_CBOR_BYTES, MAX_WARRANT_TTL_SECS, PaymentRail,
         PaymentSubjectKind, PaymentSubjectRef, SignatureEnvelope, SignerRef, SigningAlgorithm,
-        SigningKeyPair,         WARRANT_SIGN_DOMAIN, WARRANT_VERSION_V1, Warrant, WarrantMetadata,
+        SigningKeyPair, WARRANT_SIGN_DOMAIN, WARRANT_VERSION_V1, Warrant, WarrantMetadata,
         generate_warrant_id, generate_warrant_id_128, hex_encode_bytes, sha256_prefixed,
     },
 };

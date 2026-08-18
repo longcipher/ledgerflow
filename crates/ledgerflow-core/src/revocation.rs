@@ -117,7 +117,6 @@ impl RevocationCheck for InMemoryRevocationCheck {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]

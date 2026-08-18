@@ -8,9 +8,8 @@
 
 use ledgerflow_core::{
     AuthorizationContext, AuthorizationError, PopProof, SignedApproval, ToolArguments,
-    TrustedIssuers, WarrantChain, verify_authorization,
+    TrustedIssuers, WarrantChain, revocation::RevocationCheck, verify_authorization,
 };
-use ledgerflow_core::revocation::RevocationCheck;
 
 use crate::outcome::{VerifyOutcome, VerifyStatus};
 
@@ -66,24 +65,23 @@ where
 /// Maps an authorization error to a [`VerifyStatus`].
 pub const fn map_error(error: &AuthorizationError) -> VerifyStatus {
     match error {
-        AuthorizationError::InsufficientApprovals { .. }
-        | AuthorizationError::ApprovalRequired
-        | AuthorizationError::ApprovalExpired
-        | AuthorizationError::ApproverNotAllowed
-        | AuthorizationError::InvalidApprovalSignature
-        | AuthorizationError::ApprovalsDigestMismatch
-        | AuthorizationError::ApprovalRequestMismatch => VerifyStatus::InsufficientApproval,
+        AuthorizationError::InsufficientApprovals { .. } |
+        AuthorizationError::ApprovalRequired |
+        AuthorizationError::ApprovalExpired |
+        AuthorizationError::ApproverNotAllowed |
+        AuthorizationError::InvalidApprovalSignature |
+        AuthorizationError::ApprovalsDigestMismatch |
+        AuthorizationError::ApprovalRequestMismatch => VerifyStatus::InsufficientApproval,
         AuthorizationError::WarrantRevoked | AuthorizationError::HolderRevoked => {
             VerifyStatus::Revoked
         }
-        AuthorizationError::WarrantExpired { .. }
-        | AuthorizationError::WarrantNotYetValid { .. }
-        | AuthorizationError::ProofOutsideFreshnessWindow { .. } => VerifyStatus::Expired,
+        AuthorizationError::WarrantExpired { .. } |
+        AuthorizationError::WarrantNotYetValid { .. } |
+        AuthorizationError::ProofOutsideFreshnessWindow { .. } => VerifyStatus::Expired,
         AuthorizationError::ChallengeMismatch => VerifyStatus::Replayed,
         _ => VerifyStatus::Unauthorized,
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -92,13 +90,34 @@ mod tests {
 
     #[test]
     fn map_error_maps_approval_failures() {
-        assert_eq!(map_error(&AuthorizationError::InsufficientApprovals { got: 0, need: 1 }), VerifyStatus::InsufficientApproval);
-        assert_eq!(map_error(&AuthorizationError::ApprovalRequired), VerifyStatus::InsufficientApproval);
-        assert_eq!(map_error(&AuthorizationError::ApprovalExpired), VerifyStatus::InsufficientApproval);
-        assert_eq!(map_error(&AuthorizationError::ApproverNotAllowed), VerifyStatus::InsufficientApproval);
-        assert_eq!(map_error(&AuthorizationError::InvalidApprovalSignature), VerifyStatus::InsufficientApproval);
-        assert_eq!(map_error(&AuthorizationError::ApprovalsDigestMismatch), VerifyStatus::InsufficientApproval);
-        assert_eq!(map_error(&AuthorizationError::ApprovalRequestMismatch), VerifyStatus::InsufficientApproval);
+        assert_eq!(
+            map_error(&AuthorizationError::InsufficientApprovals { got: 0, need: 1 }),
+            VerifyStatus::InsufficientApproval
+        );
+        assert_eq!(
+            map_error(&AuthorizationError::ApprovalRequired),
+            VerifyStatus::InsufficientApproval
+        );
+        assert_eq!(
+            map_error(&AuthorizationError::ApprovalExpired),
+            VerifyStatus::InsufficientApproval
+        );
+        assert_eq!(
+            map_error(&AuthorizationError::ApproverNotAllowed),
+            VerifyStatus::InsufficientApproval
+        );
+        assert_eq!(
+            map_error(&AuthorizationError::InvalidApprovalSignature),
+            VerifyStatus::InsufficientApproval
+        );
+        assert_eq!(
+            map_error(&AuthorizationError::ApprovalsDigestMismatch),
+            VerifyStatus::InsufficientApproval
+        );
+        assert_eq!(
+            map_error(&AuthorizationError::ApprovalRequestMismatch),
+            VerifyStatus::InsufficientApproval
+        );
     }
 
     #[test]
@@ -109,9 +128,21 @@ mod tests {
 
     #[test]
     fn map_error_maps_expiry_failures() {
-        assert_eq!(map_error(&AuthorizationError::WarrantExpired { expires_at: 1 }), VerifyStatus::Expired);
-        assert_eq!(map_error(&AuthorizationError::WarrantNotYetValid { issued_at: 1 }), VerifyStatus::Expired);
-        assert_eq!(map_error(&AuthorizationError::ProofOutsideFreshnessWindow { created_at_ms: 1, now_ms: 2 }), VerifyStatus::Expired);
+        assert_eq!(
+            map_error(&AuthorizationError::WarrantExpired { expires_at: 1 }),
+            VerifyStatus::Expired
+        );
+        assert_eq!(
+            map_error(&AuthorizationError::WarrantNotYetValid { issued_at: 1 }),
+            VerifyStatus::Expired
+        );
+        assert_eq!(
+            map_error(&AuthorizationError::ProofOutsideFreshnessWindow {
+                created_at_ms: 1,
+                now_ms: 2
+            }),
+            VerifyStatus::Expired
+        );
     }
 
     #[test]
@@ -122,8 +153,14 @@ mod tests {
     #[test]
     fn map_error_defaults_to_unauthorized() {
         assert_eq!(map_error(&AuthorizationError::EmptyChain), VerifyStatus::Unauthorized);
-        assert_eq!(map_error(&AuthorizationError::InvalidWarrantSignature), VerifyStatus::Unauthorized);
-        assert_eq!(map_error(&AuthorizationError::MerchantNotAllowed { merchant_id: "x".to_string() }), VerifyStatus::Unauthorized);
+        assert_eq!(
+            map_error(&AuthorizationError::InvalidWarrantSignature),
+            VerifyStatus::Unauthorized
+        );
+        assert_eq!(
+            map_error(&AuthorizationError::MerchantNotAllowed { merchant_id: "x".to_string() }),
+            VerifyStatus::Unauthorized
+        );
         assert_eq!(map_error(&AuthorizationError::ParentHashMismatch), VerifyStatus::Unauthorized);
     }
 }

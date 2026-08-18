@@ -64,8 +64,7 @@ impl SaasAuthExtractor {
         match self.mode {
             SaasMode::Standalone => Ok(SaaSContext::standalone(self.standalone_tenant.clone())),
             SaasMode::Saas => {
-                let expected =
-                    self.service_token.as_deref().ok_or(SaasAuthError::InvalidToken)?;
+                let expected = self.service_token.as_deref().ok_or(SaasAuthError::InvalidToken)?;
                 let provided = headers
                     .get(HEADER_AUTHORIZATION)
                     .and_then(|v| v.to_str().ok())
@@ -88,12 +87,7 @@ impl SaasAuthExtractor {
                     .unwrap_or_default();
                 let principal =
                     headers.get(HEADER_PRINCIPAL).and_then(|v| v.to_str().ok()).map(str::to_string);
-                Ok(SaaSContext {
-                    tenant_id: tenant_id.to_string(),
-                    user_id,
-                    roles,
-                    principal,
-                })
+                Ok(SaaSContext { tenant_id: tenant_id.to_string(), user_id, roles, principal })
             }
         }
     }
@@ -146,7 +140,6 @@ pub const fn saas_auth_extractor_state(
     axum::extract::State(extractor)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -162,7 +155,7 @@ mod tests {
     fn constant_time_eq_detects_any_byte_difference() {
         // Equal-length strings differing in ANY byte position must be unequal.
         assert!(!constant_time_eq(b"secret1", b"secret2"));
-        assert!(!constant_time_eq(b"secret1", b"ecret1x"));
+        assert!(!constant_time_eq(b"secret1", b"Secret1"));
         assert!(!constant_time_eq(b"aaaa", b"aaab"));
         assert!(!constant_time_eq(b"aaaa", b"baaa"));
         assert!(!constant_time_eq(b"aaaa", b"aaba"));

@@ -117,9 +117,7 @@ pub fn verify_chain(
     let mut seen = HashSet::with_capacity(chain.len());
     for node in &chain.warrants {
         if !seen.insert(node.id.as_slice()) {
-            return Err(AuthorizationError::DuplicateWarrantInChain {
-                warrant_id: node.id_hex(),
-            });
+            return Err(AuthorizationError::DuplicateWarrantInChain { warrant_id: node.id_hex() });
         }
     }
 
@@ -250,6 +248,7 @@ mod tests {
 
     use super::*;
     use crate::{
+        TrustedIssuer, TrustedIssuers,
         constraint::{
             AuthorizationContext, MerchantConstraint, PaymentConstraint, ResourceConstraint,
         },
@@ -260,7 +259,6 @@ mod tests {
             PaymentRail, PaymentSubjectKind, PaymentSubjectRef, SignerRef, SigningKeyPair,
             sha256_prefixed,
         },
-        TrustedIssuer, TrustedIssuers,
     };
 
     fn issuer_keys() -> SigningKeyPair {
@@ -348,7 +346,11 @@ mod tests {
         }
     }
 
-    fn proof_for(warrant: &Warrant, context: &AuthorizationContext, signer: &SigningKeyPair) -> PopProof {
+    fn proof_for(
+        warrant: &Warrant,
+        context: &AuthorizationContext,
+        signer: &SigningKeyPair,
+    ) -> PopProof {
         ProofBuilder::new()
             .warrant_id(warrant.id.clone())
             .challenge_id(context.challenge_id.clone())
@@ -375,12 +377,19 @@ mod tests {
         assert_eq!(chain.root(), Some(&warrant));
         assert_eq!(chain.leaf(), Some(&warrant));
 
-        let child = crate::typestate::DelegatedWarrantBuilder::from(warrant)
-            .issue_to(delegate_keys().signer_ref(), &holder_keys(), 2_000, [0_u8; 8]);
+        let child = crate::typestate::DelegatedWarrantBuilder::from(warrant).issue_to(
+            delegate_keys().signer_ref(),
+            &holder_keys(),
+            2_000,
+            [0_u8; 8],
+        );
         chain.push(child.clone());
         assert_eq!(chain.len(), 2);
         assert_eq!(chain.leaf(), Some(&child));
-        assert_eq!(chain.root().expect("root").holder.public_key, holder_keys().public_key_bytes().to_vec());
+        assert_eq!(
+            chain.root().expect("root").holder.public_key,
+            holder_keys().public_key_bytes().to_vec()
+        );
         assert_ne!(chain, WarrantChain::default());
     }
 
@@ -388,9 +397,14 @@ mod tests {
     fn empty_chain_is_rejected() {
         let chain = WarrantChain::default();
         assert!(chain.is_empty());
-        let proof = proof_for(&root_warrant(2_000, 60, 3), &context(2_000, &holder_keys().signer_ref()), &holder_keys());
-        let error = verify_chain(&chain, &trusted(), &proof, &context(2_000, &holder_keys().signer_ref()))
-            .expect_err("empty");
+        let proof = proof_for(
+            &root_warrant(2_000, 60, 3),
+            &context(2_000, &holder_keys().signer_ref()),
+            &holder_keys(),
+        );
+        let error =
+            verify_chain(&chain, &trusted(), &proof, &context(2_000, &holder_keys().signer_ref()))
+                .expect_err("empty");
         assert_eq!(error, AuthorizationError::EmptyChain);
     }
 
@@ -424,8 +438,12 @@ mod tests {
     fn non_delegatable_root_with_child_is_rejected() {
         // max_depth = 0 on root means no child may follow.
         let root = root_warrant(2_000, 60, 0);
-        let child = crate::typestate::DelegatedWarrantBuilder::from(root.clone())
-            .issue_to(delegate_keys().signer_ref(), &holder_keys(), 2_000, [0_u8; 8]);
+        let child = crate::typestate::DelegatedWarrantBuilder::from(root.clone()).issue_to(
+            delegate_keys().signer_ref(),
+            &holder_keys(),
+            2_000,
+            [0_u8; 8],
+        );
         let chain = WarrantChain { warrants: vec![root, child] };
         let leaf = chain.leaf().expect("leaf");
         let ctx = context(2_000, &delegate_keys().signer_ref());
@@ -439,8 +457,12 @@ mod tests {
     // ---------------------------------------------------------------------
 
     fn child_warrant() -> Warrant {
-        crate::typestate::DelegatedWarrantBuilder::from(root_warrant(2_000, 60, 3))
-            .issue_to(delegate_keys().signer_ref(), &holder_keys(), 2_000, [0_u8; 8])
+        crate::typestate::DelegatedWarrantBuilder::from(root_warrant(2_000, 60, 3)).issue_to(
+            delegate_keys().signer_ref(),
+            &holder_keys(),
+            2_000,
+            [0_u8; 8],
+        )
     }
 
     #[test]
@@ -501,8 +523,12 @@ mod tests {
     fn link_rejects_depth_beyond_parent_max() {
         let parent = root_warrant(2_000, 60, 0);
         // Child derived from THIS parent (max_depth = 0): child.depth = 1.
-        let child = crate::typestate::DelegatedWarrantBuilder::from(parent.clone())
-            .issue_to(delegate_keys().signer_ref(), &holder_keys(), 2_000, [0_u8; 8]);
+        let child = crate::typestate::DelegatedWarrantBuilder::from(parent.clone()).issue_to(
+            delegate_keys().signer_ref(),
+            &holder_keys(),
+            2_000,
+            [0_u8; 8],
+        );
         let error = verify_link(&parent, &child).expect_err("I4 static");
         assert!(matches!(error, AuthorizationError::DelegationDepthExceeded { .. }));
     }
@@ -524,9 +550,8 @@ mod tests {
         let ctx = context(2_000, &holder_keys().signer_ref());
         let mut proof = proof_for(&warrant, &ctx, &holder_keys());
         proof.tuple.warrant_id = vec![0xAB; 16];
-        let error =
-            verify_chain(&WarrantChain::single(warrant), &trusted(), &proof, &ctx)
-                .expect_err("warrant id mismatch");
+        let error = verify_chain(&WarrantChain::single(warrant), &trusted(), &proof, &ctx)
+            .expect_err("warrant id mismatch");
         assert_eq!(error, AuthorizationError::WarrantDigestMismatch);
     }
 
@@ -583,8 +608,8 @@ mod tests {
         let warrant = root_warrant(2_000, 60, 3);
         let ctx = context(2_000, &holder_keys().signer_ref());
         let proof = proof_for(&warrant, &ctx, &holder_keys());
-        let verified = verify_chain(&WarrantChain::single(warrant), &trusted(), &proof, &ctx)
-            .expect("valid");
+        let verified =
+            verify_chain(&WarrantChain::single(warrant), &trusted(), &proof, &ctx).expect("valid");
         assert_eq!(verified.chain_len, 1);
         assert_eq!(verified.leaf.id, proof.tuple.warrant_id);
         assert_eq!(verified.root.id, verified.leaf.id);
@@ -598,9 +623,8 @@ mod tests {
         // now_ms = 2_000 => now_secs = 2, which equals issued_at = 2.
         let ctx = context(2_000, &holder_keys().signer_ref());
         let proof = proof_for(&warrant, &ctx, &holder_keys());
-        let verified =
-            verify_chain(&WarrantChain::single(warrant), &trusted(), &proof, &ctx)
-                .expect("issued_at == now is valid");
+        let verified = verify_chain(&WarrantChain::single(warrant), &trusted(), &proof, &ctx)
+            .expect("issued_at == now is valid");
         assert_eq!(verified.chain_len, 1);
     }
 
@@ -610,8 +634,12 @@ mod tests {
         // (the `index + 1 < len` guard fires for non-leaf nodes), but a
         // single-node chain never enters that branch.
         let root = root_warrant(2_000, 86_400, 0);
-        let first = crate::typestate::DelegatedWarrantBuilder::from(root.clone())
-            .issue_to(delegate_keys().signer_ref(), &holder_keys(), 2_000, [0_u8; 8]);
+        let first = crate::typestate::DelegatedWarrantBuilder::from(root.clone()).issue_to(
+            delegate_keys().signer_ref(),
+            &holder_keys(),
+            2_000,
+            [0_u8; 8],
+        );
         // The middle (non-leaf) node has max_depth 0 inherited from root.
         let chain = WarrantChain { warrants: vec![root, first] };
         let leaf = chain.leaf().expect("leaf");
@@ -651,8 +679,12 @@ mod tests {
         for index in 0..depth as usize {
             let parent = chain.warrants.last().expect("parent").clone();
             let next_holder = keys[index + 1].signer_ref();
-            let child = crate::typestate::DelegatedWarrantBuilder::from(parent)
-                .issue_to(next_holder, &keys[index], 2_000, [index as u8; 8]);
+            let child = crate::typestate::DelegatedWarrantBuilder::from(parent).issue_to(
+                next_holder,
+                &keys[index],
+                2_000,
+                [index as u8; 8],
+            );
             chain.push(child);
         }
         (chain, keys)
@@ -676,8 +708,12 @@ mod tests {
         // Root allows depth 0 => even with a child present, root.max_depth is 0
         // and the child link check fires on the root (index 0).
         let root = root_warrant(2_000, 86_400, 0);
-        let child = crate::typestate::DelegatedWarrantBuilder::from(root.clone())
-            .issue_to(delegate_keys().signer_ref(), &holder_keys(), 2_000, [0_u8; 8]);
+        let child = crate::typestate::DelegatedWarrantBuilder::from(root.clone()).issue_to(
+            delegate_keys().signer_ref(),
+            &holder_keys(),
+            2_000,
+            [0_u8; 8],
+        );
         let chain = WarrantChain { warrants: vec![root, child] };
         let leaf = chain.leaf().expect("leaf");
         let ctx = context(2_000, &delegate_keys().signer_ref());
@@ -716,8 +752,12 @@ mod tests {
         // the I3 check (`child.expires_at > parent.expires_at`) must NOT fire
         // when the child expires no later than the parent.
         let parent = root_warrant(2_000, 86_400, 3);
-        let child = crate::typestate::DelegatedWarrantBuilder::from(parent.clone())
-            .issue_to(delegate_keys().signer_ref(), &holder_keys(), 2_000, [0_u8; 8]);
+        let child = crate::typestate::DelegatedWarrantBuilder::from(parent.clone()).issue_to(
+            delegate_keys().signer_ref(),
+            &holder_keys(),
+            2_000,
+            [0_u8; 8],
+        );
         assert!(child.expires_at <= parent.expires_at);
         verify_link(&parent, &child).expect("child expiry <= parent expiry is allowed");
     }

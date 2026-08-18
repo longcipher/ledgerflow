@@ -5,9 +5,9 @@
 use clap::{Parser, Subcommand};
 use eyre::{OptionExt, Result};
 use ledgerflow_core::{
-    ApprovalGate, AssetRef, MerchantConstraint, PaymentConstraint, PaymentRail,
-    PaymentSubjectKind, PaymentSubjectRef, ResourceConstraint, SigningKeyPair, SignedApproval,
-    TrustedIssuer, TrustedIssuers, WarrantBuilder, WarrantChain,
+    ApprovalGate, AssetRef, MerchantConstraint, PaymentConstraint, PaymentRail, PaymentSubjectKind,
+    PaymentSubjectRef, ResourceConstraint, SignedApproval, SigningKeyPair, TrustedIssuer,
+    TrustedIssuers, WarrantBuilder, WarrantChain,
 };
 use ledgerflow_protocol::{
     AcceptedQuote, HttpRequest, PaymentPayloadSeed, build_payment_payload,
@@ -94,8 +94,7 @@ fn render_sample_payment_fixture() -> Result<String> {
             approvals: Vec::new(),
         },
     )?;
-    let extension =
-        payload.ledgerflow.ok_or_eyre("missing sample payment ledgerflow extension")?;
+    let extension = payload.ledgerflow.ok_or_eyre("missing sample payment ledgerflow extension")?;
     let payment_identifier =
         payload.payment_identifier.as_deref().ok_or_eyre("missing sample payment identifier")?;
     let warrant_digest = match extension.warrant_chain.last() {

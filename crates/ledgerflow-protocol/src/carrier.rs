@@ -2,11 +2,9 @@
 //!
 //! v1 rules (design §7.1 / §7.2):
 //!
-//! - **Header carriers** (MPP `WWW-Authenticate`/`Authorization`, x402 HTTP
-//!   headers) are limited to single-warrant or digest references — full
-//!   chains never fit in headers.
-//! - **Body carriers** (402 response body, MCP `_meta`, A2A params) carry the
-//!   full inline chain.
+//! - **Header carriers** (MPP `WWW-Authenticate`/`Authorization`, x402 HTTP headers) are limited to
+//!   single-warrant or digest references — full chains never fit in headers.
+//! - **Body carriers** (402 response body, MCP `_meta`, A2A params) carry the full inline chain.
 //! - **In-process** carriers have no size limit.
 
 use crate::error::ProtocolError;

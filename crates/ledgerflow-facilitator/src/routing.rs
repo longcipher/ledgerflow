@@ -8,7 +8,9 @@ use crate::{
         RailAdapter, RailError, RailQuote, custodial::CustodialRailAdapter, evm::EvmRailAdapter,
         exchange::ExchangeRailAdapter, gateway::GatewayRailAdapter,
     },
-    subject::{DefaultSubjectResolver, PaymentSubjectResolver, ResolvedSubject, SubjectResolutionError},
+    subject::{
+        DefaultSubjectResolver, PaymentSubjectResolver, ResolvedSubject, SubjectResolutionError,
+    },
 };
 
 /// Supported settlement rails.
@@ -71,7 +73,10 @@ impl<R> Facilitator<R>
 where
     R: PaymentSubjectResolver,
 {
-    pub fn route(&self, authorization: &VerifiedAuthorization) -> Result<RouteDecision, RoutingError> {
+    pub fn route(
+        &self,
+        authorization: &VerifiedAuthorization,
+    ) -> Result<RouteDecision, RoutingError> {
         let resolved = self.resolver.resolve(authorization)?;
         let adapter = self
             .adapters

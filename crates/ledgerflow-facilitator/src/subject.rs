@@ -65,8 +65,9 @@ impl PaymentSubjectResolver for DefaultSubjectResolver {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
-    use super::*;
     use ledgerflow_core::PaymentSubjectRef;
+
+    use super::*;
 
     fn authz(subject: PaymentSubjectRef) -> VerifiedAuthorization {
         let holder = ledgerflow_core::SignerRef::new(
@@ -118,10 +119,8 @@ mod tests {
 
     #[test]
     fn caip10_subject_resolves_to_evm() {
-        let subject = PaymentSubjectRef::new(
-            PaymentSubjectKind::Caip10,
-            "caip10:eip155:8453:0xabc123",
-        );
+        let subject =
+            PaymentSubjectRef::new(PaymentSubjectKind::Caip10, "caip10:eip155:8453:0xabc123");
         let resolved = DefaultSubjectResolver.resolve(&authz(subject)).expect("resolved");
         assert_eq!(resolved.rail, RailKind::Evm);
         assert_eq!(resolved.value, "caip10:eip155:8453:0xabc123");
@@ -129,10 +128,7 @@ mod tests {
 
     #[test]
     fn exchange_account_subject_resolves_to_exchange() {
-        let subject = PaymentSubjectRef::new(
-            PaymentSubjectKind::ExchangeAccount,
-            "exchange-1",
-        );
+        let subject = PaymentSubjectRef::new(PaymentSubjectKind::ExchangeAccount, "exchange-1");
         let resolved = DefaultSubjectResolver.resolve(&authz(subject)).expect("resolved");
         assert_eq!(resolved.rail, RailKind::Exchange);
     }
@@ -176,10 +172,8 @@ mod tests {
     #[test]
     fn binance_okx_gateway_guards_are_not_case_swapped() {
         // "binance:" guard must not match "binancex:" or "notbinance:".
-        let near_miss = PaymentSubjectRef::new(
-            PaymentSubjectKind::FacilitatorAccount,
-            "notbinance:acct",
-        );
+        let near_miss =
+            PaymentSubjectRef::new(PaymentSubjectKind::FacilitatorAccount, "notbinance:acct");
         let resolved = DefaultSubjectResolver.resolve(&authz(near_miss)).expect("falls through");
         assert_eq!(resolved.rail, RailKind::Exchange);
     }

@@ -81,9 +81,8 @@ pub fn verify_authorization(input: &AuthorizationInput<'_>) -> Result<VerifiedAu
 
     // 3. Approval gates.
     let gate = leaf.approval_gates.get(&input.context.tool_name);
-    let requires_approval = gate.is_some_and(|gate: &ApprovalGate| {
-        gate.fires(input.tool_arguments)
-    });
+    let requires_approval =
+        gate.is_some_and(|gate: &ApprovalGate| gate.fires(input.tool_arguments));
     if requires_approval {
         verify_approvals(
             input.approvals,

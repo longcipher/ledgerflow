@@ -68,8 +68,7 @@ impl SignedApproval {
     pub fn encode_cbor(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         #[allow(clippy::expect_used)]
-        ciborium::ser::into_writer(self, &mut bytes)
-            .expect("approval serialization is infallible");
+        ciborium::ser::into_writer(self, &mut bytes).expect("approval serialization is infallible");
         bytes
     }
 }
@@ -132,8 +131,8 @@ pub struct ApprovalVerification {
 /// - Every approval must be unexpired and must bind the request hash.
 /// - Duplicate approvers count once.
 /// - At least `min_approvals` distinct approvers are required.
-/// - The PoP tuple's `approvals_digest` must match the supplied approvals,
-///   closing the PoP/approvals ambiguity window.
+/// - The PoP tuple's `approvals_digest` must match the supplied approvals, closing the
+///   PoP/approvals ambiguity window.
 pub fn verify_approvals(
     approvals: &[SignedApproval],
     required_approvers: &[SignerRef],
@@ -173,16 +172,10 @@ pub fn verify_approvals(
     }
 
     let valid_count = valid.len() as u32;
-    let threshold = if min_approvals == 0 {
-        required_approvers.len() as u32
-    } else {
-        min_approvals
-    };
+    let threshold =
+        if min_approvals == 0 { required_approvers.len() as u32 } else { min_approvals };
     if valid_count < threshold {
-        return Err(AuthorizationError::InsufficientApprovals {
-            got: valid_count,
-            need: threshold,
-        });
+        return Err(AuthorizationError::InsufficientApprovals { got: valid_count, need: threshold });
     }
 
     Ok(ApprovalVerification { valid_count, threshold })
@@ -219,16 +212,10 @@ pub fn verify_approval_threshold(
     }
 
     let valid_count = valid.len() as u32;
-    let threshold = if min_approvals == 0 {
-        required_approvers.len() as u32
-    } else {
-        min_approvals
-    };
+    let threshold =
+        if min_approvals == 0 { required_approvers.len() as u32 } else { min_approvals };
     if valid_count < threshold {
-        return Err(AuthorizationError::InsufficientApprovals {
-            got: valid_count,
-            need: threshold,
-        });
+        return Err(AuthorizationError::InsufficientApprovals { got: valid_count, need: threshold });
     }
 
     Ok(ApprovalVerification { valid_count, threshold })
@@ -343,10 +330,8 @@ mod tests {
         let b = approver_keys(2);
         let required = approvers(&[&a, &b]);
         // Two approvals from the same approver => only 1 distinct.
-        let approvals = vec![
-            approval("sha256:req", &a, 10_300),
-            approval("sha256:req", &a, 10_300),
-        ];
+        let approvals =
+            vec![approval("sha256:req", &a, 10_300), approval("sha256:req", &a, 10_300)];
         let error = verify_approval_threshold(&approvals, &required, 2, "sha256:req", 10_000)
             .expect_err("duplicate counts once");
         assert!(matches!(error, AuthorizationError::InsufficientApprovals { got: 1, .. }));
@@ -376,10 +361,7 @@ mod tests {
         let approvals = vec![approval("sha256:req", &a, 10_300)];
         let error = verify_approval_threshold(&approvals, &required, 2, "sha256:req", 10_000)
             .expect_err("need 2 got 1");
-        assert!(matches!(
-            error,
-            AuthorizationError::InsufficientApprovals { got: 1, need: 2 }
-        ));
+        assert!(matches!(error, AuthorizationError::InsufficientApprovals { got: 1, need: 2 }));
     }
 
     #[test]
@@ -431,12 +413,9 @@ mod tests {
         let a = approver_keys(1);
         let required = approvers(&[&a]);
         let approvals = vec![approval("sha256:req", &a, 10_300)];
-        let result = verify_approval_threshold(&approvals, &required, 1, "sha256:req", 10_000)
-            .expect("ok");
-        assert_eq!(
-            result,
-            ApprovalVerification { valid_count: 1, threshold: 1 }
-        );
+        let result =
+            verify_approval_threshold(&approvals, &required, 1, "sha256:req", 10_000).expect("ok");
+        assert_eq!(result, ApprovalVerification { valid_count: 1, threshold: 1 });
     }
 
     // ---------------------------------------------------------------------
@@ -464,10 +443,8 @@ mod tests {
         let a = approver_keys(1);
         let b = approver_keys(2);
         let required = approvers(&[&a, &b]);
-        let approvals = vec![
-            approval("sha256:req", &a, 10_300),
-            approval("sha256:req", &b, 10_300),
-        ];
+        let approvals =
+            vec![approval("sha256:req", &a, 10_300), approval("sha256:req", &b, 10_300)];
         let tuple = pop_tuple("sha256:req", &approvals);
         let result = verify_approvals(&approvals, &required, 2, "sha256:req", 10_000, &tuple)
             .expect("2-of-2");
@@ -550,10 +527,8 @@ mod tests {
         let b = approver_keys(2);
         let c = approver_keys(3);
         let required = approvers(&[&a, &b, &c]);
-        let approvals = vec![
-            approval("sha256:req", &a, 10_300),
-            approval("sha256:req", &b, 10_300),
-        ];
+        let approvals =
+            vec![approval("sha256:req", &a, 10_300), approval("sha256:req", &b, 10_300)];
         let tuple = pop_tuple("sha256:req", &approvals);
         let error = verify_approvals(&approvals, &required, 0, "sha256:req", 10_000, &tuple)
             .expect_err("2 of 3");
@@ -565,17 +540,12 @@ mod tests {
         let a = approver_keys(1);
         let b = approver_keys(2);
         let required = approvers(&[&a, &b]);
-        let approvals = vec![
-            approval("sha256:req", &a, 10_300),
-            approval("sha256:req", &a, 10_300),
-        ];
+        let approvals =
+            vec![approval("sha256:req", &a, 10_300), approval("sha256:req", &a, 10_300)];
         let tuple = pop_tuple("sha256:req", &approvals);
         let error = verify_approvals(&approvals, &required, 2, "sha256:req", 10_000, &tuple)
             .expect_err("duplicate counts once");
-        assert!(matches!(
-            error,
-            AuthorizationError::InsufficientApprovals { got: 1, .. }
-        ));
+        assert!(matches!(error, AuthorizationError::InsufficientApprovals { got: 1, .. }));
     }
 
     #[test]
@@ -609,12 +579,12 @@ mod tests {
         // Must start with the domain prefix.
         assert!(preimage.starts_with(APPROVAL_SIGN_DOMAIN));
         // Must contain the request hash, approver key, and expiry.
-        assert!(preimage
-            .windows(b"sha256:req".len())
-            .any(|window| window == b"sha256:req"));
-        assert!(preimage
-            .windows(a.public_key_bytes().len())
-            .any(|window| window == a.public_key_bytes()));
+        assert!(preimage.windows(b"sha256:req".len()).any(|window| window == b"sha256:req"));
+        assert!(
+            preimage
+                .windows(a.public_key_bytes().len())
+                .any(|window| window == a.public_key_bytes())
+        );
         // Deterministic across two constructions.
         let again = approval("sha256:req", &a, 10_300);
         assert_eq!(preimage, again.preimage());

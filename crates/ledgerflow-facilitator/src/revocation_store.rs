@@ -15,9 +15,7 @@ use std::{
     sync::Mutex,
 };
 
-use ledgerflow_core::{
-    RevocationCheck, RevocationDecision, SignerRef,
-};
+use ledgerflow_core::{RevocationCheck, RevocationDecision, SignerRef};
 
 /// A revocation record (JSON Lines).
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -123,29 +121,14 @@ impl FileRevocationStore {
 
 impl RevocationCheck for FileRevocationStore {
     fn check_warrant(&self, warrant_id: &[u8]) -> RevocationDecision {
-        let revoked = self
-            .inner
-            .revoked_warrants
-            .lock()
-            .is_ok_and(|set| set.contains(warrant_id));
-        if revoked {
-            RevocationDecision::RevokedWarrant
-        } else {
-            RevocationDecision::Ok
-        }
+        let revoked = self.inner.revoked_warrants.lock().is_ok_and(|set| set.contains(warrant_id));
+        if revoked { RevocationDecision::RevokedWarrant } else { RevocationDecision::Ok }
     }
 
     fn check_holder(&self, holder: &SignerRef) -> RevocationDecision {
-        let revoked = self
-            .inner
-            .revoked_holders
-            .lock()
-            .is_ok_and(|set| set.contains(&holder.public_key));
-        if revoked {
-            RevocationDecision::RevokedHolder
-        } else {
-            RevocationDecision::Ok
-        }
+        let revoked =
+            self.inner.revoked_holders.lock().is_ok_and(|set| set.contains(&holder.public_key));
+        if revoked { RevocationDecision::RevokedHolder } else { RevocationDecision::Ok }
     }
 }
 
@@ -215,12 +198,12 @@ fn hex_decode(hex: &str) -> Result<Vec<u8>, ()> {
         .collect()
 }
 
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
-    use super::*;
     use ledgerflow_core::{SigningAlgorithm, SigningKeyPair};
+
+    use super::*;
 
     fn holder() -> SignerRef {
         SigningKeyPair::from_bytes(&[0x77; 32]).signer_ref()
@@ -238,10 +221,7 @@ mod tests {
             store.revoke_holder(&holder()).expect("revoke holder");
         }
         let reloaded = FileRevocationStore::open(&path).expect("reopen");
-        assert_eq!(
-            reloaded.check_holder(&holder()),
-            RevocationDecision::RevokedHolder
-        );
+        assert_eq!(reloaded.check_holder(&holder()), RevocationDecision::RevokedHolder);
         // A different holder is not revoked.
         let other = SigningKeyPair::from_bytes(&[0x78; 32]).signer_ref();
         assert_eq!(reloaded.check_holder(&other), RevocationDecision::Ok);

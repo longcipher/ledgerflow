@@ -171,7 +171,6 @@ pub const fn verify_freshness(
     Ok(())
 }
 
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -222,21 +221,11 @@ mod tests {
     #[test]
     fn approvals_digest_binds_all_approvals() {
         let a = SigningKeyPair::from_bytes(&[0x51; 32]);
-        let approval = SignedApproval::sign(
-            "sha256:req",
-            &a.signer_ref(),
-            10_300,
-            &a,
-        );
+        let approval = SignedApproval::sign("sha256:req", &a.signer_ref(), 10_300, &a);
         let digest = PopTuple::approvals_digest(std::slice::from_ref(&approval));
         assert!(digest.starts_with("sha256:"));
         // Different approvals yield different digests.
-        let other = SignedApproval::sign(
-            "sha256:other",
-            &a.signer_ref(),
-            10_300,
-            &a,
-        );
+        let other = SignedApproval::sign("sha256:other", &a.signer_ref(), 10_300, &a);
         assert_ne!(digest, PopTuple::approvals_digest(std::slice::from_ref(&other)));
     }
 
@@ -264,9 +253,8 @@ mod tests {
         // Exactly at tolerance passes (strict >).
         verify_freshness(&proof, 2_000 + 60_000 + 30_000, 60_000, 30_000).expect("at limit");
         // One ms beyond fails.
-        let error =
-            verify_freshness(&proof, 2_000 + 60_000 + 30_000 + 1, 60_000, 30_000)
-                .expect_err("beyond");
+        let error = verify_freshness(&proof, 2_000 + 60_000 + 30_000 + 1, 60_000, 30_000)
+            .expect_err("beyond");
         assert!(matches!(error, AuthorizationError::ProofOutsideFreshnessWindow { .. }));
         // Future proof (created after now) also bounded by abs diff.
         verify_freshness(&proof, 1_000, 60_000, 30_000).expect("skew tolerance");

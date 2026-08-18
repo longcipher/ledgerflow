@@ -40,7 +40,6 @@ impl WebhookSender {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -51,12 +50,16 @@ mod tests {
         assert!(sender.buffered().is_empty(), "new sender must have no buffered events");
         sender.emit(WebhookEvent::WarrantIssued { warrant_id: "w1".to_string() });
         sender.emit(WebhookEvent::WarrantRevoked { warrant_id: "w1".to_string() });
-        sender.emit(WebhookEvent::PaymentSettled { transaction_id: "tx-1".to_string(), amount: 100 });
+        sender
+            .emit(WebhookEvent::PaymentSettled { transaction_id: "tx-1".to_string(), amount: 100 });
         sender.emit(WebhookEvent::ApprovalRequested { request_hash: "sha256:req".to_string() });
         let events = sender.buffered();
         assert_eq!(events.len(), 4);
         assert_eq!(events[0], WebhookEvent::WarrantIssued { warrant_id: "w1".to_string() });
-        assert_eq!(events[3], WebhookEvent::ApprovalRequested { request_hash: "sha256:req".to_string() });
+        assert_eq!(
+            events[3],
+            WebhookEvent::ApprovalRequested { request_hash: "sha256:req".to_string() }
+        );
     }
 
     #[test]

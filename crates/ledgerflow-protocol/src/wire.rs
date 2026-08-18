@@ -1,9 +1,9 @@
 //! Wire helpers: CBOR encode/decode with size limits, base64url, and carrier
 //! size policy.
 
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 
-use crate::{error::ProtocolError, carrier::LedgerFlowCarrier};
+use crate::{carrier::LedgerFlowCarrier, error::ProtocolError};
 
 /// CBOR-encodes a value with a size limit.
 pub fn cbor_encode<T: Serialize>(value: &T, max_bytes: usize) -> Result<Vec<u8>, ProtocolError> {
@@ -17,7 +17,10 @@ pub fn cbor_encode<T: Serialize>(value: &T, max_bytes: usize) -> Result<Vec<u8>,
 }
 
 /// CBOR-decodes a value with a size limit.
-pub fn cbor_decode<T: DeserializeOwned>(bytes: &[u8], max_bytes: usize) -> Result<T, ProtocolError> {
+pub fn cbor_decode<T: DeserializeOwned>(
+    bytes: &[u8],
+    max_bytes: usize,
+) -> Result<T, ProtocolError> {
     if bytes.len() > max_bytes {
         return Err(ProtocolError::PayloadTooLarge { size: bytes.len(), max: max_bytes });
     }
@@ -53,7 +56,6 @@ pub const fn validate_carrier_fit(
     }
     Ok(())
 }
-
 
 #[cfg(test)]
 mod tests {
