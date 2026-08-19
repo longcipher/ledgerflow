@@ -25,9 +25,9 @@ pub mod verify;
 pub use crate::{
     outcome::{SettlementOutcome, SettlementStatus, VerifyOutcome, VerifyStatus},
     rails::{
-        RailAdapter, RailError, RailQuote, SettlementReceipt, VerificationResult,
-        custodial::CustodialRailAdapter, evm::EvmRailAdapter, exchange::ExchangeRailAdapter,
-        gateway::GatewayRailAdapter,
+        RailAdapter, RailError, RailQuote, SettlementReceipt, SharedRailAdapter,
+        VerificationResult, custodial::CustodialRailAdapter, evm::EvmRailAdapter,
+        exchange::ExchangeRailAdapter, gateway::GatewayRailAdapter, solana::SolanaRailAdapter,
     },
     revocation_store::{FileRevocationStore, InsecureMemoryRevocationStore, RevocationStoreError},
     routing::{Facilitator, RailKind, RouteDecision, RoutingError},

@@ -2,13 +2,19 @@
 //!
 //! Events are buffered in-memory for the tenant-scoped audit endpoint, and —
 //! when a delivery URL is configured — delivered to an HTTP webhook endpoint
-//! with a bounded retry. Delivery is best-effort and non-blocking: it runs on
-//! a detached thread so handler latency is unaffected. A real, durable,
-//! at-least-once fan-out (persistent queue + idempotency keys) is a deployment
-//! concern for the platform (design §10.3); this module provides the
-//! synchronous in-process delivery path.
+//! with a bounded retry. Delivery is best-effort and non-blocking: handlers
+//! enqueue onto a bounded worker queue so request latency and thread count stay
+//! bounded under load. A real, durable, at-least-once fan-out (persistent
+//! queue + idempotency keys) is a deployment concern for the platform
+//! (design §10.3); this module provides the in-process delivery path.
 
-use std::sync::Arc;
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+    time::Duration,
+};
 
 /// Webhook event kinds emitted by the server.
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
@@ -50,44 +56,70 @@ impl WebhookEvent {
 /// Webhook sender.
 ///
 /// Buffers events for the audit endpoint and, when a delivery URL is
-/// configured, delivers each event to that URL with a bounded retry on a
-/// detached thread.
+/// configured, enqueues each event onto a bounded background worker.
 #[derive(Clone, Debug)]
 pub struct WebhookSender {
     sink: Arc<std::sync::Mutex<Vec<WebhookEvent>>>,
-    delivery_url: Option<String>,
+    delivery: Option<Arc<DeliveryWorker>>,
+}
+
+#[derive(Clone, Debug)]
+struct DeliveryConfig {
+    queue_capacity: usize,
+    max_attempts: usize,
+    backoff_base_ms: u64,
+    attempt_timeout_ms: u64,
+}
+
+impl Default for DeliveryConfig {
+    fn default() -> Self {
+        Self {
+            queue_capacity: 256,
+            max_attempts: 3,
+            backoff_base_ms: 200,
+            attempt_timeout_ms: 5_000,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct DeliveryWorker {
+    queue: flume::Sender<DeliveryJob>,
+    dropped_events: AtomicUsize,
+}
+
+#[derive(Clone, Debug)]
+struct DeliveryJob {
+    payload: serde_json::Value,
 }
 
 impl WebhookSender {
     /// Creates a disabled sender (no delivery; events are buffered for tests).
     #[must_use]
     pub fn disabled() -> Self {
-        Self { sink: Arc::new(std::sync::Mutex::new(Vec::new())), delivery_url: None }
+        Self { sink: Arc::new(std::sync::Mutex::new(Vec::new())), delivery: None }
     }
 
     /// Creates a sender that buffers events and delivers them to `delivery_url`
     /// (best-effort, with bounded retry).
     #[must_use]
     pub fn with_delivery(delivery_url: String) -> Self {
-        Self { sink: Arc::new(std::sync::Mutex::new(Vec::new())), delivery_url: Some(delivery_url) }
+        Self::with_delivery_config(delivery_url, DeliveryConfig::default())
     }
 
-    /// Emits an event: buffers it and, if a delivery URL is configured, kicks
-    /// off a best-effort delivery on a detached thread.
+    /// Emits an event: buffers it and, if a delivery URL is configured,
+    /// enqueues it for best-effort background delivery.
     pub fn emit(&self, event: WebhookEvent) {
         if let Ok(mut sink) = self.sink.lock() {
             sink.push(event.clone());
         }
-        if let Some(url) = &self.delivery_url {
-            let url = url.clone();
+        if let Some(delivery) = &self.delivery {
             let payload = serde_json::json!({
                 "type": event.kind(),
                 "tenant_id": event.tenant_id(),
                 "event": event,
             });
-            std::thread::spawn(move || {
-                deliver_with_retry(&url, &payload);
-            });
+            delivery.enqueue(DeliveryJob { payload });
         }
     }
 
@@ -95,54 +127,118 @@ impl WebhookSender {
     pub fn buffered(&self) -> Vec<WebhookEvent> {
         self.sink.lock().map(|sink| sink.clone()).unwrap_or_default()
     }
+
+    #[must_use]
+    fn with_delivery_config(delivery_url: String, config: DeliveryConfig) -> Self {
+        Self {
+            sink: Arc::new(std::sync::Mutex::new(Vec::new())),
+            delivery: Some(Arc::new(DeliveryWorker::spawn(delivery_url, config))),
+        }
+    }
 }
 
-/// Delivers a webhook payload with a bounded number of retries.
-///
-/// Best-effort: failures are logged and dropped (no durable queue in v1).
-fn deliver_with_retry(url: &str, payload: &serde_json::Value) {
-    const MAX_ATTEMPTS: usize = 3;
-    for attempt in 0..MAX_ATTEMPTS {
-        match deliver_once(url, payload) {
-            Ok(()) => return,
-            Err(error) => {
-                if attempt + 1 < MAX_ATTEMPTS {
-                    std::thread::sleep(std::time::Duration::from_millis(
-                        200 * (attempt as u64 + 1),
-                    ));
-                } else {
-                    tracing::warn!(url, error = %error, "webhook delivery failed after retries");
-                }
+impl DeliveryWorker {
+    fn spawn(delivery_url: String, config: DeliveryConfig) -> Self {
+        let queue_capacity = config.queue_capacity.max(1);
+        let (queue, receiver) = flume::bounded(queue_capacity);
+        if let Err(error) = std::thread::Builder::new()
+            .name("ledgerflow-webhook".to_string())
+            .spawn(move || run_delivery_worker(delivery_url, receiver, config))
+        {
+            tracing::warn!(error = %error, "failed to start webhook worker");
+        }
+        Self { queue, dropped_events: AtomicUsize::new(0) }
+    }
+
+    fn enqueue(&self, job: DeliveryJob) {
+        match self.queue.try_send(job) {
+            Ok(()) => {}
+            Err(flume::TrySendError::Full(_)) => {
+                self.dropped_events.fetch_add(1, Ordering::Relaxed);
+                tracing::warn!("webhook delivery queue is full; dropping event");
+            }
+            Err(flume::TrySendError::Disconnected(_)) => {
+                self.dropped_events.fetch_add(1, Ordering::Relaxed);
+                tracing::warn!("webhook delivery worker stopped; dropping event");
             }
         }
     }
 }
 
-/// Performs a single synchronous webhook POST.
-fn deliver_once(url: &str, payload: &serde_json::Value) -> Result<(), String> {
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|error| error.to_string())?;
-    runtime.block_on(async move {
-        let client = hpx::Client::new();
-        let response = client
-            .post(url)
-            .header("content-type", "application/json")
-            .body(payload.to_string())
-            .send()
-            .await
-            .map_err(|error| error.to_string())?;
-        if response.status().is_success() {
-            Ok(())
-        } else {
-            Err(format!("webhook returned status {}", response.status()))
+fn run_delivery_worker(
+    delivery_url: String,
+    receiver: flume::Receiver<DeliveryJob>,
+    config: DeliveryConfig,
+) {
+    let runtime = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            tracing::warn!(error = %error, "failed to initialize webhook runtime");
+            return;
         }
-    })
+    };
+    let client = hpx::Client::new();
+    while let Ok(job) = receiver.recv() {
+        if let Err(error) =
+            runtime.block_on(deliver_with_retry(&client, &delivery_url, &job.payload, &config))
+        {
+            tracing::warn!(url = %delivery_url, error = %error, "webhook delivery failed");
+        }
+    }
+}
+
+/// Delivers a webhook payload with a bounded number of retries.
+async fn deliver_with_retry(
+    client: &hpx::Client,
+    url: &str,
+    payload: &serde_json::Value,
+    config: &DeliveryConfig,
+) -> Result<(), String> {
+    let mut last_error = None;
+    for attempt in 0..config.max_attempts {
+        match deliver_once(client, url, payload, config).await {
+            Ok(()) => return Ok(()),
+            Err(error) => {
+                last_error = Some(error);
+                if attempt + 1 < config.max_attempts {
+                    tokio::time::sleep(Duration::from_millis(
+                        config.backoff_base_ms * (attempt as u64 + 1),
+                    ))
+                    .await;
+                }
+            }
+        }
+    }
+    Err(last_error.unwrap_or_else(|| "webhook delivery exhausted retries".to_string()))
+}
+
+/// Performs a single webhook POST using the worker-owned client.
+async fn deliver_once(
+    client: &hpx::Client,
+    url: &str,
+    payload: &serde_json::Value,
+    config: &DeliveryConfig,
+) -> Result<(), String> {
+    let request =
+        client.post(url).header("content-type", "application/json").body(payload.to_string());
+    let response =
+        tokio::time::timeout(Duration::from_millis(config.attempt_timeout_ms), request.send())
+            .await
+            .map_err(|_| {
+                format!("webhook request timed out after {} ms", config.attempt_timeout_ms)
+            })?
+            .map_err(|error| error.to_string())?;
+    if response.status().is_success() {
+        Ok(())
+    } else {
+        Err(format!("webhook returned status {}", response.status()))
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::{sync::atomic::Ordering, time::Duration};
+
     use super::*;
 
     #[test]
@@ -233,5 +329,34 @@ mod tests {
             .kind(),
             "payment.settled"
         );
+    }
+
+    #[test]
+    fn webhook_sender_uses_a_bounded_delivery_queue() {
+        let sender = WebhookSender::with_delivery_config(
+            "http://127.0.0.1:9".to_string(),
+            DeliveryConfig {
+                queue_capacity: 1,
+                max_attempts: 3,
+                backoff_base_ms: 250,
+                attempt_timeout_ms: 250,
+            },
+        );
+
+        for index in 0..16 {
+            sender.emit(WebhookEvent::WarrantIssued {
+                tenant_id: "t1".to_string(),
+                warrant_id: format!("w{index}"),
+            });
+        }
+
+        std::thread::sleep(Duration::from_millis(50));
+        let dropped = sender
+            .delivery
+            .as_ref()
+            .map(|worker| worker.dropped_events.load(Ordering::Relaxed))
+            .unwrap_or_default();
+        assert!(dropped > 0, "queue saturation should drop excess events");
+        assert_eq!(sender.buffered().len(), 16, "audit buffering stays intact");
     }
 }

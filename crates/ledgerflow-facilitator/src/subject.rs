@@ -38,7 +38,12 @@ impl PaymentSubjectResolver for DefaultSubjectResolver {
     ) -> Result<ResolvedSubject, SubjectResolutionError> {
         let subject = &authorization.payment_subject;
         let rail = match subject.kind {
-            PaymentSubjectKind::Caip10 => RailKind::Evm,
+            PaymentSubjectKind::Caip10 if subject.value.starts_with("caip10:solana:") => {
+                RailKind::Solana
+            }
+            PaymentSubjectKind::Caip10 if subject.value.starts_with("caip10:eip155:") => {
+                RailKind::Evm
+            }
             PaymentSubjectKind::ExchangeAccount => RailKind::Exchange,
             PaymentSubjectKind::FacilitatorAccount if subject.value.starts_with("binance:") => {
                 RailKind::Exchange
@@ -124,6 +129,26 @@ mod tests {
         let resolved = DefaultSubjectResolver.resolve(&authz(subject)).expect("resolved");
         assert_eq!(resolved.rail, RailKind::Evm);
         assert_eq!(resolved.value, "caip10:eip155:8453:0xabc123");
+    }
+
+    #[test]
+    fn caip10_solana_subject_resolves_to_solana() {
+        let subject = PaymentSubjectRef::new(
+            PaymentSubjectKind::Caip10,
+            "caip10:solana:mainnet:7vfCXTUXx5Wn4P6m7XJ3e1yK2bXxVmW7nYj1m5X9A1t3",
+        );
+        let resolved = DefaultSubjectResolver.resolve(&authz(subject)).expect("resolved");
+        assert_eq!(resolved.rail, RailKind::Solana);
+    }
+
+    #[test]
+    fn unsupported_caip10_chain_family_is_rejected() {
+        let subject = PaymentSubjectRef::new(
+            PaymentSubjectKind::Caip10,
+            "caip10:cosmos:cosmoshub-4:cosmos1deadbeef",
+        );
+        let error = DefaultSubjectResolver.resolve(&authz(subject)).expect_err("unsupported");
+        assert!(matches!(error, SubjectResolutionError::UnsupportedSubject { .. }));
     }
 
     #[test]

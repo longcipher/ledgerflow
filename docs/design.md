@@ -621,7 +621,7 @@ system is kept; adds `VerifyOutcome` structured error codes (distinguishing
 | Rail | Status | Notes |
 |---|---|---|
 | EVM | ✓ (demo adapter) | `exact` / `upto` / `batch-settlement` schemes |
-| Solana | ✓ (skeleton adapter) | SPL Token / Token-2022 exact |
+| Solana | ✓ (runtime-wired demo adapter) | SPL Token / Token-2022 exact; selected from `caip10:solana:...` subjects |
 | Exchange | ✓ (demo adapter) | off-chain exchange settlement |
 | Custodial | ✓ (demo adapter) | custodial ledger settlement |
 | Gateway | ✓ (demo adapter) | traditional payment-gateway settlement |
@@ -630,8 +630,10 @@ system is kept; adds `VerifyOutcome` structured error codes (distinguishing
 
 > All rail adapters are **demo-grade** in v1: they return deterministic receipts
 > so the orchestration and TOCTOU-closing logic can be exercised end-to-end.
-> Real chain integrations (EVM RPC, Solana, Tempo, Stripe) replace the adapter
-> internals without changing the `RailAdapter` trait.
+> The Solana adapter is now wired through the default runtime/server settlement
+> path, not only exposed as a placeholder type. Real chain integrations (EVM
+> RPC, Solana, Tempo, Stripe) replace the adapter internals without changing
+> the `RailAdapter` trait.
 
 The Facilitator stays **rail-agnostic at the merchant boundary** (existing
 principle), exposing only `verify/settle/status`; rail selection is routing

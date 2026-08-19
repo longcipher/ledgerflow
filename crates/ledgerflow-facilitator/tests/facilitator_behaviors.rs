@@ -6,6 +6,8 @@
 
 #![allow(clippy::expect_used)]
 
+use std::sync::Arc;
+
 use ledgerflow_core::{
     AssetRef, AuthorizationContext, AuthorizationInput, InMemoryRevocationCheck,
     MerchantConstraint, PaymentConstraint, PaymentRail, PaymentSubjectKind, PaymentSubjectRef,
@@ -15,7 +17,8 @@ use ledgerflow_core::{
 };
 use ledgerflow_facilitator::{
     DefaultSubjectResolver, EvmRailAdapter, FileRevocationStore, SettlementRegistry,
-    SettlementService, VerificationService, VerifyRequest, VerifyStatus,
+    SettlementService, SharedRailAdapter, SolanaRailAdapter, VerificationService, VerifyRequest,
+    VerifyStatus,
 };
 
 fn issuer_keys() -> SigningKeyPair {
@@ -32,6 +35,13 @@ fn approver_keys() -> SigningKeyPair {
 
 fn subject_ref() -> PaymentSubjectRef {
     PaymentSubjectRef::new(PaymentSubjectKind::Caip10, "caip10:eip155:8453:0xabc123")
+}
+
+fn solana_subject_ref() -> PaymentSubjectRef {
+    PaymentSubjectRef::new(
+        PaymentSubjectKind::Caip10,
+        "caip10:solana:mainnet:7vfCXTUXx5Wn4P6m7XJ3e1yK2bXxVmW7nYj1m5X9A1t3",
+    )
 }
 
 fn merchant_constraint() -> MerchantConstraint {
@@ -68,6 +78,27 @@ fn root_warrant(now_ms: u64) -> Warrant {
         .sign_with(&issuer, [0_u8; 8])
 }
 
+fn solana_root_warrant(now_ms: u64) -> Warrant {
+    let issuer = issuer_keys();
+    let holder = holder_keys();
+    WarrantBuilder::new(now_ms)
+        .warrant_id(*b"root-solana-test")
+        .ttl_secs(60)
+        .max_depth(1)
+        .issuer(issuer.signer_ref())
+        .holder(holder.signer_ref())
+        .merchant(merchant_constraint())
+        .resource(resource_constraint())
+        .payment(
+            PaymentConstraint::new(1_000)
+                .with_asset(AssetRef::new("USDC", Some("solana".to_string())))
+                .with_rails(vec![PaymentRail::Onchain])
+                .with_schemes(vec!["exact".to_string()])
+                .with_payees(vec!["merchant-a".to_string()]),
+        )
+        .sign_with(&issuer, [1_u8; 8])
+}
+
 fn trusted() -> TrustedIssuers {
     let mut set = TrustedIssuers::new();
     set.add(TrustedIssuer::new("issuer-1".to_string(), issuer_keys().signer_ref()));
@@ -100,6 +131,13 @@ fn context(now_ms: u64, amount: u128) -> AuthorizationContext {
         payment_subject: subject_ref(),
         presenter: holder_keys().signer_ref(),
     }
+}
+
+fn solana_context(now_ms: u64, amount: u128) -> AuthorizationContext {
+    let mut context = context(now_ms, amount);
+    context.asset_network = Some("solana".to_string());
+    context.payment_subject = solana_subject_ref();
+    context
 }
 
 fn proof(warrant: &Warrant, context: &AuthorizationContext) -> PopProof {
@@ -532,6 +570,47 @@ fn settle_routes_to_matching_rail_and_fails_when_none() {
     });
     assert_eq!(failed.status, ledgerflow_facilitator::SettlementStatus::Failed);
     assert!(failed.reason.unwrap_or_default().contains("no rail adapter"));
+}
+
+#[test]
+fn settle_routes_solana_subjects_to_solana_adapter() {
+    let now_ms = 5_000;
+    let warrant = solana_root_warrant(now_ms);
+    let chain = WarrantChain::single(warrant);
+    let ctx = solana_context(now_ms, 100);
+    let proof = proof(chain.leaf().expect("leaf"), &ctx);
+    let verify_service = VerificationService::new(InMemoryRevocationCheck::new());
+    let verify_request = VerifyRequest {
+        chain: &chain,
+        trusted: &trusted(),
+        proof: &proof,
+        context: &ctx,
+        approvals: &[],
+        tool_arguments: &tool_arguments(),
+    };
+    let outcome = verify_service.verify(&verify_request);
+    let authorization = outcome.authorization.expect("authorized");
+
+    let settlement = SettlementService::new(
+        InMemoryRevocationCheck::new(),
+        DefaultSubjectResolver,
+        vec![
+            Arc::new(EvmRailAdapter) as SharedRailAdapter,
+            Arc::new(SolanaRailAdapter) as SharedRailAdapter,
+        ],
+    );
+    let result = settlement.settle(&ledgerflow_facilitator::SettleRequest {
+        authorization: &authorization,
+        chain: &chain,
+        proof: &proof,
+        context: &ctx,
+        now_ms,
+    });
+
+    assert_eq!(result.status, ledgerflow_facilitator::SettlementStatus::Settled);
+    let receipt = result.receipt.expect("receipt");
+    assert_eq!(receipt.rail, ledgerflow_facilitator::RailKind::Solana);
+    assert!(receipt.transaction_id.starts_with("solana-tx-"));
 }
 
 // ---------------------------------------------------------------------------

@@ -206,11 +206,17 @@ cargo run -p ledgerflow-cli -- sample-payment
   payment-identifier idempotency.
 - The Facilitator stays rail-agnostic at the merchant boundary while choosing
   concrete settlement adapters internally.
+- On-chain `caip10` subjects route by chain family: `caip10:eip155:...`
+  resolves to the EVM adapter, while `caip10:solana:...` resolves to the
+  Solana adapter in both the Facilitator and the server runtime.
 - Revocation is an online security commitment: production deployments MUST
   persist the revocation store; in-memory mode is demo-only with an explicit
   `--insecure-revoc-memory` flag.
 - Configuration is fail-fast: an invalid `[saas]` section is a startup error;
   an absent section is an explicit default to standalone.
+- Webhook delivery is best-effort and in-process, but now runs through a
+  bounded background worker queue instead of spawning one delivery thread per
+  emitted event.
 
 ## License
 

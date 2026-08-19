@@ -29,6 +29,20 @@ bun.lockb
 .env
 .env.local
 .env.*.local
+.env.*
+.envrc
+
+# Credentials, keys, and secrets
+*.pem
+*.key
+*.crt
+id_rsa
+id_rsa.*
+secrets.yaml
+secrets.yml
+secrets.toml
+*.sops.yaml
+*.sops.yml
 
 # Leptos
 /site/

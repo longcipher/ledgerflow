@@ -6,7 +6,7 @@ use thiserror::Error;
 use crate::{
     rails::{
         RailAdapter, RailError, RailQuote, custodial::CustodialRailAdapter, evm::EvmRailAdapter,
-        exchange::ExchangeRailAdapter, gateway::GatewayRailAdapter,
+        exchange::ExchangeRailAdapter, gateway::GatewayRailAdapter, solana::SolanaRailAdapter,
     },
     subject::{
         DefaultSubjectResolver, PaymentSubjectResolver, ResolvedSubject, SubjectResolutionError,
@@ -55,6 +55,7 @@ impl Default for Facilitator<DefaultSubjectResolver> {
             DefaultSubjectResolver,
             vec![
                 Box::new(EvmRailAdapter),
+                Box::new(SolanaRailAdapter),
                 Box::new(ExchangeRailAdapter),
                 Box::new(CustodialRailAdapter),
                 Box::new(GatewayRailAdapter),

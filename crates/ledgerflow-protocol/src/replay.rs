@@ -40,8 +40,26 @@ pub trait ReplayStore {
         fingerprint: ReplayFingerprint,
         now_ms: u64,
     ) -> std::result::Result<(), ReplayConflict>;
-    fn cached_payment(&self, payment_identifier: &str) -> Option<VerifiedAuthorization>;
-    fn cache_payment(&mut self, payment_identifier: String, authorization: VerifiedAuthorization);
+    fn cached_payment(
+        &self,
+        payment_identifier: &str,
+        request_hash: &str,
+        accepted_hash: &str,
+    ) -> Option<VerifiedAuthorization>;
+    fn cache_payment(
+        &mut self,
+        payment_identifier: String,
+        authorization: VerifiedAuthorization,
+        request_hash: String,
+        accepted_hash: String,
+    );
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CachedPayment {
+    pub authorization: VerifiedAuthorization,
+    pub request_hash: String,
+    pub accepted_hash: String,
 }
 
 const DEFAULT_TTL_MS: u64 = 300_000;
@@ -50,7 +68,7 @@ const DEFAULT_TTL_MS: u64 = 300_000;
 #[derive(Clone, Debug)]
 pub struct InMemoryReplayStore {
     nonce_claims: BTreeMap<(String, String), NonceClaim>,
-    payment_results: BTreeMap<String, VerifiedAuthorization>,
+    payment_results: BTreeMap<String, CachedPayment>,
     ttl_ms: u64,
 }
 
@@ -86,12 +104,29 @@ impl ReplayStore for InMemoryReplayStore {
         Ok(())
     }
 
-    fn cached_payment(&self, payment_identifier: &str) -> Option<VerifiedAuthorization> {
-        self.payment_results.get(payment_identifier).cloned()
+    fn cached_payment(
+        &self,
+        payment_identifier: &str,
+        request_hash: &str,
+        accepted_hash: &str,
+    ) -> Option<VerifiedAuthorization> {
+        self.payment_results.get(payment_identifier).and_then(|cached| {
+            (cached.request_hash == request_hash && cached.accepted_hash == accepted_hash)
+                .then(|| cached.authorization.clone())
+        })
     }
 
-    fn cache_payment(&mut self, payment_identifier: String, authorization: VerifiedAuthorization) {
-        self.payment_results.insert(payment_identifier, authorization);
+    fn cache_payment(
+        &mut self,
+        payment_identifier: String,
+        authorization: VerifiedAuthorization,
+        request_hash: String,
+        accepted_hash: String,
+    ) {
+        self.payment_results.insert(
+            payment_identifier,
+            CachedPayment { authorization, request_hash, accepted_hash },
+        );
     }
 }
 
@@ -160,11 +195,18 @@ mod tests {
     #[test]
     fn payment_cache_round_trips() {
         let mut store = InMemoryReplayStore::default();
-        assert!(store.cached_payment("p1").is_none());
+        assert!(store.cached_payment("p1", "sha256:req", "sha256:acc").is_none());
         let auth = dummy_authorization();
-        store.cache_payment("p1".to_string(), auth.clone());
-        assert_eq!(store.cached_payment("p1"), Some(auth));
-        assert!(store.cached_payment("p2").is_none());
+        store.cache_payment(
+            "p1".to_string(),
+            auth.clone(),
+            "sha256:req".to_string(),
+            "sha256:acc".to_string(),
+        );
+        assert_eq!(store.cached_payment("p1", "sha256:req", "sha256:acc"), Some(auth.clone()));
+        assert!(store.cached_payment("p1", "sha256:other", "sha256:acc").is_none());
+        assert!(store.cached_payment("p1", "sha256:req", "sha256:other").is_none());
+        assert!(store.cached_payment("p2", "sha256:req", "sha256:acc").is_none());
     }
 
     fn dummy_authorization() -> VerifiedAuthorization {

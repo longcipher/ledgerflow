@@ -1,9 +1,11 @@
 //! Application state shared by handlers.
 
+use std::sync::Arc;
+
 use ledgerflow_core::{RevocationCheck, SignerRef, SigningKeyPair, TrustedIssuers};
 use ledgerflow_facilitator::{
     DefaultSubjectResolver, EvmRailAdapter, FileRevocationStore, SettlementRegistry,
-    SettlementService, VerificationService,
+    SettlementService, SharedRailAdapter, SolanaRailAdapter, VerificationService,
 };
 
 /// Application state.
@@ -12,7 +14,8 @@ pub struct AppState {
     pub config: crate::config::ServerConfig,
     pub saas: crate::saas::SaasAuthExtractor,
     pub verification: VerificationService<FileRevocationStore>,
-    pub settlement: SettlementService<FileRevocationStore, DefaultSubjectResolver, EvmRailAdapter>,
+    pub settlement:
+        SettlementService<FileRevocationStore, DefaultSubjectResolver, SharedRailAdapter>,
     pub registry: SettlementRegistry,
     pub trusted: TrustedIssuers,
     /// The issuer signing key used to issue warrants. Never a predictable demo
@@ -35,7 +38,10 @@ impl AppState {
         let settlement = SettlementService::new(
             revocation.clone(),
             DefaultSubjectResolver,
-            vec![EvmRailAdapter],
+            vec![
+                Arc::new(EvmRailAdapter) as SharedRailAdapter,
+                Arc::new(SolanaRailAdapter) as SharedRailAdapter,
+            ],
         );
         // The issuer key is mandatory; `NewAppState::demo` supplies a test key,
         // but production construction must provide a real key via config.
@@ -152,3 +158,116 @@ fn hex_encode(bytes: &[u8]) -> String {
 // can rely on it without an explicit import.
 #[allow(dead_code)]
 pub(crate) fn _trait_bounds_used(_check: &dyn RevocationCheck, _signer: &SignerRef) {}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::expect_used)]
+
+    use ledgerflow_core::{
+        AssetRef, AuthorizationContext, MerchantConstraint, PaymentConstraint, PaymentRail,
+        PaymentSubjectKind, PaymentSubjectRef, PopProof, ProofBuilder, ResourceConstraint,
+        WarrantBuilder, WarrantChain, sha256_prefixed,
+    };
+
+    use super::*;
+
+    fn root_warrant(now_ms: u64) -> ledgerflow_core::Warrant {
+        let issuer = SigningKeyPair::from_bytes(&[1_u8; 32]);
+        let holder = SigningKeyPair::from_bytes(&[2_u8; 32]);
+        WarrantBuilder::new(now_ms)
+            .warrant_id(*b"solana-state-tst")
+            .ttl_secs(60)
+            .max_depth(1)
+            .issuer(issuer.signer_ref())
+            .holder(holder.signer_ref())
+            .merchant(MerchantConstraint::with_ids(vec!["merchant-a".to_string()]))
+            .resource(ResourceConstraint {
+                http_methods: vec!["POST".to_string()],
+                path_prefixes: vec!["/pay".to_string()],
+            })
+            .payment(
+                PaymentConstraint::new(1_000)
+                    .with_asset(AssetRef::new("USDC", Some("solana".to_string())))
+                    .with_rails(vec![PaymentRail::Onchain])
+                    .with_schemes(vec!["exact".to_string()])
+                    .with_payees(vec!["merchant-a".to_string()]),
+            )
+            .sign_with(&issuer, [0_u8; 8])
+    }
+
+    fn solana_context(now_ms: u64) -> AuthorizationContext {
+        AuthorizationContext {
+            merchant_id: "merchant-a".to_string(),
+            merchant_host: "merchant-a.example".to_string(),
+            tool_name: "web-search".to_string(),
+            model_provider: String::new(),
+            action_label: String::new(),
+            http_method: "POST".to_string(),
+            path_and_query: "/pay".to_string(),
+            selected_amount: 100,
+            asset: "USDC".to_string(),
+            asset_network: Some("solana".to_string()),
+            scheme: "exact".to_string(),
+            payee_id: "merchant-a".to_string(),
+            rail: PaymentRail::Onchain,
+            challenge_id: "challenge-1".to_string(),
+            request_hash: sha256_prefixed("POST\nmerchant-a.example\n/pay\nsha256:body"),
+            accepted_hash: sha256_prefixed("exact:USDC:100:merchant-a"),
+            now_ms,
+            freshness_window_ms: 60_000,
+            clock_skew_ms: 30_000,
+            payment_subject: PaymentSubjectRef::new(
+                PaymentSubjectKind::Caip10,
+                "caip10:solana:mainnet:7vfCXTUXx5Wn4P6m7XJ3e1yK2bXxVmW7nYj1m5X9A1t3",
+            ),
+            presenter: SigningKeyPair::from_bytes(&[2_u8; 32]).signer_ref(),
+        }
+    }
+
+    fn proof(warrant: &ledgerflow_core::Warrant, context: &AuthorizationContext) -> PopProof {
+        ProofBuilder::new()
+            .warrant_id(warrant.id.clone())
+            .challenge_id(context.challenge_id.clone())
+            .method(context.http_method.clone())
+            .uri(format!("{}{}", context.merchant_host, context.path_and_query))
+            .request_hash(context.request_hash.clone())
+            .accepted_hash(context.accepted_hash.clone())
+            .payment_payload_digest(sha256_prefixed("x402-payload"))
+            .nonce("nonce-1".to_string())
+            .created_at_ms(context.now_ms)
+            .sign_with(&SigningKeyPair::from_bytes(&[2_u8; 32]))
+    }
+
+    #[test]
+    fn app_state_routes_solana_subjects_through_settlement_runtime() {
+        let state = NewAppState::demo().expect("demo state");
+        let now_ms = 5_000;
+        let warrant = root_warrant(now_ms);
+        let chain = WarrantChain::single(warrant.clone());
+        let context = solana_context(now_ms);
+        let proof = proof(&warrant, &context);
+        let tool_arguments = std::collections::BTreeMap::new();
+        let outcome = state.verification.verify(&ledgerflow_facilitator::VerifyRequest {
+            chain: &chain,
+            trusted: &state.trusted,
+            proof: &proof,
+            context: &context,
+            approvals: &[],
+            tool_arguments: &tool_arguments,
+        });
+        let authorization = outcome.authorization.expect("authorized");
+
+        let settlement = state.settlement.settle(&ledgerflow_facilitator::SettleRequest {
+            authorization: &authorization,
+            chain: &chain,
+            proof: &proof,
+            context: &context,
+            now_ms,
+        });
+
+        assert_eq!(settlement.status, ledgerflow_facilitator::SettlementStatus::Settled);
+        let receipt = settlement.receipt.expect("receipt");
+        assert_eq!(receipt.rail, ledgerflow_facilitator::RailKind::Solana);
+        assert!(receipt.transaction_id.starts_with("solana-tx-"));
+    }
+}

@@ -132,14 +132,18 @@ where
             return Err(MerchantVerificationError::ExtensionSignerMismatch);
         }
 
+        let accepted_hash = canonical_accepted_hash(&payload.accepted);
+        let request_hash = canonical_request_hash(request);
+
         if let Some(payment_identifier) = payload.payment_identifier() &&
-            let Some(authorization) = self.replay_store.cached_payment(payment_identifier)
+            let Some(authorization) = self.replay_store.cached_payment(
+                payment_identifier,
+                &request_hash,
+                &accepted_hash,
+            )
         {
             return Ok(MerchantVerificationOutcome { authorization, settlement_reused: true });
         }
-
-        let accepted_hash = canonical_accepted_hash(&payload.accepted);
-        let request_hash = canonical_request_hash(request);
 
         self.claim_replay(challenge, extension, &request_hash, &accepted_hash, now_ms)?;
 
@@ -190,7 +194,12 @@ where
         let authorization = ledgerflow_core::verify_authorization(&input)?;
 
         if let Some(payment_identifier) = payload.payment_identifier() {
-            self.replay_store.cache_payment(payment_identifier.to_string(), authorization.clone());
+            self.replay_store.cache_payment(
+                payment_identifier.to_string(),
+                authorization.clone(),
+                request_hash.clone(),
+                accepted_hash.clone(),
+            );
         }
 
         Ok(MerchantVerificationOutcome { authorization, settlement_reused: false })

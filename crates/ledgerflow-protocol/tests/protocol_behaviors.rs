@@ -273,6 +273,53 @@ fn merchant_verifier_reuses_cached_payment_identifier() {
 }
 
 #[test]
+fn merchant_verifier_rejects_cached_payment_identifier_with_mismatched_request_binding() {
+    let accepted = AcceptedQuote::exact("USDC", 100, "merchant-a", Some("base".to_string()));
+    let challenge = challenge();
+    let payload = build_payment_payload(
+        &challenge,
+        &request(),
+        accepted,
+        WarrantChain::single(root_warrant()),
+        seed(),
+    )
+    .expect("build");
+    let mut verifier = MerchantVerifier::new(
+        InMemoryReplayStore::default(),
+        InMemoryWarrantRepository::default(),
+        InMemoryRevocationCheck::new(),
+    );
+
+    verifier
+        .verify_payment(
+            &challenge,
+            &request(),
+            &payload,
+            &trusted(),
+            "web-search",
+            &tool_arguments(),
+            2_000,
+        )
+        .expect("first");
+
+    let mismatched_request =
+        HttpRequest::new("POST", "merchant-a.example", "/pay?other=1", br#"{"ok":true}"#.to_vec());
+    let error = verifier
+        .verify_payment(
+            &challenge,
+            &mismatched_request,
+            &payload,
+            &trusted(),
+            "web-search",
+            &tool_arguments(),
+            2_500,
+        )
+        .expect_err("mismatched request binding must not reuse cached settlement");
+
+    assert!(matches!(error, ledgerflow_protocol::MerchantVerificationError::ReplayDetected));
+}
+
+#[test]
 fn merchant_verifier_rejects_challenge_mismatch() {
     let accepted = AcceptedQuote::exact("USDC", 100, "merchant-a", Some("base".to_string()));
     let other_challenge = LedgerFlowChallenge {

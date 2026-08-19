@@ -13,6 +13,8 @@ pub mod exchange;
 pub mod gateway;
 pub mod solana;
 
+use std::sync::Arc;
+
 use ledgerflow_core::VerifiedAuthorization;
 use thiserror::Error;
 
@@ -65,6 +67,37 @@ pub trait RailAdapter: Send + Sync {
     fn verify(&self, receipt: &SettlementReceipt) -> Result<VerificationResult, RailError>;
 }
 
+/// Shared rail-adapter handle used by runtime settlement wiring.
+pub type SharedRailAdapter = Arc<dyn RailAdapter>;
+
+impl<T> RailAdapter for Arc<T>
+where
+    T: RailAdapter + ?Sized,
+{
+    fn kind(&self) -> RailKind {
+        self.as_ref().kind()
+    }
+
+    fn supports(&self, subject: &ResolvedSubject) -> bool {
+        self.as_ref().supports(subject)
+    }
+
+    fn quote(&self, authorization: &VerifiedAuthorization) -> Result<RailQuote, RailError> {
+        self.as_ref().quote(authorization)
+    }
+
+    fn settle(
+        &self,
+        authorization: &VerifiedAuthorization,
+    ) -> Result<SettlementReceipt, RailError> {
+        self.as_ref().settle(authorization)
+    }
+
+    fn verify(&self, receipt: &SettlementReceipt) -> Result<VerificationResult, RailError> {
+        self.as_ref().verify(receipt)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -72,7 +105,7 @@ mod tests {
     use crate::{
         rails::{
             custodial::CustodialRailAdapter, evm::EvmRailAdapter, exchange::ExchangeRailAdapter,
-            gateway::GatewayRailAdapter,
+            gateway::GatewayRailAdapter, solana::SolanaRailAdapter,
         },
         routing::RailKind,
     };
@@ -85,10 +118,20 @@ mod tests {
     fn evm_adapter_only_supports_evm() {
         let adapter = EvmRailAdapter;
         assert!(adapter.supports(&subject(RailKind::Evm)));
+        assert!(!adapter.supports(&subject(RailKind::Solana)));
         assert!(!adapter.supports(&subject(RailKind::Exchange)));
         assert!(!adapter.supports(&subject(RailKind::Gateway)));
         assert!(!adapter.supports(&subject(RailKind::Custodial)));
         assert_eq!(adapter.kind(), RailKind::Evm);
+    }
+
+    #[test]
+    fn solana_adapter_only_supports_solana() {
+        let adapter = SolanaRailAdapter;
+        assert!(adapter.supports(&subject(RailKind::Solana)));
+        assert!(!adapter.supports(&subject(RailKind::Evm)));
+        assert!(!adapter.supports(&subject(RailKind::Exchange)));
+        assert_eq!(adapter.kind(), RailKind::Solana);
     }
 
     #[test]
@@ -196,5 +239,12 @@ mod tests {
                 .to_string()
                 .contains("verification failed")
         );
+    }
+
+    #[test]
+    fn shared_rail_adapter_dispatches_to_underlying_adapter() {
+        let adapter: SharedRailAdapter = Arc::new(SolanaRailAdapter);
+        assert!(adapter.supports(&subject(RailKind::Solana)));
+        assert_eq!(adapter.kind(), RailKind::Solana);
     }
 }
