@@ -54,6 +54,10 @@ where
             approvals: request.approvals,
             tool_arguments: request.tool_arguments,
             revocation: &self.revocation,
+            // The Facilitator pre-check has no payment-payload context of its
+            // own; the binding is enforced by the merchant verifier which sets
+            // this. Leaving it `None` performs no digest check here.
+            payment_payload_digest: None,
         };
         match verify_authorization(&input) {
             Ok(authorization) => VerifyOutcome::ok(authorization),

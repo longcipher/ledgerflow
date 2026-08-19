@@ -140,6 +140,25 @@ pub const fn saas_auth_extractor_state(
     axum::extract::State(extractor)
 }
 
+/// Axum extractor for the per-request [`SaaSContext`].
+///
+/// The [`saas_auth_middleware`] inserts the context into request extensions on
+/// every request, so handlers can depend on it directly. This closes the gap
+/// where the context was computed but never consumed (design §10.2 tenant
+/// isolation).
+impl axum::extract::FromRequestParts<crate::state::AppState> for SaaSContext {
+    type Rejection = std::convert::Infallible;
+
+    fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        _state: &crate::state::AppState,
+    ) -> impl std::future::Future<Output = Result<Self, Self::Rejection>> + Send {
+        let context =
+            parts.extensions.get::<Self>().cloned().unwrap_or_else(|| Self::standalone("default"));
+        std::future::ready(Ok(context))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

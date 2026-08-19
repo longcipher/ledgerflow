@@ -104,6 +104,61 @@ impl FileRevocationStore {
         Ok(())
     }
 
+    /// Tenant-scoped revocation of a warrant (design §10.2 tenant isolation).
+    ///
+    /// Keys are namespaced by `tenant_id` so one tenant's revocation cannot
+    /// affect another. The record is also appended to the same JSON-Lines file;
+    /// the in-memory set is keyed by the tenant-scoped composite key.
+    pub fn revoke_warrant_for(
+        &self,
+        tenant_id: &str,
+        warrant_id: &[u8],
+    ) -> Result<(), RevocationStoreError> {
+        let scoped = tenant_scoped_key(tenant_id, warrant_id);
+        let record = RevocationRecord::Warrant { id_hex: hex_encode(&scoped) };
+        self.append(&record)?;
+        if let Ok(mut set) = self.inner.revoked_warrants.lock() {
+            set.insert(scoped);
+        }
+        Ok(())
+    }
+
+    /// Tenant-scoped revocation of a holder key (design §10.2).
+    pub fn revoke_holder_for(
+        &self,
+        tenant_id: &str,
+        holder: &SignerRef,
+    ) -> Result<(), RevocationStoreError> {
+        let scoped = tenant_scoped_key(tenant_id, &holder.public_key);
+        let record = RevocationRecord::Holder { key_hex: hex_encode(&scoped) };
+        self.append(&record)?;
+        if let Ok(mut set) = self.inner.revoked_holders.lock() {
+            set.insert(scoped);
+        }
+        Ok(())
+    }
+
+    /// Tenant-scoped warrant revocation check (design §10.2).
+    #[must_use]
+    pub fn check_warrant_for(&self, tenant_id: &str, warrant_id: &[u8]) -> RevocationDecision {
+        let scoped = tenant_scoped_key(tenant_id, warrant_id);
+        self.check_warrant(&scoped)
+    }
+
+    /// Tenant-scoped holder revocation check (design §10.2).
+    #[must_use]
+    pub fn check_holder_for(&self, tenant_id: &str, holder: &SignerRef) -> RevocationDecision {
+        let scoped = tenant_scoped_key(tenant_id, &holder.public_key);
+        self.check_holder_key(&scoped)
+    }
+
+    /// Checks whether a raw (possibly tenant-scoped) holder key is revoked.
+    #[must_use]
+    pub fn check_holder_key(&self, holder_key: &[u8]) -> RevocationDecision {
+        let revoked = self.inner.revoked_holders.lock().is_ok_and(|set| set.contains(holder_key));
+        if revoked { RevocationDecision::RevokedHolder } else { RevocationDecision::Ok }
+    }
+
     fn append(&self, record: &RevocationRecord) -> Result<(), RevocationStoreError> {
         let mut file = OpenOptions::new()
             .create(true)
@@ -196,6 +251,19 @@ fn hex_decode(hex: &str) -> Result<Vec<u8>, ()> {
         .step_by(2)
         .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).map_err(|_| ()))
         .collect()
+}
+
+/// Builds a tenant-scoped composite revocation key.
+///
+/// Tenant isolation (design §10.2) requires that one tenant's revocation cannot
+/// match another's; we prefix the key with the tenant id and a separator that
+/// cannot appear in a hex key.
+fn tenant_scoped_key(tenant_id: &str, key: &[u8]) -> Vec<u8> {
+    let mut scoped = Vec::with_capacity(tenant_id.len() + 1 + key.len());
+    scoped.extend_from_slice(tenant_id.as_bytes());
+    scoped.push(0xFF);
+    scoped.extend_from_slice(key);
+    scoped
 }
 
 #[cfg(test)]

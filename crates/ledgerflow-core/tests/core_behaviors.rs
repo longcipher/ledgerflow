@@ -145,6 +145,7 @@ fn authorize(
         approvals,
         tool_arguments: &std::collections::BTreeMap::new(),
         revocation,
+        payment_payload_digest: None,
     };
     verify_authorization(&input)
 }
@@ -564,6 +565,7 @@ fn tenant_isolation_via_separate_trust_anchors() {
         approvals: &[],
         tool_arguments: &std::collections::BTreeMap::new(),
         revocation: &InMemoryRevocationCheck::new(),
+        payment_payload_digest: None,
     };
     let error = verify_authorization(&input).expect_err("cross-tenant");
     assert!(matches!(error, ledgerflow_core::AuthorizationError::UntrustedIssuer { .. }));

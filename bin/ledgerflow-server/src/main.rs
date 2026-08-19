@@ -26,11 +26,22 @@ async fn main() -> Result<()> {
     let config = ServerConfig::from_env().wrap_err("invalid configuration (fail-fast)")?;
     println!("ledgerflow-server: bind={} mode={:?}", config.bind_addr, config.saas.mode);
 
+    // The trust anchor is derived from the configured issuer key (fail-fast
+    // guarantees it is present; never a predictable demo key — design §6.8).
+    let issuer_key_hex = config
+        .issuer_key_hex
+        .clone()
+        .ok_or_else(|| eyre::eyre!("LEDGERFLOW_ISSUER_KEY is required (fail-fast)"))?;
+    let issuer_key_bytes = hex_decode(&issuer_key_hex)
+        .ok_or_else(|| eyre::eyre!("LEDGERFLOW_ISSUER_KEY must be 32-byte hex"))?;
+    let issuer_key = ledgerflow_core::SigningKeyPair::from_bytes(&issuer_key_bytes);
+
     let state = AppState::new(config.clone(), &cli.revocation_store, {
         let mut trusted = ledgerflow_core::TrustedIssuers::new();
-        let issuer = ledgerflow_core::SigningKeyPair::from_bytes(&[1_u8; 32]);
-        trusted
-            .add(ledgerflow_core::TrustedIssuer::new("issuer-1".to_string(), issuer.signer_ref()));
+        trusted.add(ledgerflow_core::TrustedIssuer::new(
+            "issuer-1".to_string(),
+            issuer_key.signer_ref(),
+        ));
         trusted
     })
     .wrap_err("failed to initialize application state")?;
@@ -44,4 +55,18 @@ async fn main() -> Result<()> {
         tokio::net::TcpListener::bind(&config.bind_addr).await.wrap_err("failed to bind")?;
     println!("listening on {}", config.bind_addr);
     axum::serve(listener, app).await.wrap_err("server error")
+}
+
+/// Decodes a 32-byte hex string into bytes.
+fn hex_decode(hex: &str) -> Option<[u8; 32]> {
+    let hex = hex.trim();
+    if hex.len() != 64 {
+        return None;
+    }
+    let mut out = [0_u8; 32];
+    for (i, chunk) in hex.as_bytes().chunks(2).enumerate() {
+        let text = std::str::from_utf8(chunk).ok()?;
+        out[i] = u8::from_str_radix(text, 16).ok()?;
+    }
+    Some(out)
 }

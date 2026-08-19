@@ -2,10 +2,17 @@
 
 #![allow(clippy::expect_used)]
 
+use std::sync::Mutex;
+
 use ledgerflow_server::{
     config::{SaasMode, ServerConfig},
     saas::{SaaSContext, SaasAuthExtractor},
 };
+
+/// Serializes tests that mutate process-global environment variables. Rust
+/// runs tests in parallel threads within one process, so env-var access must
+/// be exclusive to avoid cross-test interference.
+static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 fn saas_extractor(mode: SaasMode, token: Option<&str>) -> SaasAuthExtractor {
     SaasAuthExtractor {
@@ -78,6 +85,7 @@ fn saas_mode_requires_tenant_header() {
 
 #[test]
 fn config_fail_fast_on_invalid_mode() {
+    let _guard = ENV_LOCK.lock().expect("env lock");
     unsafe {
         std::env::set_var("LEDGERFLOW_SAAS_MODE", "bogus");
     }
@@ -90,6 +98,7 @@ fn config_fail_fast_on_invalid_mode() {
 
 #[test]
 fn config_requires_service_token_in_saas_mode() {
+    let _guard = ENV_LOCK.lock().expect("env lock");
     unsafe {
         std::env::set_var("LEDGERFLOW_SAAS_MODE", "saas");
     }
@@ -105,15 +114,26 @@ fn config_requires_service_token_in_saas_mode() {
 
 #[test]
 fn config_defaults_to_standalone_without_saas_env() {
+    let _guard = ENV_LOCK.lock().expect("env lock");
     unsafe {
         std::env::remove_var("LEDGERFLOW_SAAS_MODE");
     }
     unsafe {
         std::env::remove_var("LEDGERFLOW_SERVICE_TOKEN");
     }
+    // The issuer key is mandatory (fail-fast); supply a valid 32-byte hex key.
+    unsafe {
+        std::env::set_var(
+            "LEDGERFLOW_ISSUER_KEY",
+            "0101010101010101010101010101010101010101010101010101010101010101",
+        );
+    }
     let config = ServerConfig::from_env().expect("standalone default");
     assert_eq!(config.saas.mode, SaasMode::Standalone);
     assert_eq!(config.saas.tenant_id, "default");
+    unsafe {
+        std::env::remove_var("LEDGERFLOW_ISSUER_KEY");
+    }
 }
 
 #[test]

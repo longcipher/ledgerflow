@@ -620,11 +620,18 @@ system is kept; adds `VerifyOutcome` structured error codes (distinguishing
 
 | Rail | Status | Notes |
 |---|---|---|
-| EVM | ✓ (existing) | `exact` / `upto` / `batch-settlement` schemes |
-| Solana | ✓ (existing skeleton) | SPL Token / Token-2022 exact |
+| EVM | ✓ (demo adapter) | `exact` / `upto` / `batch-settlement` schemes |
+| Solana | ✓ (skeleton adapter) | SPL Token / Token-2022 exact |
+| Exchange | ✓ (demo adapter) | off-chain exchange settlement |
+| Custodial | ✓ (demo adapter) | custodial ledger settlement |
+| Gateway | ✓ (demo adapter) | traditional payment-gateway settlement |
 | Tempo | roadmap | MPP charge/session (reusing the mpp-rs approach) |
 | Stripe | roadmap | card acquiring (SPT) |
-| Traditional gateway / custodial | roadmap | custodial/gateway skeleton exists |
+
+> All rail adapters are **demo-grade** in v1: they return deterministic receipts
+> so the orchestration and TOCTOU-closing logic can be exercised end-to-end.
+> Real chain integrations (EVM RPC, Solana, Tempo, Stripe) replace the adapter
+> internals without changing the `RailAdapter` trait.
 
 The Facilitator stays **rail-agnostic at the merchant boundary** (existing
 principle), exposing only `verify/settle/status`; rail selection is routing
@@ -651,19 +658,27 @@ written to the audit record (append-only, §13.7).
 Defines the `WalletSigner` abstraction (in the `ledgerflow-wallet` crate):
 
 ```rust
-#[async_trait]
 pub trait WalletSigner: Send + Sync {
     /// Wallet identifier (URI / name).
     fn descriptor(&self) -> WalletDescriptor;
 
-    /// Sign warrants / approvals (signed by the holder private key).
-    async fn sign(&self, domain: SignDomain, message: &[u8]) -> Result<SignatureEnvelope>;
+    /// Lists the keys available in this wallet.
+    fn keys(&self) -> Result<Vec<SignerRef>, WalletError>;
 
-    /// Sign on-chain payment transactions (called by rail schemes).
-    async fn sign_payment(&self, req: SignPaymentRequest) -> Result<SignedPayment>;
+    /// Signs an arbitrary message.
+    fn sign(&self, request: &SignRequest) -> Result<SignResult, WalletError>;
+
+    /// Signs on-chain payment transactions (called by rail schemes).
+    fn sign_payment(&self, request: &SignPaymentRequest) -> Result<SignedPayment, WalletError>;
 }
 ```
 
+> The interface is **synchronous** by design: the underlying operations are
+> local signing or short-lived transport calls, which keeps embedded /
+> in-process signers simple and avoids blocking an async runtime. HTTP-backed
+> signers perform their transport call synchronously; callers that must not
+> block an async executor should run them on a blocking thread
+> (e.g. `tokio::task::spawn_blocking`).
 > Wallet implementation details (adapters, vendor differences, integration
 > test checklist) are recorded in a separate integration-guide document, not
 > in this design document, to preserve protocol-layer neutrality.

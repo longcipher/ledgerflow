@@ -83,8 +83,13 @@ pub struct SignedPayment {
 
 /// Wallet capability interface.
 ///
-/// Implementations MUST be `Send + Sync`. The interface is synchronous: the
-/// underlying operations are local signing or short-lived transport calls.
+/// Implementations MUST be `Send + Sync`. The interface is **synchronous** by
+/// design (design §9.1): the underlying operations are local signing or
+/// short-lived transport calls, and a synchronous trait keeps embedded /
+/// in-process signers simple and avoids blocking an async runtime. HTTP-backed
+/// signers (e.g. [`crate::LocalRpcSigner`]) perform their transport call
+/// synchronously; callers that must not block an async executor should run
+/// them on a blocking thread (e.g. `tokio::task::spawn_blocking`).
 pub trait WalletSigner: Send + Sync {
     fn descriptor(&self) -> WalletDescriptor;
 

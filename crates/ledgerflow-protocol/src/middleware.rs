@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 use ledgerflow_core::{
     AuthorizationContext, AuthorizationInput, DEFAULT_PROOF_FRESHNESS_MS, PaymentRail,
     RevocationCheck, ToolArguments, TrustedIssuers, VerifiedAuthorization, Warrant, WarrantChain,
+    sha256_prefixed,
 };
 use thiserror::Error;
 
@@ -183,6 +184,8 @@ where
             approvals: &extension.approvals,
             tool_arguments,
             revocation: &self.revocation,
+            // Bind the PoP to the concrete accepted quote (design §6.3).
+            payment_payload_digest: Some(sha256_prefixed(payload.accepted.canonical())),
         };
         let authorization = ledgerflow_core::verify_authorization(&input)?;
 
@@ -304,6 +307,7 @@ mod tests {
             crate::x402::AcceptedQuote::exact("USDC", 100, "merchant-a", Some("base".to_string()));
         let request_hash = crate::x402::canonical_request_hash(&req);
         let accepted_hash = crate::x402::canonical_accepted_hash(&quote);
+        let payment_payload_digest = sha256_prefixed(quote.canonical());
         let ctx = AuthorizationContext {
             merchant_id: "merchant-a".to_string(),
             merchant_host: "merchant-a.example".to_string(),
@@ -337,7 +341,7 @@ mod tests {
             .uri(format!("{}{}", ctx.merchant_host, ctx.path_and_query))
             .request_hash(ctx.request_hash.clone())
             .accepted_hash(ctx.accepted_hash.clone())
-            .payment_payload_digest(sha256_prefixed("x402-payload"))
+            .payment_payload_digest(payment_payload_digest.clone())
             .nonce("nonce-1".to_string())
             .created_at_ms(ctx.now_ms)
             .sign_with(&holder_keys());

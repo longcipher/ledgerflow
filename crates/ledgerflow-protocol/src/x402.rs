@@ -237,6 +237,11 @@ pub fn build_payment_payload(
     };
 
     let tool_args_digest = PopTuple::tool_args_digest(&seed.tool_args);
+    // Bind the PoP to the concrete accepted quote (design §6.3). The digest is
+    // derived from the canonical quote representation and is later cross-checked
+    // by `verify_authorization`, so a valid PoP cannot be reused against a
+    // different payment.
+    let payment_payload_digest = sha256_prefixed(accepted.canonical());
     let tuple = PopTuple {
         warrant_id: leaf.id,
         challenge_id: challenge.challenge_id.clone(),
@@ -244,7 +249,7 @@ pub fn build_payment_payload(
         uri: format!("{}{}", request.authority, request.path_and_query),
         request_hash,
         accepted_hash,
-        payment_payload_digest: sha256_prefixed("x402-payment-payload"),
+        payment_payload_digest,
         tool_args_digest,
         approvals_digest,
         nonce: seed.nonce.clone(),
@@ -264,8 +269,10 @@ pub fn build_payment_payload(
         .sign_with(&seed.signer);
 
     Ok(PaymentPayload {
-        accepted,
-        settlement_payload: "x402-payment-payload".to_string(),
+        accepted: accepted.clone(),
+        // The settlement payload carries the canonical quote; the PoP commits
+        // to its digest, so the two stay consistent (design §6.3).
+        settlement_payload: accepted.canonical(),
         payment_identifier: seed.payment_identifier.clone(),
         ledgerflow: Some(LedgerFlowAuthorizationExtension {
             version: LEDGERFLOW_EXTENSION_VERSION.to_string(),

@@ -7,11 +7,17 @@ repository.workspace = true
 
 [dependencies]
 axum.workspace = true
+hpx = { workspace = true, features = ["json"] }
 ledgerflow-core = { path = "../ledgerflow-core" }
 ledgerflow-facilitator = { path = "../ledgerflow-facilitator" }
+rand = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 thiserror.workspace = true
+tokio = { workspace = true, features = ["rt", "time", "macros"] }
+tracing.workspace = true
+utoipa = { workspace = true, features = ["axum_extras"] }
+utoipa-swagger-ui = { workspace = true, features = ["axum"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread"] }

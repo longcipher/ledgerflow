@@ -11,6 +11,7 @@ pub mod custodial;
 pub mod evm;
 pub mod exchange;
 pub mod gateway;
+pub mod solana;
 
 use ledgerflow_core::VerifiedAuthorization;
 use thiserror::Error;

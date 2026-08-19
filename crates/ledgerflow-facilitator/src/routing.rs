@@ -17,6 +17,7 @@ use crate::{
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RailKind {
     Evm,
+    Solana,
     Exchange,
     Custodial,
     Gateway,

@@ -70,7 +70,21 @@ where
             }
         };
 
-        // 3. Settle.
+        // 3. Final revocation re-check immediately before settlement.
+        //
+        // Design §8.1 requires the settlement action and the final revocation
+        // check to be as close to atomic as the store allows. `reverify` above
+        // already checked revocation; we re-check once more right before
+        // touching the rail to shrink the verify→settle TOCTOU window. The
+        // residual window (a revocation landing between this check and the
+        // rail call) is documented as a deployment concern: production should
+        // hold a settlement lease or perform the check inside the rail's
+        // transaction when the rail supports it.
+        if let Err(error) = self.reverify(request) {
+            return SettlementOutcome::failed(error.to_string());
+        }
+
+        // 4. Settle.
         match adapter.settle(request.authorization) {
             Ok(receipt) => SettlementOutcome::settled(receipt),
             Err(error) => SettlementOutcome::failed(error.to_string()),

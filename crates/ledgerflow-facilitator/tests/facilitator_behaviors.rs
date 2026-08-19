@@ -554,6 +554,7 @@ fn _core_path_is_reachable(
         approvals,
         tool_arguments: &tool_arguments(),
         revocation: &InMemoryRevocationCheck::new(),
+        payment_payload_digest: None,
     };
     let _ = holder;
     let verified = verify_authorization(&input)?;

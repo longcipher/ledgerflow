@@ -118,6 +118,7 @@ fn bench_verify_authorization_hot_path(criterion: &mut Criterion) {
                 approvals: &[],
                 tool_arguments: &tool_arguments,
                 revocation: &revocation,
+                payment_payload_digest: None,
             };
             let result = verify_authorization(&input);
             assert!(result.is_ok());

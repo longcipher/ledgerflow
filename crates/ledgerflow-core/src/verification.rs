@@ -59,12 +59,29 @@ pub struct AuthorizationInput<'a> {
     pub tool_arguments: &'a ToolArguments,
     /// Online revocation seam (must be provided; core never does I/O).
     pub revocation: &'a dyn RevocationCheck,
+    /// Optional expected payment-payload digest that the PoP must bind to.
+    ///
+    /// When `Some`, [`verify_authorization`] cross-checks the PoP's
+    /// `payment_payload_digest` against this value, closing the
+    /// proof-of-possession ↔ payment binding gap (design §6.3). Callers that do
+    /// not compute a bound leave this `None` (no check).
+    pub payment_payload_digest: Option<String>,
 }
 
 /// Runs the full authorization pipeline.
 pub fn verify_authorization(input: &AuthorizationInput<'_>) -> Result<VerifiedAuthorization> {
     // 1. Chain + PoP + trust anchor + freshness.
     let chain_verified = verify_chain(input.chain, input.trusted, input.proof, input.context)?;
+
+    // 1b. Payment-payload binding: when the caller supplies an expected digest,
+    // the PoP must commit to the exact payment payload (design §6.3). This
+    // closes the proof-of-possession ↔ payment binding gap so a valid PoP
+    // cannot be replayed against a different payment.
+    if let Some(expected) = &input.payment_payload_digest &&
+        &input.proof.tuple.payment_payload_digest != expected
+    {
+        return Err(AuthorizationError::PaymentPayloadDigestMismatch);
+    }
 
     // 2. Revocation (online).
     let leaf = &chain_verified.leaf;
@@ -155,6 +172,13 @@ impl WarrantExt for Warrant {
         // the CAIP-10 of the presenter's key when present. For simplicity,
         // the subject allowance is expressed through the merchant/resource
         // constraints; callers that model explicit subjects set them here.
+        //
+        // NOTE (documented v1 limitation, not a silent bug): the v1 `Warrant`
+        // schema carries no dedicated payment-subject constraint field, so
+        // this predicate is intentionally permissive. Subject containment is
+        // instead enforced through the merchant/resource constraints and the
+        // PoP binding (design §6.4). When a subject constraint is added to the
+        // schema, this method MUST be tightened to enforce it (fail-closed).
         let _ = context;
         true
     }

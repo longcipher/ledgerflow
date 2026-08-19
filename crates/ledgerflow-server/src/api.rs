@@ -16,8 +16,22 @@ use axum::{
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
+use utoipa::{OpenApi, ToSchema};
 
 use crate::{state::AppState, webhook::WebhookEvent};
+
+/// OpenAPI document for the LedgerFlow server REST API (design §10.3).
+#[derive(OpenApi)]
+#[openapi(
+    paths(health, issue_warrant, revoke, query_settlement, audit),
+    components(schemas(IssueWarrantRequest, IssueWarrantResponse, RevokeRequest)),
+    info(
+        title = "LedgerFlow Server API",
+        version = "0.1.0",
+        description = "REST API for warrant issuance, revocation, settlement query, and audit."
+    )
+)]
+pub struct ApiDoc;
 
 /// Builds the API router.
 pub fn router() -> Router<AppState> {
@@ -27,6 +41,10 @@ pub fn router() -> Router<AppState> {
         .route("/v1/revocations", post(revoke))
         .route("/v1/settlements/{transaction_id}", get(query_settlement))
         .route("/v1/audit", get(audit))
+        .merge(
+            utoipa_swagger_ui::SwaggerUi::new("/swagger-ui")
+                .url("/openapi.json", ApiDoc::openapi()),
+        )
 }
 
 /// API response envelope.
@@ -76,12 +94,18 @@ impl IntoResponse for ApiError {
     }
 }
 
+/// Liveness check.
+#[utoipa::path(
+    get,
+    path = "/healthz",
+    responses((status = 200, description = "Service is healthy"))
+)]
 async fn health() -> Json<ApiResponse<String>> {
     Json(ApiResponse::ok("ok".to_string()))
 }
 
 /// Issue-warrant request body.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
 pub struct IssueWarrantRequest {
     pub holder_public_key: String,
     pub merchant_id: String,
@@ -90,23 +114,41 @@ pub struct IssueWarrantRequest {
 }
 
 /// Issue-warrant response body.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
 pub struct IssueWarrantResponse {
     pub warrant_id: String,
     pub digest: String,
     pub expires_at: u64,
 }
 
+/// Issues a root warrant for a holder.
+#[utoipa::path(
+    post,
+    path = "/v1/warrants",
+    request_body = IssueWarrantRequest,
+    responses(
+        (status = 200, description = "Warrant issued", body = IssueWarrantResponse),
+        (status = 400, description = "Bad request"),
+        (status = 401, description = "Unauthorized")
+    )
+)]
 async fn issue_warrant(
     State(state): State<AppState>,
+    ctx: crate::saas::SaaSContext,
     Json(request): Json<IssueWarrantRequest>,
 ) -> Result<Json<ApiResponse<IssueWarrantResponse>>, ApiError> {
     let holder_key_bytes = decode_hex(&request.holder_public_key)
         .ok_or_else(|| ApiError::BadRequest("holder_public_key must be 32-byte hex".to_string()))?;
     let holder_key = ledgerflow_core::SigningKeyPair::from_bytes(&holder_key_bytes);
-    // The demo issuer key is derived from the trusted issuer configured in the
-    // state. For simplicity v1 uses a fixed demo key pair shared with the CLI.
-    let issuer_key = ledgerflow_core::SigningKeyPair::from_bytes(&[1_u8; 32]);
+    // Enforce a sane upper bound on the per-charge cap (fail-closed: a request
+    // for more than the configured ceiling is rejected rather than silently
+    // issued). Design §6.1 hard caps must be enforced server-side.
+    if request.amount_cap > MAX_PER_CHARGE_CAP {
+        return Err(ApiError::BadRequest(format!(
+            "amount_cap exceeds the maximum allowed ({MAX_PER_CHARGE_CAP})"
+        )));
+    }
+    let issuer_key = state.issuer_key.clone();
     let now_ms = now_ms();
     let warrant = ledgerflow_core::WarrantBuilder::new(now_ms)
         .ttl_secs(request.ttl_secs.unwrap_or(ledgerflow_core::DEFAULT_WARRANT_TTL_SECS))
@@ -124,12 +166,15 @@ async fn issue_warrant(
     let warrant_id = warrant.id_hex();
     let digest = warrant.digest();
     let expires_at = warrant.expires_at;
-    state.webhook.emit(WebhookEvent::WarrantIssued { warrant_id: warrant_id.clone() });
+    state.webhook.emit(WebhookEvent::WarrantIssued {
+        tenant_id: ctx.tenant_id,
+        warrant_id: warrant_id.clone(),
+    });
     Ok(Json(ApiResponse::ok(IssueWarrantResponse { warrant_id, digest, expires_at })))
 }
 
 /// Revoke request body.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
 pub struct RevokeRequest {
     /// Hex-encoded 16-byte warrant id.
     pub warrant_id: Option<String>,
@@ -137,16 +182,36 @@ pub struct RevokeRequest {
     pub holder_public_key: Option<String>,
 }
 
+/// Revokes a warrant or holder (tenant-scoped).
+#[utoipa::path(
+    post,
+    path = "/v1/revocations",
+    request_body = RevokeRequest,
+    responses(
+        (status = 200, description = "Revocation recorded"),
+        (status = 400, description = "Bad request"),
+        (status = 401, description = "Unauthorized")
+    )
+)]
 async fn revoke(
     State(state): State<AppState>,
+    ctx: crate::saas::SaaSContext,
     Json(request): Json<RevokeRequest>,
 ) -> Result<Json<ApiResponse<String>>, ApiError> {
-    let revocation = &state.verification.revocation;
+    // Tenant-scoped revocation (design §10.2): a tenant can only revoke within
+    // its own namespace, never another tenant's warrants/holders.
+    let tenant = &ctx.tenant_id;
     if let Some(warrant_id) = &request.warrant_id {
         let bytes: [u8; 16] = decode_hex(warrant_id)
             .ok_or_else(|| ApiError::BadRequest("warrant_id must be 16-byte hex".to_string()))?;
-        revocation.revoke_warrant(&bytes).map_err(|error| ApiError::Internal(error.to_string()))?;
-        state.webhook.emit(WebhookEvent::WarrantRevoked { warrant_id: warrant_id.clone() });
+        state
+            .revocation_store
+            .revoke_warrant_for(tenant, &bytes)
+            .map_err(|error| ApiError::Internal(error.to_string()))?;
+        state.webhook.emit(WebhookEvent::WarrantRevoked {
+            tenant_id: tenant.clone(),
+            warrant_id: warrant_id.clone(),
+        });
         return Ok(Json(ApiResponse::ok(format!("warrant {warrant_id} revoked"))));
     }
     if let Some(holder_key) = &request.holder_public_key {
@@ -157,12 +222,25 @@ async fn revoke(
             ledgerflow_core::SigningAlgorithm::Ed25519,
             bytes.to_vec(),
         );
-        revocation.revoke_holder(&holder).map_err(|error| ApiError::Internal(error.to_string()))?;
+        state
+            .revocation_store
+            .revoke_holder_for(tenant, &holder)
+            .map_err(|error| ApiError::Internal(error.to_string()))?;
         return Ok(Json(ApiResponse::ok(format!("holder {holder_key} revoked"))));
     }
     Err(ApiError::BadRequest("provide warrant_id or holder_public_key".to_string()))
 }
 
+/// Queries an idempotent settlement by transaction id.
+#[utoipa::path(
+    get,
+    path = "/v1/settlements/{transaction_id}",
+    params(("transaction_id" = String, Path, description = "Settlement transaction id")),
+    responses(
+        (status = 200, description = "Settlement status"),
+        (status = 404, description = "Not found")
+    )
+)]
 async fn query_settlement(
     State(state): State<AppState>,
     axum::extract::Path(transaction_id): axum::extract::Path<String>,
@@ -185,18 +263,34 @@ async fn query_settlement(
     }
 }
 
-async fn audit(State(state): State<AppState>) -> Json<ApiResponse<Vec<String>>> {
+/// Returns the tenant-scoped audit event stream.
+#[utoipa::path(
+    get,
+    path = "/v1/audit",
+    responses((status = 200, description = "Audit events"))
+)]
+async fn audit(
+    State(state): State<AppState>,
+    ctx: crate::saas::SaaSContext,
+) -> Json<ApiResponse<Vec<String>>> {
+    // Tenant-scoped audit (design §10.2): a tenant only sees its own events.
+    let tenant = &ctx.tenant_id;
     let events = state
         .webhook
         .buffered()
         .into_iter()
+        .filter(|event| event.tenant_id() == tenant)
         .map(|event| match event {
-            WebhookEvent::WarrantIssued { warrant_id } => format!("warrant_issued:{warrant_id}"),
-            WebhookEvent::WarrantRevoked { warrant_id } => format!("warrant_revoked:{warrant_id}"),
-            WebhookEvent::PaymentSettled { transaction_id, amount } => {
+            WebhookEvent::WarrantIssued { warrant_id, .. } => {
+                format!("warrant_issued:{warrant_id}")
+            }
+            WebhookEvent::WarrantRevoked { warrant_id, .. } => {
+                format!("warrant_revoked:{warrant_id}")
+            }
+            WebhookEvent::PaymentSettled { transaction_id, amount, .. } => {
                 format!("payment_settled:{transaction_id}:{amount}")
             }
-            WebhookEvent::ApprovalRequested { request_hash } => {
+            WebhookEvent::ApprovalRequested { request_hash, .. } => {
                 format!("approval_requested:{request_hash}")
             }
         })
@@ -210,14 +304,13 @@ fn now_ms() -> u64 {
         .map_or(0, |d| d.as_millis() as u64)
 }
 
+/// Maximum per-charge cap the server will issue (base units). Requests above
+/// this ceiling are rejected (fail-closed). Tunable per deployment.
+const MAX_PER_CHARGE_CAP: u128 = u128::MAX / 1_000_000;
+
+/// Generates a cryptographically random nonce for warrant issuance.
 fn random_bytes() -> [u8; 8] {
-    let mut bytes = [0_u8; 8];
-    for byte in &mut bytes {
-        *byte = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| (d.as_nanos() & 0xFF) as u8);
-    }
-    bytes
+    rand::random()
 }
 
 /// Decodes a hex string into exactly `N` bytes.

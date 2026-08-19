@@ -38,6 +38,8 @@ pub enum AuthorizationError {
     WarrantDigestMismatch,
     #[error("accepted quote binding did not match")]
     AcceptedHashMismatch,
+    #[error("payment payload digest binding did not match")]
+    PaymentPayloadDigestMismatch,
     #[error("request binding did not match")]
     RequestHashMismatch,
     #[error("proof signer did not match the warrant holder")]
