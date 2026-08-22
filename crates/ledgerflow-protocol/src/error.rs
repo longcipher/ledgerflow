@@ -18,6 +18,8 @@ pub enum ProtocolError {
     EmptyChain,
     #[error("the carrier cannot carry {size} bytes (limit {max})")]
     CarrierTooLarge { size: usize, max: usize },
+    #[error("invalid LedgerFlow credential: {0}")]
+    VcInvalid(String),
     #[error(transparent)]
     Core(#[from] AuthorizationError),
 }

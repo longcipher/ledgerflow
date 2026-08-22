@@ -219,6 +219,16 @@ mod tests {
     }
 
     #[test]
+    fn tuple_cbor_round_trips_exactly() {
+        let t = tuple();
+        let encoded = t.encode_cbor();
+        // CBOR maps have major type 5: the first byte must fall in 0xA0..=0xBF.
+        assert!(encoded[0] & 0xE0 == 0xA0, "expected a CBOR map header, got {:#04x}", encoded[0]);
+        let decoded: PopTuple = ciborium::de::from_reader(encoded.as_slice()).expect("decode");
+        assert_eq!(decoded, t);
+    }
+
+    #[test]
     fn approvals_digest_binds_all_approvals() {
         let a = SigningKeyPair::from_bytes(&[0x51; 32]);
         let approval = SignedApproval::sign("sha256:req", &a.signer_ref(), 10_300, &a);

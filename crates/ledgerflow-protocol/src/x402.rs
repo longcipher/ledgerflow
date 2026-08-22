@@ -100,6 +100,11 @@ pub struct LedgerFlowChallenge {
     pub required_subject_kinds: Vec<String>,
     /// Accounting point for budget execution (P2+; null in v1).
     pub ledger: Option<String>,
+    /// Whether this resource requires human presence (AP2-style
+    /// human-in-the-loop). When `true`, the presented authorization must
+    /// carry valid m-of-n approvals bound to the PoP.
+    #[serde(default)]
+    pub human_present: bool,
 }
 
 impl LedgerFlowChallenge {
@@ -186,7 +191,7 @@ pub struct PaymentPayloadSeed {
 }
 
 /// Creates a standard x402 `402 Payment Required` response with a LedgerFlow
-/// challenge extension.
+/// challenge extension (human presence not required).
 #[must_use]
 pub fn merchant_payment_required(
     challenge_id: impl Into<String>,
@@ -194,6 +199,30 @@ pub fn merchant_payment_required(
     resource: impl Into<String>,
     accepted: Vec<AcceptedQuote>,
     proof_freshness_ms: u64,
+) -> PaymentRequiredResponse {
+    merchant_payment_required_with(
+        challenge_id,
+        merchant_id,
+        resource,
+        accepted,
+        proof_freshness_ms,
+        false,
+    )
+}
+
+/// Creates a 402 response whose LedgerFlow challenge declares whether human
+/// presence is required for this resource.
+///
+/// With `human_present = true`, the verifier will demand valid m-of-n
+/// approvals bound to the presented PoP (AP2-style human-in-the-loop flow).
+#[must_use]
+pub fn merchant_payment_required_with(
+    challenge_id: impl Into<String>,
+    merchant_id: impl Into<String>,
+    resource: impl Into<String>,
+    accepted: Vec<AcceptedQuote>,
+    proof_freshness_ms: u64,
+    human_present: bool,
 ) -> PaymentRequiredResponse {
     PaymentRequiredResponse {
         status_code: 402,
@@ -212,6 +241,7 @@ pub fn merchant_payment_required(
             challenge_ttl_ms: ledgerflow_core::DEFAULT_CHALLENGE_TTL_MS,
             required_subject_kinds: vec!["signer".to_string(), "payment_subject".to_string()],
             ledger: None,
+            human_present,
         }),
     }
 }

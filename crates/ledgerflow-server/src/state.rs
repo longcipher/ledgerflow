@@ -221,6 +221,7 @@ mod tests {
                 "caip10:solana:mainnet:7vfCXTUXx5Wn4P6m7XJ3e1yK2bXxVmW7nYj1m5X9A1t3",
             ),
             presenter: SigningKeyPair::from_bytes(&[2_u8; 32]).signer_ref(),
+            human_present: false,
         }
     }
 

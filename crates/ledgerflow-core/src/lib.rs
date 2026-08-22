@@ -19,10 +19,14 @@
 
 #![allow(missing_docs)]
 
+pub mod agent_identity;
 pub mod approval;
 pub mod chain;
 pub mod constraint;
+pub mod crypto;
+pub mod erc1271;
 pub mod error;
+pub mod feedback_auth;
 pub mod issue_bounds;
 pub mod pop;
 pub mod proof_builder;
@@ -34,17 +38,33 @@ pub mod verification;
 pub mod warrant;
 
 pub use crate::{
+    agent_identity::{
+        AGENT_ID_EXTENSION_KEY, AgentIdParseError, AgentIdRef, IdentityResolver,
+        agent_id_from_warrant,
+    },
     approval::{
         ApprovalGate, ApprovalVerification, SignedApproval, verify_approval_threshold,
         verify_approvals,
     },
-    chain::{VerifiedChainAuthorization, WarrantChain, verify_chain, verify_link},
+    chain::{
+        VerifiedChainAuthorization, WarrantChain, verify_chain, verify_chain_with_resolver,
+        verify_link,
+    },
     constraint::{
         AuthorizationContext, Constraint, MerchantConstraint, PaymentConstraint,
         ResourceConstraint, ToolConstraint, Verify, validate_attenuation,
         verify_all as verify_all_constraints,
     },
+    crypto::{
+        Secp256k1KeyPair, eip191_hash_of_bytes32, eip191_message_hash,
+        ethereum_address_from_compressed_pubkey, keccak256,
+    },
+    erc1271::{
+        ContractSignatureVerifier, ERC_1271_MAGIC_VALUE, is_contract_account_claim,
+        verify_signature_with,
+    },
     error::{AuthorizationError, Result, WireError, WireResult},
+    feedback_auth::FeedbackAuth,
     issue_bounds::{ISSUE_BOUNDS_EXTENSION, IssueBounds},
     pop::{POP_SIGN_DOMAIN, PopProof, PopTuple, verify_freshness},
     proof_builder::ProofBuilder,

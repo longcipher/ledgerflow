@@ -137,6 +137,7 @@ fn context(now_ms: u64, holder: &SignerRef) -> AuthorizationContext {
             "caip10:eip155:8453:0xabc123",
         ),
         presenter: holder.clone(),
+        human_present: false,
     }
 }
 

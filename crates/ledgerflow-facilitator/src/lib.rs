@@ -14,6 +14,7 @@
 
 pub mod outcome;
 pub mod rails;
+pub mod reputation;
 pub mod revocation_store;
 pub mod routing;
 pub mod settle;
@@ -28,6 +29,9 @@ pub use crate::{
         RailAdapter, RailError, RailQuote, SettlementReceipt, SharedRailAdapter,
         VerificationResult, custodial::CustodialRailAdapter, evm::EvmRailAdapter,
         exchange::ExchangeRailAdapter, gateway::GatewayRailAdapter, solana::SolanaRailAdapter,
+    },
+    reputation::{
+        FeedbackSink, LoggingSink, ProofOfPayment, ReputationReporter, SettlementFeedback,
     },
     revocation_store::{FileRevocationStore, InsecureMemoryRevocationStore, RevocationStoreError},
     routing::{Facilitator, RailKind, RouteDecision, RoutingError},

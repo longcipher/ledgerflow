@@ -8,13 +8,17 @@ repository.workspace = true
 [dependencies]
 ciborium.workspace = true
 ed25519-dalek = { workspace = true, features = ["rand_core", "serde"] }
+k256 = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_bytes.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
+tiny-keccak = { workspace = true, features = ["keccak"] }
 
 [dev-dependencies]
 criterion.workspace = true
+mutants = "0.0.4"
+serde_json.workspace = true
 
 [lints]
 workspace = true

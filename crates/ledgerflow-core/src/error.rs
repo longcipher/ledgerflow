@@ -98,6 +98,12 @@ pub enum AuthorizationError {
     SrlVersionRegression { presented: u64, applied: u64 },
     #[error("the SRL signature is invalid")]
     InvalidSrlSignature,
+    #[error("human presence is required for this payment but no valid approvals were presented")]
+    HumanPresenceRequired,
+    #[error("identity resolution failed for `{reference}`: {detail}")]
+    IdentityResolutionFailed { reference: String, detail: String },
+    #[error("warrant issuer key is not bound to the anchored agent identity `{reference}`")]
+    IssuerNotBoundToIdentity { reference: String },
 }
 
 /// Errors returned while encoding or decoding LedgerFlow wire payloads.

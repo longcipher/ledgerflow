@@ -179,6 +179,7 @@ where
             clock_skew_ms: challenge.clock_skew_ms,
             payment_subject: extension.payment_subject.clone(),
             presenter: extension.signer.clone(),
+            human_present: challenge.human_present,
         };
         let input = AuthorizationInput {
             chain: &chain,
@@ -302,6 +303,7 @@ mod tests {
             challenge_ttl_ms: 300_000,
             required_subject_kinds: vec!["payment".to_string()],
             ledger: None,
+            human_present: false,
         }
     }
 
@@ -342,6 +344,7 @@ mod tests {
                 "caip10:eip155:8453:0xabc123",
             ),
             presenter: holder_keys().signer_ref(),
+            human_present: false,
         };
         let proof = ProofBuilder::new()
             .warrant_id(w.id.clone())
@@ -493,6 +496,41 @@ mod tests {
             .verify_payment(&ch, &req, &payload, &trusted(), "web-search", &BTreeMap::new(), 2_000)
             .expect_err("replay");
         assert!(matches!(error, MerchantVerificationError::ReplayDetected));
+    }
+
+    #[test]
+    fn human_present_challenge_requires_approvals() {
+        let mut verifier = MerchantVerifier::new(
+            InMemoryReplayStore::default(),
+            InMemoryWarrantRepository::default(),
+            ledgerflow_core::InMemoryRevocationCheck::new(),
+        );
+        let mut ch = challenge();
+        ch.human_present = true;
+        let req = request();
+        let ext = extension();
+        let payload = crate::x402::PaymentPayload {
+            accepted: crate::x402::AcceptedQuote::exact(
+                "USDC",
+                100,
+                "merchant-a",
+                Some("base".to_string()),
+            ),
+            settlement_payload: "0xabc".to_string(),
+            payment_identifier: None,
+            ledgerflow: Some(ext),
+        };
+        // The fixture warrant carries no approver set: a human-present
+        // challenge must fail closed.
+        let error = verifier
+            .verify_payment(&ch, &req, &payload, &trusted(), "web-search", &BTreeMap::new(), 2_000)
+            .expect_err("human presence required");
+        assert!(matches!(
+            error,
+            MerchantVerificationError::Core(
+                ledgerflow_core::AuthorizationError::HumanPresenceRequired
+            )
+        ));
     }
 
     #[test]

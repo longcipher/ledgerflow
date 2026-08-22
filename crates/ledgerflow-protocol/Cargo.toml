@@ -7,9 +7,11 @@ repository.workspace = true
 
 [dependencies]
 base64.workspace = true
+bs58 = { workspace = true }
 ciborium.workspace = true
 ledgerflow-core = { path = "../ledgerflow-core" }
 serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
 thiserror.workspace = true
 
 [lints]

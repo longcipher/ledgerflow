@@ -46,6 +46,14 @@ pub struct AuthorizationContext {
     pub payment_subject: PaymentSubjectRef,
     /// The holder key that presented the proof-of-possession.
     pub presenter: SignerRef,
+    /// Whether the merchant requires human presence for this interaction
+    /// (AP2-style human-in-the-loop semantics).
+    ///
+    /// When `true`, the verification pipeline requires valid m-of-n approvals
+    /// bound to the presented PoP, even when no approval gate fires. A
+    /// warrant without a configured approver set therefore cannot satisfy a
+    /// human-present challenge (fail-closed).
+    pub human_present: bool,
 }
 
 /// Typed warrant constraints for v1 (stateless predicates).
@@ -650,6 +658,7 @@ mod tests {
                 "caip10:eip155:8453:0xabc123",
             ),
             presenter: SignerRef::new(crate::warrant::SigningAlgorithm::Ed25519, vec![1; 32]),
+            human_present: false,
         }
     }
 
@@ -733,5 +742,136 @@ mod tests {
         ];
         let error = crate::constraint::verify_all(&over_limit, &ctx).expect_err("over limit");
         assert!(matches!(error, AuthorizationError::PaymentAmountExceeded { .. }));
+    }
+
+    // ---------------------------------------------------------------------
+    // validate_attenuation: per-dimension guard coverage
+    // ---------------------------------------------------------------------
+
+    use crate::warrant::AssetRef;
+
+    #[test]
+    fn attenuation_rejects_widening_in_each_dimension() {
+        // Merchant ids.
+        let parent =
+            Constraint::Merchant(MerchantConstraint::with_ids(vec!["merchant-a".to_string()]));
+        let child =
+            Constraint::Merchant(MerchantConstraint::with_ids(vec!["merchant-b".to_string()]));
+        assert!(validate_attenuation(&parent, &child).is_err());
+
+        // Host suffixes (parent restricted, child escapes the set).
+        let parent = Constraint::Merchant(MerchantConstraint {
+            merchant_ids: Vec::new(),
+            host_suffixes: vec![".acme.com".to_string()],
+        });
+        let child = Constraint::Merchant(MerchantConstraint {
+            merchant_ids: Vec::new(),
+            host_suffixes: vec![".evil.io".to_string()],
+        });
+        assert!(validate_attenuation(&parent, &child).is_err());
+
+        // HTTP methods.
+        let parent = Constraint::Resource(ResourceConstraint {
+            http_methods: vec!["GET".to_string()],
+            path_prefixes: Vec::new(),
+        });
+        let child = Constraint::Resource(ResourceConstraint {
+            http_methods: vec!["POST".to_string()],
+            path_prefixes: Vec::new(),
+        });
+        assert!(validate_attenuation(&parent, &child).is_err());
+
+        // Path prefixes.
+        let parent = Constraint::Resource(ResourceConstraint {
+            http_methods: Vec::new(),
+            path_prefixes: vec!["/api".to_string()],
+        });
+        let child = Constraint::Resource(ResourceConstraint {
+            http_methods: Vec::new(),
+            path_prefixes: vec!["/admin".to_string()],
+        });
+        assert!(validate_attenuation(&parent, &child).is_err());
+
+        // Tool names.
+        let parent = Constraint::Tool(ToolConstraint {
+            tool_names: vec!["search".to_string()],
+            model_providers: Vec::new(),
+            action_labels: Vec::new(),
+        });
+        let child = Constraint::Tool(ToolConstraint {
+            tool_names: vec!["delete".to_string()],
+            model_providers: Vec::new(),
+            action_labels: Vec::new(),
+        });
+        assert!(validate_attenuation(&parent, &child).is_err());
+
+        // Payment assets.
+        let parent = Constraint::Payment(PaymentConstraint {
+            allowed_assets: vec![AssetRef::new("USDC", None)],
+            ..PaymentConstraint::new(1_000)
+        });
+        let child = Constraint::Payment(PaymentConstraint {
+            allowed_assets: vec![AssetRef::new("ETH", None)],
+            ..PaymentConstraint::new(1_000)
+        });
+        assert!(validate_attenuation(&parent, &child).is_err());
+
+        // Payment rails.
+        let parent = Constraint::Payment(PaymentConstraint {
+            allowed_rails: vec![PaymentRail::Onchain],
+            ..PaymentConstraint::new(1_000)
+        });
+        let child = Constraint::Payment(PaymentConstraint {
+            allowed_rails: vec![PaymentRail::Exchange],
+            ..PaymentConstraint::new(1_000)
+        });
+        assert!(validate_attenuation(&parent, &child).is_err());
+    }
+
+    #[test]
+    fn attenuation_accepts_valid_subsets() {
+        // Matching host suffix subset (guards the inner contains-check).
+        let parent = Constraint::Merchant(MerchantConstraint {
+            merchant_ids: Vec::new(),
+            host_suffixes: vec![".acme.com".to_string(), ".acme.dev".to_string()],
+        });
+        let child = Constraint::Merchant(MerchantConstraint {
+            merchant_ids: Vec::new(),
+            host_suffixes: vec![".acme.com".to_string()],
+        });
+        assert!(validate_attenuation(&parent, &child).is_ok());
+
+        // Matching tool subset (guards the inner contains-check).
+        let parent = Constraint::Tool(ToolConstraint {
+            tool_names: vec!["search".to_string(), "read".to_string()],
+            model_providers: vec!["openai".to_string()],
+            action_labels: Vec::new(),
+        });
+        let child = Constraint::Tool(ToolConstraint {
+            tool_names: vec!["search".to_string()],
+            model_providers: vec!["openai".to_string()],
+            action_labels: Vec::new(),
+        });
+        assert!(validate_attenuation(&parent, &child).is_ok());
+    }
+
+    #[test]
+    fn payment_error_classification_distinguishes_amount_from_other_causes() {
+        // At exactly the cap with a DIFFERENT violating dimension (payee not
+        // in the allowlist), the error must be PaymentNotAllowed, not
+        // AmountExceeded.
+        let constraint = PaymentConstraint {
+            payee_ids: vec!["merchant-b".to_string()],
+            ..PaymentConstraint::new(100)
+        };
+        let ctx = context_for(100, "POST", "/pay", "web-search");
+        let error = constraint.verify(&ctx).expect_err("payee mismatch");
+        assert_eq!(error, AuthorizationError::PaymentNotAllowed);
+
+        // Over the cap with everything else fine → AmountExceeded.
+        let open = PaymentConstraint::new(100);
+        let ctx_over = context_for(101, "POST", "/pay", "web-search");
+        let error = open.verify(&ctx_over).expect_err("over cap");
+        assert_eq!(error, AuthorizationError::PaymentAmountExceeded { amount: 101, limit: 100 });
     }
 }

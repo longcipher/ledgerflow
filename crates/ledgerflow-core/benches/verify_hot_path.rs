@@ -77,6 +77,7 @@ fn context() -> AuthorizationContext {
         clock_skew_ms: 30_000,
         payment_subject: subject_ref(),
         presenter: holder().signer_ref(),
+        human_present: false,
     }
 }
 

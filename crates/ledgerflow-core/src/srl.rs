@@ -177,3 +177,97 @@ impl SrlState {
         Ok(bytes)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::expect_used)]
+
+    use super::*;
+
+    fn control_keys() -> SigningKeyPair {
+        SigningKeyPair::from_bytes(&[0x2A; 32])
+    }
+
+    fn sample_list(version: u64) -> SignedRevocationList {
+        SignedRevocationList::sign(
+            version,
+            vec![SrlEntry::Warrant { id_hex: "aabb".to_string() }],
+            &control_keys(),
+        )
+    }
+
+    #[test]
+    fn digest_is_prefixed_and_content_bound() {
+        let list = sample_list(1);
+        assert!(list.digest().starts_with("sha256:"));
+        // Same content → same digest; changed content → different digest.
+        assert_eq!(list.digest(), sample_list(1).digest());
+        let other = SignedRevocationList::sign(
+            1,
+            vec![SrlEntry::Warrant { id_hex: "ccdd".to_string() }],
+            &control_keys(),
+        );
+        assert_ne!(list.digest(), other.digest());
+    }
+
+    #[test]
+    fn signature_binds_version_and_entries() {
+        let keys = control_keys();
+        let list = sample_list(1);
+        let signer = keys.signer_ref();
+        assert!(list.verify_signature(&signer));
+
+        // Tampering with the version invalidates the signature.
+        let mut bumped = list.clone();
+        bumped.version = 2;
+        assert!(!bumped.verify_signature(&signer));
+
+        // Tampering with the entries invalidates the signature.
+        let mut extra = list.clone();
+        extra.entries.push(SrlEntry::Holder { key_hex: "ff00".to_string() });
+        assert!(!extra.verify_signature(&signer));
+
+        // A different signer fails.
+        let stranger = SigningKeyPair::from_bytes(&[0x2B; 32]).signer_ref();
+        assert!(!list.verify_signature(&stranger));
+    }
+
+    #[test]
+    fn holder_revocation_queries_reflect_state() {
+        let holder = SigningKeyPair::from_bytes(&[0x2C; 32]);
+        let state = SrlState::new();
+        // Fresh state revokes nobody.
+        assert!(!state.is_holder_revoked(&holder.signer_ref()));
+
+        let mut state = SrlState::new();
+        let list = SignedRevocationList::sign(
+            1,
+            vec![SrlEntry::Holder {
+                key_hex: crate::warrant::hex_encode_bytes(&holder.public_key_bytes()),
+            }],
+            &control_keys(),
+        );
+        state.apply(&list, &control_keys().signer_ref()).expect("apply");
+        assert!(state.is_holder_revoked(&holder.signer_ref()));
+        // An unrelated holder stays clean.
+        let other = SigningKeyPair::from_bytes(&[0x2D; 32]);
+        assert!(!state.is_holder_revoked(&other.signer_ref()));
+    }
+
+    #[test]
+    fn apply_rejects_rollback_and_bad_signatures() {
+        let mut state = SrlState::new();
+        let v2 = sample_list(2);
+        state.apply(&v2, &control_keys().signer_ref()).expect("v2");
+        // Same or lower version is rejected.
+        let error =
+            state.apply(&sample_list(1), &control_keys().signer_ref()).expect_err("rollback");
+        assert!(matches!(error, AuthorizationError::SrlVersionRegression { .. }));
+
+        // Forged signer rejected.
+        let forged =
+            SignedRevocationList::sign(3, Vec::new(), &SigningKeyPair::from_bytes(&[0x2E; 32]));
+        let error = state.apply(&forged, &control_keys().signer_ref()).expect_err("forged");
+        assert_eq!(error, AuthorizationError::InvalidSrlSignature);
+    }
+}

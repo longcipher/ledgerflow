@@ -589,3 +589,123 @@ fn validate_issue_bounds(
     }
     let _ = tool; // Tool bounds are validated by the parent-attenuation check.
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::expect_used)]
+
+    use super::*;
+    use crate::issue_bounds::{ISSUE_BOUNDS_EXTENSION, IssueBounds};
+
+    fn issuer_keys() -> SigningKeyPair {
+        SigningKeyPair::from_bytes(&[0x3A; 32])
+    }
+
+    fn holder_keys() -> SigningKeyPair {
+        SigningKeyPair::from_bytes(&[0x3B; 32])
+    }
+
+    fn delegate_keys() -> SigningKeyPair {
+        SigningKeyPair::from_bytes(&[0x3C; 32])
+    }
+
+    fn rich_parent(bounds: &IssueBounds) -> Warrant {
+        WarrantBuilder::new(2_000)
+            .issuer(issuer_keys().signer_ref())
+            .holder(holder_keys().signer_ref())
+            .merchant(MerchantConstraint::with_ids(vec!["merchant-a".to_string()]))
+            .resource(ResourceConstraint {
+                http_methods: vec!["POST".to_string()],
+                path_prefixes: vec!["/pay".to_string()],
+            })
+            .payment(PaymentConstraint {
+                allowed_assets: vec![crate::AssetRef::new("USDC", None)],
+                allowed_rails: vec![crate::PaymentRail::Onchain],
+                allowed_schemes: vec!["exact".to_string()],
+                payee_ids: vec!["merchant-a".to_string()],
+                ..PaymentConstraint::new(1_000)
+            })
+            .extension(ISSUE_BOUNDS_EXTENSION, bounds.encode_cbor().expect("bounds encode"))
+            .sign_with(&issuer_keys(), [0_u8; 8])
+    }
+
+    #[test]
+    fn builder_debug_names_the_type_and_fields() {
+        let builder = WarrantBuilder::new(2_000).ttl_secs(60);
+        let rendered = format!("{builder:?}");
+        assert!(rendered.contains("WarrantBuilder"));
+        assert!(rendered.contains("now_ms"));
+        assert!(rendered.contains("2000"));
+        assert!(rendered.contains("ttl_secs"));
+        assert!(rendered.contains("60"));
+    }
+
+    #[test]
+    fn delegation_within_unrestricted_bounds_succeeds() {
+        // Bounds present but unrestricted: every guard must treat the empty
+        // ceiling as "no restriction" and the delegation must succeed.
+        let parent = rich_parent(&IssueBounds::unrestricted());
+        let child = DelegatedWarrantBuilder::from(parent).issue_to(
+            delegate_keys().signer_ref(),
+            &holder_keys(),
+            2_000,
+            [0_u8; 8],
+        );
+        assert_eq!(child.depth, 1);
+        assert_eq!(child.merchant.merchant_ids, vec!["merchant-a".to_string()]);
+    }
+
+    #[test]
+    #[should_panic(expected = "issue bounds: host suffix")]
+    fn delegation_exceeding_host_suffix_bounds_panics() {
+        let mut bounds = IssueBounds::unrestricted();
+        bounds.host_suffixes = vec![".evil.io".to_string()];
+        // Parent restricted to an acme host suffix; the bound forbids it.
+        let parent = WarrantBuilder::new(2_000)
+            .issuer(issuer_keys().signer_ref())
+            .holder(holder_keys().signer_ref())
+            .merchant(MerchantConstraint {
+                merchant_ids: Vec::new(),
+                host_suffixes: vec![".acme.com".to_string()],
+            })
+            .resource(ResourceConstraint::default())
+            .payment(PaymentConstraint::new(1_000))
+            .extension(ISSUE_BOUNDS_EXTENSION, bounds.encode_cbor().expect("encode"))
+            .sign_with(&issuer_keys(), [0_u8; 8]);
+        let _ = DelegatedWarrantBuilder::from(parent).issue_to(
+            delegate_keys().signer_ref(),
+            &holder_keys(),
+            2_000,
+            [0_u8; 8],
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "issue bounds: merchant")]
+    fn delegation_exceeding_merchant_bounds_panics() {
+        let bounds = IssueBounds {
+            merchant_ids: vec!["other-merchant".to_string()],
+            ..IssueBounds::unrestricted()
+        };
+        let parent = rich_parent(&bounds);
+        let _ = DelegatedWarrantBuilder::from(parent).issue_to(
+            delegate_keys().signer_ref(),
+            &holder_keys(),
+            2_000,
+            [0_u8; 8],
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "issue bounds")]
+    fn delegation_exceeding_cap_bound_panics() {
+        let bounds = IssueBounds { max_per_charge: Some(10), ..IssueBounds::unrestricted() };
+        let parent = rich_parent(&bounds);
+        let _ = DelegatedWarrantBuilder::from(parent).issue_to(
+            delegate_keys().signer_ref(),
+            &holder_keys(),
+            2_000,
+            [0_u8; 8],
+        );
+    }
+}

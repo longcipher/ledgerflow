@@ -17,6 +17,7 @@
 use std::collections::HashSet;
 
 use crate::{
+    agent_identity::IdentityResolver,
     constraint::{AuthorizationContext, Verify},
     error::{AuthorizationError, Result},
     pop::{PopProof, verify_freshness},
@@ -103,13 +104,26 @@ pub fn verify_chain(
     proof: &PopProof,
     context: &AuthorizationContext,
 ) -> Result<VerifiedChainAuthorization> {
+    verify_chain_with_resolver(chain, trusted, None, proof, context)
+}
+
+/// Verifies the chain invariants with an optional EIP-8004 identity resolver
+/// for anchored trust entries (see [`crate::trust::TrustedIssuer::anchored`]).
+pub fn verify_chain_with_resolver(
+    chain: &WarrantChain,
+    trusted: &TrustedIssuers,
+    resolver: Option<&dyn IdentityResolver>,
+    proof: &PopProof,
+    context: &AuthorizationContext,
+) -> Result<VerifiedChainAuthorization> {
     if chain.is_empty() {
         return Err(AuthorizationError::EmptyChain);
     }
 
     let root = &chain.warrants[0];
-    // Trust anchor: the root issuer must be trusted.
-    trusted.verify_root(root)?;
+    // Trust anchor: the root issuer must be trusted (static keys or resolved
+    // EIP-8004 anchors).
+    trusted.verify_root_with_resolver(root, resolver)?;
 
     // Cycle detection: the same warrant id must not appear twice. Duplicate
     // ids would permit re-ordering nodes (or a self-referencing cycle) that
@@ -343,6 +357,7 @@ mod tests {
                 "caip10:eip155:8453:0xabc123",
             ),
             presenter: holder.clone(),
+            human_present: false,
         }
     }
 
@@ -480,7 +495,11 @@ mod tests {
         let mut child = child_warrant();
         child.depth = parent.depth + 2;
         let error = verify_link(&parent, &child).expect_err("I2");
-        assert!(matches!(error, AuthorizationError::DepthMismatch { .. }));
+        // The error payload must report the exact expected depth.
+        assert_eq!(
+            error,
+            AuthorizationError::DepthMismatch { expected: parent.depth + 1, actual: child.depth }
+        );
     }
 
     #[test]

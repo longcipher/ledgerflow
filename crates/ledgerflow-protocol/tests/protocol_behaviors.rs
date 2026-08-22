@@ -332,6 +332,7 @@ fn merchant_verifier_rejects_challenge_mismatch() {
         challenge_ttl_ms: 300_000,
         required_subject_kinds: Vec::new(),
         ledger: None,
+        human_present: false,
     };
     let payload = build_payment_payload(
         &challenge(),

@@ -16,6 +16,7 @@ pub mod error;
 pub mod middleware;
 pub mod mpp;
 pub mod replay;
+pub mod vc;
 pub mod wire;
 pub mod x402;
 
@@ -31,10 +32,16 @@ pub use crate::{
         encode_authorization_param, encode_challenge_param,
     },
     replay::{InMemoryReplayStore, NonceClaim, ReplayConflict, ReplayFingerprint, ReplayStore},
+    vc::{
+        CREDENTIAL_TYPE_WARRANT, CredentialSubject, LedgerFlowAlg, Proof, VC_CONTEXT_WARRANT_V1,
+        WarrantCredential, credential_from_json, credential_to_json, did_key_ed25519,
+        did_key_secp256k1, parse_did_key, to_credential, unix_secs_to_rfc3339,
+        warrant_from_credential, warrant_from_vc_json, warrant_to_vc_json,
+    },
     x402::{
         AcceptedQuote, HttpRequest, LEDGERFLOW_EXTENSION_VERSION, LedgerFlowAuthorizationExtension,
         LedgerFlowChallenge, MAX_LEDGERFLOW_EXTENSION_BYTES, PaymentPayload, PaymentPayloadSeed,
         PaymentRequiredResponse, build_payment_payload, canonical_accepted_hash,
-        canonical_request_hash, merchant_payment_required,
+        canonical_request_hash, merchant_payment_required, merchant_payment_required_with,
     },
 };
