@@ -176,9 +176,51 @@ gaps found and fixes applied to the wallet are tracked in
 ```bash
 just test
 
-cargo run -p ledgerflow-cli -- sample-warrant
-cargo run -p ledgerflow-cli -- sample-payment
+# Deterministic fixtures (development aids)
+cargo run -p ledgerflow-cli -- sample-warrant    # sample warrant digest + constraints
+cargo run -p ledgerflow-cli -- sample-payment    # x402 payload with LedgerFlow extension
+cargo run -p ledgerflow-cli -- approve sha256:<request-hash> [--secret-hex <64 hex>]
+                                                 # sign an m-of-n approval for a request hash
+cargo run -p ledgerflow-cli -- trust-anchors     # trusted-issuer anchor configuration hint
 ```
+
+Full issuance/verification flows are programmatic via `ledgerflow-core`
+(`WarrantBuilder` typestate) and `ledgerflow-protocol`
+(`build_payment_payload`, `MerchantVerifier`).
+
+## Running the Server
+
+`bin/ledgerflow-server` is the deployable REST server (axum). Configuration
+is environment-driven and **fail-fast** — invalid or missing required values
+abort startup:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `LEDGERFLOW_BIND` | `127.0.0.1:8080` | Listen address |
+| `LEDGERFLOW_SAAS_MODE` | `standalone` | `standalone` or `saas` (multi-tenant behind a gateway) |
+| `LEDGERFLOW_SERVICE_TOKEN` | — | Required when mode is `saas`; shared with the gateway |
+| `LEDGERFLOW_TENANT_ID` | `default` | Tenant id used in standalone mode |
+| `LEDGERFLOW_ISSUER_KEY` | — | **Required.** Hex Ed25519 issuer key; never defaults to a demo key |
+| `LEDGERFLOW_WEBHOOK_URL` | — | Optional webhook delivery endpoint |
+
+```bash
+LEDGERFLOW_ISSUER_KEY=<64-hex> cargo run -p ledgerflow-server -- \
+  --revocation-store ./data/revocations.jsonl
+```
+
+REST API (OpenAPI at `/openapi.json`, Swagger UI at `/swagger-ui`):
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/healthz` | GET | Liveness |
+| `/v1/warrants` | POST | Issue a root warrant (`holder_public_key`, `merchant_id`, `amount_cap`, optional `ttl_secs`) |
+| `/v1/revocations` | POST | Revoke a warrant id or holder public key (tenant-scoped) |
+| `/v1/settlements/{transaction_id}` | GET | Idempotent settlement query |
+| `/v1/audit` | GET | Tenant-scoped buffered audit/webhook events |
+
+In `saas` mode every request must carry the gateway-injected internal
+headers validated against `LEDGERFLOW_SERVICE_TOKEN`; revocation and audit
+views are tenant-scoped.
 
 ## Verification
 
