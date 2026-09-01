@@ -133,6 +133,30 @@ fn recover_compressed(prehash: &[u8; 32], signature: &[u8]) -> Option<[u8; 33]> 
     Some(compressed)
 }
 
+/// Recovers the compressed SEC1 public key from a recoverable signature over
+/// an EIP-191 personal message (`personal_sign`).
+///
+/// Returns `None` for malformed signatures (wrong length, high-`s`, invalid
+/// recovery id) or when recovery fails.
+#[must_use]
+pub fn recover_public_key_from_personal_sign(
+    message: &[u8],
+    signature: &[u8],
+) -> Option<[u8; 33]> {
+    let digest = eip191_message_hash(message);
+    recover_compressed(&digest, signature)
+}
+
+/// Recovers the compressed SEC1 public key from a recoverable signature over
+/// a 32-byte prehash (e.g. an EIP-712 typed-data digest).
+///
+/// Returns `None` for malformed signatures (wrong length, high-`s`, invalid
+/// recovery id) or when recovery fails.
+#[must_use]
+pub fn recover_public_key_from_prehash(prehash: &[u8; 32], signature: &[u8]) -> Option<[u8; 33]> {
+    recover_compressed(prehash, signature)
+}
+
 /// Matches a recovered compressed public key against a signer reference.
 ///
 /// A 33-byte claim compares the compressed key directly; a 20-byte claim is
@@ -396,6 +420,34 @@ mod tests {
         let mut zero_based = envelope.clone();
         zero_based.value[64] = v - 27;
         assert!(zero_based.verify_strict(&signer, b"v conventions"));
+    }
+
+    #[test]
+    fn recover_public_key_from_personal_sign_matches_signer() {
+        let keys = Secp256k1KeyPair::from_bytes(&[0x5A; 32]).expect("valid key");
+        let signer = keys.signer_ref(SigningAlgorithm::EthPersonalSign);
+        let envelope = keys.sign_eth_personal(b"recover me");
+        let recovered = recover_public_key_from_personal_sign(b"recover me", &envelope.value)
+            .expect("recover");
+        assert_eq!(recovered.len(), 33);
+        assert_eq!(recovered.as_slice(), signer.public_key.as_slice());
+        // Wrong message must not recover the same key.
+        let wrong = recover_public_key_from_personal_sign(b"other", &envelope.value);
+        assert!(wrong.is_none() || wrong.as_ref().is_some_and(|k| k.as_slice() != signer.public_key));
+        // Malformed signatures are rejected.
+        assert!(recover_public_key_from_personal_sign(b"recover me", &[0u8; 64]).is_none());
+        assert!(recover_public_key_from_personal_sign(b"recover me", &[]).is_none());
+    }
+
+    #[test]
+    fn recover_public_key_from_prehash_matches_typed_data() {
+        let keys = Secp256k1KeyPair::from_bytes(&[0x6B; 32]).expect("valid key");
+        let signer = keys.signer_ref(SigningAlgorithm::EthTypedData);
+        let digest = keccak256(b"domainSeparator||structHash");
+        let envelope = keys.sign_eth_typed_data_digest(&digest);
+        let recovered =
+            recover_public_key_from_prehash(&digest, &envelope.value).expect("recover");
+        assert_eq!(recovered.as_slice(), signer.public_key.as_slice());
     }
 
     #[test]

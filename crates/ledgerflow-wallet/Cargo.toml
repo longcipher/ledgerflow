@@ -12,15 +12,42 @@ repository.workspace = true
 # enabled here.
 default = []
 http = ["dep:hpx", "dep:tokio"]
+# WalletConnect v2 dApp client (WcV2Signer). Enables the WC v2 protocol layer
+# (pairing URI, X25519 + HKDF key agreement, ChaCha20-Poly1305 envelopes,
+# relay client over hpx-yawc) and the WalletSigner adapter over an established
+# WC v2 session.
+wc = [
+    "dep:hpx-yawc",
+    "dep:futures",
+    "dep:url",
+    "dep:x25519-dalek",
+    "dep:chacha20poly1305",
+    "dep:hkdf",
+    "dep:hex",
+    "dep:rand",
+    "dep:sha2",
+    "dep:zeroize",
+    "dep:tokio",
+]
 
 [dependencies]
 base64.workspace = true
+chacha20poly1305 = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
+hex = { workspace = true, optional = true }
+hkdf = { workspace = true, optional = true }
 hpx = { workspace = true, optional = true, features = ["rustls-tls", "http1", "json"] }
+hpx-yawc = { workspace = true, optional = true }
 ledgerflow-core = { path = "../ledgerflow-core" }
+rand = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+sha2 = { workspace = true, optional = true }
 thiserror.workspace = true
-tokio = { workspace = true, optional = true, features = ["rt", "time"] }
+tokio = { workspace = true, optional = true, features = ["rt", "time", "macros"] }
+url = { workspace = true, optional = true }
+x25519-dalek = { workspace = true, optional = true, features = ["static_secrets"] }
+zeroize = { workspace = true, optional = true }
 
 [lints]
 workspace = true

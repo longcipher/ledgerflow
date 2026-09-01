@@ -14,6 +14,8 @@
 //! - [`server::EmbeddedWalletServer`]: an in-memory JSON-RPC 2.0 server over a [`WalletSigner`],
 //!   plus (feature `http`) a loopback HTTP listener for end-to-end use with
 //!   [`local_rpc::HttpJsonRpcTransport`].
+//! - [`wc::WcV2Signer`] (feature `wc`): a WalletConnect v2 dApp client that pairs with any WC v2
+//!   wallet (e.g. OneCipher) over a relay and routes signing requests through the session.
 
 #![allow(missing_docs)]
 
@@ -23,11 +25,15 @@ pub mod error;
 pub mod local_rpc;
 pub mod server;
 pub mod signer;
+#[cfg(feature = "wc")]
+pub mod wc;
 
 #[cfg(feature = "http")]
 pub use crate::local_rpc::HttpJsonRpcTransport;
 #[cfg(feature = "http")]
 pub use crate::server::LoopbackJsonRpcServer;
+#[cfg(feature = "wc")]
+pub use crate::wc::{WcV2Config, WcV2Signer};
 pub use crate::{
     approvals::request_approval,
     embedded::EmbeddedSigner,
