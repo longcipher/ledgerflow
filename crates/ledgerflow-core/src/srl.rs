@@ -100,11 +100,10 @@ fn preimage(version: u64, entries: &[SrlEntry]) -> Vec<u8> {
         SrlEntry::Warrant { id_hex } => (0_u8, id_hex.clone()),
         SrlEntry::Holder { key_hex } => (1_u8, key_hex.clone()),
     });
-    for entry in sorted {
-        #[allow(clippy::expect_used)]
-        ciborium::ser::into_writer(&entry, &mut bytes)
-            .expect("srl entry serialization is infallible");
-    }
+    // ponytail: encode the Vec as a CBOR array to avoid concatenation ambiguity
+    #[allow(clippy::expect_used)]
+    ciborium::ser::into_writer(&sorted, &mut bytes)
+        .expect("srl entries serialization is infallible");
     bytes
 }
 

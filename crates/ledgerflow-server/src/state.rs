@@ -129,29 +129,14 @@ impl NewAppState {
     }
 }
 
-/// Decodes a hex string into exactly `N` bytes.
+/// Decodes a hex string into exactly `N` bytes (delegates to core).
 fn decode_hex<const N: usize>(hex: &str) -> Option<[u8; N]> {
-    let hex = hex.trim();
-    if hex.len() != N * 2 {
-        return None;
-    }
-    let mut out = [0_u8; N];
-    for (i, chunk) in hex.as_bytes().chunks(2).enumerate() {
-        let text = std::str::from_utf8(chunk).ok()?;
-        out[i] = u8::from_str_radix(text, 16).ok()?;
-    }
-    Some(out)
+    ledgerflow_core::hex_decode_fixed(hex)
 }
 
-/// Encodes bytes as a lowercase hex string.
+/// Encodes bytes as a lowercase hex string (delegates to core).
 fn hex_encode(bytes: &[u8]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut encoded = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        encoded.push(HEX[(byte >> 4) as usize] as char);
-        encoded.push(HEX[(byte & 0x0F) as usize] as char);
-    }
-    encoded
+    ledgerflow_core::hex_encode_bytes(bytes)
 }
 
 // Keep the trait import used by the state's bounds referenced so consumers

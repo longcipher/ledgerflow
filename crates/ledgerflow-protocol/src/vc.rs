@@ -51,7 +51,7 @@ pub struct CredentialSubject {
     #[serde(rename = "holderDid")]
     pub holder_did: String,
     /// Delegation depth of this warrant (0 = root).
-    pub depth: u32,
+    pub depth: u8,
     /// Maximum delegation depth allowed for descendants.
     #[serde(rename = "maxDepth")]
     pub max_depth: u8,

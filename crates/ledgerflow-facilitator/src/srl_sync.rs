@@ -107,8 +107,5 @@ pub enum SrlSyncError {
 }
 
 fn hex_decode(hex: &str) -> Option<Vec<u8>> {
-    if !hex.len().is_multiple_of(2) {
-        return None;
-    }
-    (0..hex.len()).step_by(2).map(|i| u8::from_str_radix(&hex[i..i + 2], 16).ok()).collect()
+    ledgerflow_core::hex_decode_vec(hex)
 }

@@ -130,6 +130,12 @@ pub struct LedgerFlowAuthorizationExtension {
     pub signer: SignerRef,
     pub payment_subject: PaymentSubjectRef,
     pub approvals: Vec<ledgerflow_core::SignedApproval>,
+    /// Digest-referenced warrants (header-slim mode, design §7.1).
+    /// When `warrant_chain` is empty, the verifier loads each digest from
+    /// [`crate::middleware::WarrantRepository`]. Kept `#[serde(default)]` for
+    /// backward compatibility with inline-only payloads.
+    #[serde(default)]
+    pub warrant_digests: Vec<String>,
 }
 
 impl LedgerFlowAuthorizationExtension {
@@ -312,6 +318,7 @@ pub fn build_payment_payload(
             signer: seed.signer.signer_ref(),
             payment_subject: seed.payment_subject,
             approvals: seed.approvals,
+            warrant_digests: Vec::new(),
         }),
     })
 }

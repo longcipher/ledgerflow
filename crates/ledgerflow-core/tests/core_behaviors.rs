@@ -219,12 +219,9 @@ fn delegation_chain_passes_when_fully_valid() {
     let ctx = context(2_000);
 
     // Delegated warrant: holder of root delegates to the agent key.
-    let child = DelegatedWarrantBuilder::from(root.clone()).issue_to(
-        delegate_keys().signer_ref(),
-        &holder_keys(),
-        2_000,
-        [0_u8; 8],
-    );
+    let child = DelegatedWarrantBuilder::from(root.clone())
+        .try_issue_to(delegate_keys().signer_ref(), &holder_keys(), 2_000, [0_u8; 8])
+        .expect("delegation should succeed");
     let chain = WarrantChain { warrants: vec![root, child] };
     // The leaf holder is now delegate_keys; re-sign proof with it.
     let leaf = chain.leaf().expect("leaf");
@@ -251,12 +248,9 @@ fn delegated_chain_with_excessive_amount_is_rejected_by_runtime_conjunction() {
     let root = root_warrant(); // cap 1000
     let ctx = context(2_000);
     // Child with a HIGHER cap must be rejected (I7 amount monotonicity).
-    let child = DelegatedWarrantBuilder::from(root.clone()).issue_to(
-        delegate_keys().signer_ref(),
-        &holder_keys(),
-        2_000,
-        [0_u8; 8],
-    );
+    let child = DelegatedWarrantBuilder::from(root.clone())
+        .try_issue_to(delegate_keys().signer_ref(), &holder_keys(), 2_000, [0_u8; 8])
+        .expect("delegation should succeed");
     // Bump child cap beyond parent (tamper -> I7 violation).
     let mut tampered = child;
     tampered.payment = payment_constraint(2_000);
@@ -284,12 +278,9 @@ fn delegated_chain_with_excessive_amount_is_rejected_by_runtime_conjunction() {
 #[test]
 fn tampered_chain_node_is_rejected() {
     let root = root_warrant();
-    let child = DelegatedWarrantBuilder::from(root.clone()).issue_to(
-        delegate_keys().signer_ref(),
-        &holder_keys(),
-        2_000,
-        [0_u8; 8],
-    );
+    let child = DelegatedWarrantBuilder::from(root.clone())
+        .try_issue_to(delegate_keys().signer_ref(), &holder_keys(), 2_000, [0_u8; 8])
+        .expect("delegation should succeed");
     // Tamper: change merchant on the child without re-signing.
     let mut tampered = child;
     tampered.merchant = MerchantConstraint::with_ids(vec!["evil".to_string()]);

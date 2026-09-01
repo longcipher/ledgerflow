@@ -59,7 +59,7 @@ pub enum AuthorizationError {
     #[error("child issuer does not match parent holder (I1)")]
     DelegationAuthorityMismatch,
     #[error("child depth {actual} does not equal parent depth + 1 (expected {expected}) (I2)")]
-    DepthMismatch { expected: u32, actual: u32 },
+    DepthMismatch { expected: u8, actual: u8 },
     #[error("child expires later than parent (I3)")]
     TtlMonotonicityViolation,
     #[error("child amount cap exceeds parent cap (I7)")]

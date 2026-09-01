@@ -90,19 +90,13 @@ fn distinct_ids_same_node_are_allowed() {
     // A -> B -> A (different ids) is allowed by tenuo's rule: the ids differ,
     // even though the holder patterns may repeat.
     let root = root_warrant(2_000, 86_400, 3);
-    let first = ledgerflow_core::typestate::DelegatedWarrantBuilder::from(root.clone()).issue_to(
-        delegate_keys().signer_ref(),
-        &holder_keys(),
-        2_000,
-        [1_u8; 8],
-    );
+    let first = ledgerflow_core::typestate::DelegatedWarrantBuilder::from(root.clone())
+        .try_issue_to(delegate_keys().signer_ref(), &holder_keys(), 2_000, [1_u8; 8])
+        .expect("delegation should succeed");
     // Issue a second child from the first (different id via different seed).
-    let second = ledgerflow_core::typestate::DelegatedWarrantBuilder::from(first.clone()).issue_to(
-        holder_keys().signer_ref(),
-        &delegate_keys(),
-        2_000,
-        [2_u8; 8],
-    );
+    let second = ledgerflow_core::typestate::DelegatedWarrantBuilder::from(first.clone())
+        .try_issue_to(holder_keys().signer_ref(), &delegate_keys(), 2_000, [2_u8; 8])
+        .expect("delegation should succeed");
     let chain = WarrantChain { warrants: vec![root, first, second] };
     let leaf = chain.leaf().expect("leaf");
     let ctx = context(2_000, &holder_keys().signer_ref());
@@ -272,7 +266,8 @@ fn delegated_builder_narrowing_is_checked_at_issuance() {
     // Narrowing the amount cap is allowed.
     let child = ledgerflow_core::typestate::DelegatedWarrantBuilder::from(root)
         .with_payment(payment(50))
-        .issue_to(delegate_keys().signer_ref(), &holder_keys(), 2_000, [3_u8; 8]);
+        .try_issue_to(delegate_keys().signer_ref(), &holder_keys(), 2_000, [3_u8; 8])
+        .expect("delegation should succeed");
     assert_eq!(child.payment.max_per_charge, 50);
 }
 

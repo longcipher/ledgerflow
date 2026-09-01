@@ -40,6 +40,8 @@ struct FileRevocationStoreInner {
     path: PathBuf,
     revoked_warrants: Mutex<HashSet<Vec<u8>>>,
     revoked_holders: Mutex<HashSet<Vec<u8>>>,
+    // ponytail: global file lock, per-record lock if throughput matters
+    file_mutex: Mutex<()>,
 }
 
 impl FileRevocationStore {
@@ -80,26 +82,40 @@ impl FileRevocationStore {
                 path,
                 revoked_warrants: Mutex::new(revoked_warrants),
                 revoked_holders: Mutex::new(revoked_holders),
+                file_mutex: Mutex::new(()),
             }),
         })
     }
 
     /// Revokes a warrant by id (persisted immediately).
     pub fn revoke_warrant(&self, warrant_id: &[u8]) -> Result<(), RevocationStoreError> {
+        // ponytail: single global lock covers file append + set insert
+        let _file_guard = self.inner.file_mutex.lock().unwrap_or_else(|e| e.into_inner());
         let record = RevocationRecord::Warrant { id_hex: hex_encode(warrant_id) };
-        self.append(&record)?;
-        if let Ok(mut set) = self.inner.revoked_warrants.lock() {
-            set.insert(warrant_id.to_vec());
+        self.append_locked(&record)?;
+        match self.inner.revoked_warrants.lock() {
+            Ok(mut set) => {
+                set.insert(warrant_id.to_vec());
+            }
+            Err(poisoned) => {
+                poisoned.into_inner().insert(warrant_id.to_vec());
+            }
         }
         Ok(())
     }
 
     /// Revokes a holder key (persisted immediately).
     pub fn revoke_holder(&self, holder: &SignerRef) -> Result<(), RevocationStoreError> {
+        let _file_guard = self.inner.file_mutex.lock().unwrap_or_else(|e| e.into_inner());
         let record = RevocationRecord::Holder { key_hex: hex_encode(&holder.public_key) };
-        self.append(&record)?;
-        if let Ok(mut set) = self.inner.revoked_holders.lock() {
-            set.insert(holder.public_key.clone());
+        self.append_locked(&record)?;
+        match self.inner.revoked_holders.lock() {
+            Ok(mut set) => {
+                set.insert(holder.public_key.clone());
+            }
+            Err(poisoned) => {
+                poisoned.into_inner().insert(holder.public_key.clone());
+            }
         }
         Ok(())
     }
@@ -114,11 +130,17 @@ impl FileRevocationStore {
         tenant_id: &str,
         warrant_id: &[u8],
     ) -> Result<(), RevocationStoreError> {
+        let _file_guard = self.inner.file_mutex.lock().unwrap_or_else(|e| e.into_inner());
         let scoped = tenant_scoped_key(tenant_id, warrant_id);
         let record = RevocationRecord::Warrant { id_hex: hex_encode(&scoped) };
-        self.append(&record)?;
-        if let Ok(mut set) = self.inner.revoked_warrants.lock() {
-            set.insert(scoped);
+        self.append_locked(&record)?;
+        match self.inner.revoked_warrants.lock() {
+            Ok(mut set) => {
+                set.insert(scoped);
+            }
+            Err(poisoned) => {
+                poisoned.into_inner().insert(scoped);
+            }
         }
         Ok(())
     }
@@ -129,11 +151,17 @@ impl FileRevocationStore {
         tenant_id: &str,
         holder: &SignerRef,
     ) -> Result<(), RevocationStoreError> {
+        let _file_guard = self.inner.file_mutex.lock().unwrap_or_else(|e| e.into_inner());
         let scoped = tenant_scoped_key(tenant_id, &holder.public_key);
         let record = RevocationRecord::Holder { key_hex: hex_encode(&scoped) };
-        self.append(&record)?;
-        if let Ok(mut set) = self.inner.revoked_holders.lock() {
-            set.insert(scoped);
+        self.append_locked(&record)?;
+        match self.inner.revoked_holders.lock() {
+            Ok(mut set) => {
+                set.insert(scoped);
+            }
+            Err(poisoned) => {
+                poisoned.into_inner().insert(scoped);
+            }
         }
         Ok(())
     }
@@ -155,11 +183,19 @@ impl FileRevocationStore {
     /// Checks whether a raw (possibly tenant-scoped) holder key is revoked.
     #[must_use]
     pub fn check_holder_key(&self, holder_key: &[u8]) -> RevocationDecision {
-        let revoked = self.inner.revoked_holders.lock().is_ok_and(|set| set.contains(holder_key));
-        if revoked { RevocationDecision::RevokedHolder } else { RevocationDecision::Ok }
+        match self.inner.revoked_holders.lock() {
+            Ok(set) => {
+                if set.contains(holder_key) {
+                    RevocationDecision::RevokedHolder
+                } else {
+                    RevocationDecision::Ok
+                }
+            }
+            Err(_) => RevocationDecision::RevokedHolder,
+        }
     }
 
-    fn append(&self, record: &RevocationRecord) -> Result<(), RevocationStoreError> {
+    fn append_locked(&self, record: &RevocationRecord) -> Result<(), RevocationStoreError> {
         let mut file = OpenOptions::new()
             .create(true)
             .append(true)
@@ -176,14 +212,29 @@ impl FileRevocationStore {
 
 impl RevocationCheck for FileRevocationStore {
     fn check_warrant(&self, warrant_id: &[u8]) -> RevocationDecision {
-        let revoked = self.inner.revoked_warrants.lock().is_ok_and(|set| set.contains(warrant_id));
-        if revoked { RevocationDecision::RevokedWarrant } else { RevocationDecision::Ok }
+        match self.inner.revoked_warrants.lock() {
+            Ok(set) => {
+                if set.contains(warrant_id) {
+                    RevocationDecision::RevokedWarrant
+                } else {
+                    RevocationDecision::Ok
+                }
+            }
+            Err(_) => RevocationDecision::RevokedWarrant,
+        }
     }
 
     fn check_holder(&self, holder: &SignerRef) -> RevocationDecision {
-        let revoked =
-            self.inner.revoked_holders.lock().is_ok_and(|set| set.contains(&holder.public_key));
-        if revoked { RevocationDecision::RevokedHolder } else { RevocationDecision::Ok }
+        match self.inner.revoked_holders.lock() {
+            Ok(set) => {
+                if set.contains(&holder.public_key) {
+                    RevocationDecision::RevokedHolder
+                } else {
+                    RevocationDecision::Ok
+                }
+            }
+            Err(_) => RevocationDecision::RevokedHolder,
+        }
     }
 }
 
@@ -234,23 +285,11 @@ impl RevocationCheck for InsecureMemoryRevocationStore {
 }
 
 fn hex_encode(bytes: &[u8]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut encoded = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        encoded.push(HEX[(byte >> 4) as usize] as char);
-        encoded.push(HEX[(byte & 0x0F) as usize] as char);
-    }
-    encoded
+    ledgerflow_core::hex_encode_bytes(bytes)
 }
 
 fn hex_decode(hex: &str) -> Result<Vec<u8>, ()> {
-    if !hex.len().is_multiple_of(2) {
-        return Err(());
-    }
-    (0..hex.len())
-        .step_by(2)
-        .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).map_err(|_| ()))
-        .collect()
+    ledgerflow_core::hex_decode_vec(hex).ok_or(())
 }
 
 /// Builds a tenant-scoped composite revocation key.

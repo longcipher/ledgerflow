@@ -9,6 +9,7 @@
 //! (design §10.3); this module provides the in-process delivery path.
 
 use std::{
+    collections::VecDeque,
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -59,7 +60,8 @@ impl WebhookEvent {
 /// configured, enqueues each event onto a bounded background worker.
 #[derive(Clone, Debug)]
 pub struct WebhookSender {
-    sink: Arc<std::sync::Mutex<Vec<WebhookEvent>>>,
+    // ponytail: bounded 1024, oldest dropped when full
+    sink: Arc<std::sync::Mutex<VecDeque<WebhookEvent>>>,
     delivery: Option<Arc<DeliveryWorker>>,
 }
 
@@ -97,7 +99,7 @@ impl WebhookSender {
     /// Creates a disabled sender (no delivery; events are buffered for tests).
     #[must_use]
     pub fn disabled() -> Self {
-        Self { sink: Arc::new(std::sync::Mutex::new(Vec::new())), delivery: None }
+        Self { sink: Arc::new(std::sync::Mutex::new(VecDeque::new())), delivery: None }
     }
 
     /// Creates a sender that buffers events and delivers them to `delivery_url`
@@ -111,7 +113,13 @@ impl WebhookSender {
     /// enqueues it for best-effort background delivery.
     pub fn emit(&self, event: WebhookEvent) {
         if let Ok(mut sink) = self.sink.lock() {
-            sink.push(event.clone());
+            if sink.len() >= 1024 {
+                sink.pop_front();
+            }
+            sink.push_back(event.clone());
+        } else {
+            tracing::warn!("webhook sink lock poisoned; dropping event");
+            return;
         }
         if let Some(delivery) = &self.delivery {
             let payload = serde_json::json!({
@@ -125,13 +133,19 @@ impl WebhookSender {
 
     /// Returns the buffered events (for tests and audit).
     pub fn buffered(&self) -> Vec<WebhookEvent> {
-        self.sink.lock().map(|sink| sink.clone()).unwrap_or_default()
+        match self.sink.lock() {
+            Ok(sink) => sink.iter().cloned().collect(),
+            Err(poisoned) => {
+                tracing::warn!("webhook sink lock poisoned on buffered()");
+                poisoned.into_inner().iter().cloned().collect()
+            }
+        }
     }
 
     #[must_use]
     fn with_delivery_config(delivery_url: String, config: DeliveryConfig) -> Self {
         Self {
-            sink: Arc::new(std::sync::Mutex::new(Vec::new())),
+            sink: Arc::new(std::sync::Mutex::new(VecDeque::new())),
             delivery: Some(Arc::new(DeliveryWorker::spawn(delivery_url, config))),
         }
     }

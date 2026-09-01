@@ -188,24 +188,37 @@ pub trait WarrantExt {
 }
 
 impl WarrantExt for Warrant {
-    // Skipped for mutation testing: the body is a documented v1-permissive
-    // constant, so "replace with true" is an equivalent mutant.
-    #[cfg_attr(test, mutants::skip)]
     fn payment_subjects_allowed(&self, context: &AuthorizationContext) -> bool {
-        // v1 model: the warrant's holder is bound to the payment subject via
-        // the CAIP-10 of the presenter's key when present. For simplicity,
-        // the subject allowance is expressed through the merchant/resource
-        // constraints; callers that model explicit subjects set them here.
-        //
-        // NOTE (documented v1 limitation, not a silent bug): the v1 `Warrant`
-        // schema carries no dedicated payment-subject constraint field, so
-        // this predicate is intentionally permissive. Subject containment is
-        // instead enforced through the merchant/resource constraints and the
-        // PoP binding (design §6.4). When a subject constraint is added to the
-        // schema, this method MUST be tightened to enforce it (fail-closed)
-        // and this skip removed.
-        let _ = context;
-        true
+        let subject = &context.payment_subject;
+        // ponytail: fail-closed subject check; allowlist when warrant gains
+        // PaymentSubjectConstraint
+        if subject.value.is_empty() || subject.value.trim().is_empty() {
+            return false;
+        }
+        match subject.kind {
+            crate::warrant::PaymentSubjectKind::Caip10 => {
+                // CAIP-10 subjects must be prefixed and carry a chain namespace.
+                if !subject.value.starts_with("caip10:") {
+                    return false;
+                }
+                // For now allow EVM and Solana chains; extend as rails grow.
+                if !(subject.value.contains("eip155:") || subject.value.contains("solana:")) {
+                    return false;
+                }
+                // Basic shape: must contain at least two ':' separators.
+                if subject.value.matches(':').count() < 2 {
+                    return false;
+                }
+                true
+            }
+            crate::warrant::PaymentSubjectKind::FacilitatorAccount |
+            crate::warrant::PaymentSubjectKind::ExchangeAccount |
+            crate::warrant::PaymentSubjectKind::Opaque => {
+                // Non-CAIP subjects: require non-empty, non-whitespace value.
+                // Opaque is intentionally permissive beyond that.
+                !subject.value.trim().is_empty()
+            }
+        }
     }
 
     fn verify_constraints(&self, context: &AuthorizationContext) -> Result<()> {

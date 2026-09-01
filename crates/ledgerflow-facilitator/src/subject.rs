@@ -45,17 +45,11 @@ impl PaymentSubjectResolver for DefaultSubjectResolver {
                 RailKind::Evm
             }
             PaymentSubjectKind::ExchangeAccount => RailKind::Exchange,
-            PaymentSubjectKind::FacilitatorAccount if subject.value.starts_with("binance:") => {
-                RailKind::Exchange
-            }
-            PaymentSubjectKind::FacilitatorAccount if subject.value.starts_with("okx:") => {
-                RailKind::Exchange
-            }
+            PaymentSubjectKind::FacilitatorAccount => RailKind::Exchange,
             PaymentSubjectKind::Opaque if subject.value.starts_with("gateway:") => {
                 RailKind::Gateway
             }
             PaymentSubjectKind::Opaque => RailKind::Custodial,
-            PaymentSubjectKind::FacilitatorAccount => RailKind::Exchange,
             _ => {
                 return Err(SubjectResolutionError::UnsupportedSubject {
                     value: subject.value.clone(),

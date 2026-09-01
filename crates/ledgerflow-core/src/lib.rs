@@ -81,7 +81,8 @@ pub use crate::{
         MAX_DELEGATION_DEPTH, MAX_WARRANT_CBOR_BYTES, MAX_WARRANT_TTL_SECS, PaymentRail,
         PaymentSubjectKind, PaymentSubjectRef, SignatureEnvelope, SignerRef, SigningAlgorithm,
         SigningKeyPair, WARRANT_SIGN_DOMAIN, WARRANT_VERSION_V1, Warrant, WarrantMetadata,
-        generate_warrant_id, generate_warrant_id_128, hex_encode_bytes, sha256_prefixed,
+        generate_warrant_id, generate_warrant_id_128, hex_decode_fixed, hex_decode_vec,
+        hex_encode_bytes, sha256_prefixed,
     },
 };
 

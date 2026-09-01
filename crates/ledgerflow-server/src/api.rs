@@ -313,17 +313,9 @@ fn random_bytes() -> [u8; 8] {
     rand::random()
 }
 
-/// Decodes a hex string into exactly `N` bytes.
+/// Decodes a hex string into exactly `N` bytes (delegates to core).
 fn decode_hex<const N: usize>(hex: &str) -> Option<[u8; N]> {
-    if hex.len() != N * 2 {
-        return None;
-    }
-    let mut out = [0_u8; N];
-    for (i, chunk) in hex.as_bytes().chunks(2).enumerate() {
-        let text = std::str::from_utf8(chunk).ok()?;
-        out[i] = u8::from_str_radix(text, 16).ok()?;
-    }
-    Some(out)
+    ledgerflow_core::hex_decode_fixed(hex)
 }
 
 #[cfg(test)]

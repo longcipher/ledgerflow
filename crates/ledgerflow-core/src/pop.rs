@@ -85,10 +85,11 @@ impl PopTuple {
     /// Produces a digest over a list of signed approvals.
     #[must_use]
     pub fn approvals_digest(approvals: &[crate::approval::SignedApproval]) -> String {
+        // ponytail: CBOR-encode the Vec to avoid concatenation ambiguity
         let mut bytes = Vec::new();
-        for approval in approvals {
-            bytes.extend_from_slice(&approval.encode_cbor());
-        }
+        #[allow(clippy::expect_used)]
+        ciborium::ser::into_writer(approvals, &mut bytes)
+            .expect("approvals serialization is infallible");
         sha256_prefixed(bytes)
     }
 

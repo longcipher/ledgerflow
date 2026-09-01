@@ -74,7 +74,15 @@ impl TrustedIssuers {
     #[must_use]
     pub fn contains(&self, signer: &SignerRef) -> bool {
         self.issuers.iter().any(|entry| {
-            entry.issuer.alg == signer.alg && entry.issuer.public_key == signer.public_key
+            if entry.issuer.alg != signer.alg || entry.issuer.public_key != signer.public_key {
+                return false;
+            }
+            // Strict key_id policy: both sides must agree when either pins a key_id.
+            match (&entry.issuer.key_id, &signer.key_id) {
+                (Some(expected), Some(actual)) => expected == actual,
+                (None, None) => true,
+                (Some(_), None) | (None, Some(_)) => false,
+            }
         })
     }
 
@@ -115,15 +123,27 @@ impl TrustedIssuers {
         if self.contains(&root.issuer) {
             return Ok(());
         }
-        let mut saw_anchor = false;
-        let mut last_anchor: Option<&AgentIdRef> = None;
-        for entry in &self.issuers {
-            let Some(anchor) = &entry.anchor else {
-                continue;
+        let anchored: Vec<&TrustedIssuer> =
+            self.issuers.iter().filter(|e| e.anchor.is_some()).collect();
+        if anchored.is_empty() {
+            return Err(AuthorizationError::UntrustedIssuer {
+                key_id: root.issuer.key_id.clone().unwrap_or_default(),
+            });
+        }
+        let Some(resolver) = resolver else {
+            // ponytail: fail-closed when identity anchors exist but no resolver is wired
+            let Some(first) = &anchored[0].anchor else {
+                return Err(AuthorizationError::UntrustedIssuer {
+                    key_id: root.issuer.key_id.clone().unwrap_or_default(),
+                });
             };
-            saw_anchor = true;
-            last_anchor = Some(anchor);
-            let Some(resolver) = resolver else {
+            return Err(AuthorizationError::IdentityResolutionFailed {
+                reference: first.to_string(),
+                detail: "resolver unavailable".to_string(),
+            });
+        };
+        for entry in &anchored {
+            let Some(anchor) = &entry.anchor else {
                 continue;
             };
             let resolved = resolver.resolve_keys(anchor).map_err(|error| {
@@ -132,22 +152,28 @@ impl TrustedIssuers {
                     detail: error.to_string(),
                 }
             })?;
-            if resolved
-                .iter()
-                .any(|key| key.alg == root.issuer.alg && key.public_key == root.issuer.public_key)
-            {
+            let matched = resolved.iter().any(|key| {
+                if key.alg != root.issuer.alg || key.public_key != root.issuer.public_key {
+                    return false;
+                }
+                // ponytail: enforce key_id when present on either side
+                match (&key.key_id, &root.issuer.key_id) {
+                    (Some(expected), Some(actual)) => expected == actual,
+                    (None, None) => true,
+                    (Some(_), None) | (None, Some(_)) => false,
+                }
+            });
+            if matched {
                 return Ok(());
             }
         }
-        if saw_anchor {
-            Err(AuthorizationError::IssuerNotBoundToIdentity {
-                reference: last_anchor.map_or_else(String::new, std::string::ToString::to_string),
-            })
-        } else {
-            Err(AuthorizationError::UntrustedIssuer {
-                key_id: root.issuer.key_id.clone().unwrap_or_default(),
-            })
-        }
+        let reference = anchored
+            .iter()
+            .filter_map(|e| e.anchor.as_ref())
+            .map(std::string::ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(",");
+        Err(AuthorizationError::IssuerNotBoundToIdentity { reference })
     }
 }
 
@@ -257,7 +283,7 @@ mod tests {
         let warrant = sample_root(rotated_keys());
         // No resolver available: anchors cannot be consulted.
         let error = set.verify_root_with_resolver(&warrant, None).expect_err("no resolver");
-        assert!(matches!(error, AuthorizationError::IssuerNotBoundToIdentity { .. }));
+        assert!(matches!(error, AuthorizationError::IdentityResolutionFailed { .. }));
     }
 
     #[test]

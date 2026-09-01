@@ -4,8 +4,7 @@
 //! published messages are delivered to every subscriber of that topic. The
 //! dApp client's mock paths use this directly (no WebSocket).
 
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded};
 use tokio::sync::Mutex;

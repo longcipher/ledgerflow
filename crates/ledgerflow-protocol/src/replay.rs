@@ -53,6 +53,7 @@ pub trait ReplayStore {
         request_hash: String,
         accepted_hash: String,
     );
+    fn remove_cached_payment(&mut self, payment_identifier: &str);
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -63,6 +64,8 @@ pub struct CachedPayment {
 }
 
 const DEFAULT_TTL_MS: u64 = 300_000;
+const MAX_PAYMENT_RESULTS: usize = 1024;
+const CLEANUP_INTERVAL: u64 = 128;
 
 /// In-memory replay/idempotency store used by tests and local flows.
 #[derive(Clone, Debug)]
@@ -70,13 +73,19 @@ pub struct InMemoryReplayStore {
     nonce_claims: BTreeMap<(String, String), NonceClaim>,
     payment_results: BTreeMap<String, CachedPayment>,
     ttl_ms: u64,
+    ops_since_cleanup: u64,
 }
 
 impl InMemoryReplayStore {
     /// Create a new store with the specified TTL in milliseconds.
     #[must_use]
     pub const fn with_ttl(ttl_ms: u64) -> Self {
-        Self { nonce_claims: BTreeMap::new(), payment_results: BTreeMap::new(), ttl_ms }
+        Self {
+            nonce_claims: BTreeMap::new(),
+            payment_results: BTreeMap::new(),
+            ttl_ms,
+            ops_since_cleanup: 0,
+        }
     }
 }
 
@@ -92,12 +101,28 @@ impl ReplayStore for InMemoryReplayStore {
         fingerprint: ReplayFingerprint,
         now_ms: u64,
     ) -> std::result::Result<(), ReplayConflict> {
-        self.nonce_claims
-            .retain(|_, claim| now_ms.saturating_sub(claim.created_at_ms) < self.ttl_ms);
-
+        // ponytail: per-key expiry check + periodic sweep instead of O(n) retain every call
         let key = fingerprint.key();
         if let Some(existing) = self.nonce_claims.get(&key) {
-            return Err(ReplayConflict { existing: existing.fingerprint.clone() });
+            if now_ms.saturating_sub(existing.created_at_ms) < self.ttl_ms {
+                return Err(ReplayConflict { existing: existing.fingerprint.clone() });
+            }
+            // expired entry for this key -> evict lazily
+            self.nonce_claims.remove(&key);
+        }
+
+        self.ops_since_cleanup = self.ops_since_cleanup.wrapping_add(1);
+        if self.ops_since_cleanup.is_multiple_of(CLEANUP_INTERVAL) {
+            // periodic full sweep to bound memory; still O(n) but amortized 1/128
+            let expired: Vec<(String, String)> = self
+                .nonce_claims
+                .iter()
+                .filter(|(_, claim)| now_ms.saturating_sub(claim.created_at_ms) >= self.ttl_ms)
+                .map(|(k, _)| k.clone())
+                .collect();
+            for k in expired {
+                self.nonce_claims.remove(&k);
+            }
         }
 
         self.nonce_claims.insert(key, NonceClaim { fingerprint, created_at_ms: now_ms });
@@ -127,6 +152,19 @@ impl ReplayStore for InMemoryReplayStore {
             payment_identifier,
             CachedPayment { authorization, request_hash, accepted_hash },
         );
+        // ponytail: bounded 1024, evict lexicographically smallest key when over (BTreeMap order,
+        // not true LRU)
+        while self.payment_results.len() > MAX_PAYMENT_RESULTS {
+            if let Some(first_key) = self.payment_results.keys().next().cloned() {
+                self.payment_results.remove(&first_key);
+            } else {
+                break;
+            }
+        }
+    }
+
+    fn remove_cached_payment(&mut self, payment_identifier: &str) {
+        self.payment_results.remove(payment_identifier);
     }
 }
 

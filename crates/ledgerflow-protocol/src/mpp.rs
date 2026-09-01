@@ -88,6 +88,7 @@ impl SlimAuthorization {
             signer: self.signer,
             payment_subject: self.payment_subject,
             approvals: self.approvals,
+            warrant_digests: Vec::new(),
         }
     }
 }

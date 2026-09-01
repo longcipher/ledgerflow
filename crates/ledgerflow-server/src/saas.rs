@@ -93,12 +93,18 @@ impl SaasAuthExtractor {
     }
 }
 
-/// Constant-time string equality.
+/// Constant-time string equality (length-independent).
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
+    let max = a.len().max(b.len());
+    let mut diff = (a.len() ^ b.len()) as u8;
+    // Ensure any length mismatch is captured even when low byte is zero (e.g., 256).
+    diff |= u8::from(a.len() != b.len());
+    for i in 0..max {
+        let av = if i < a.len() { a[i] } else { 0 };
+        let bv = if i < b.len() { b[i] } else { 0 };
+        diff |= av ^ bv;
     }
-    a.iter().zip(b).fold(0_u8, |acc, (x, y)| acc | (x ^ y)) == 0
+    diff == 0
 }
 
 /// Middleware function for axum that extracts the SaaS context and stores it
@@ -146,16 +152,22 @@ pub const fn saas_auth_extractor_state(
 /// every request, so handlers can depend on it directly. This closes the gap
 /// where the context was computed but never consumed (design §10.2 tenant
 /// isolation).
+///
+/// This extractor is fail-closed: if the middleware did not run (e.g., layer
+/// ordering bug), the request is rejected with 401 instead of falling back to
+/// a default tenant. Ensure `saas_auth_middleware` is the outermost layer.
 impl axum::extract::FromRequestParts<crate::state::AppState> for SaaSContext {
-    type Rejection = std::convert::Infallible;
+    type Rejection = crate::api::ApiError;
 
     fn from_request_parts(
         parts: &mut axum::http::request::Parts,
         _state: &crate::state::AppState,
     ) -> impl std::future::Future<Output = Result<Self, Self::Rejection>> + Send {
-        let context =
-            parts.extensions.get::<Self>().cloned().unwrap_or_else(|| Self::standalone("default"));
-        std::future::ready(Ok(context))
+        if let Some(ctx) = parts.extensions.get::<Self>().cloned() {
+            std::future::ready(Ok(ctx))
+        } else {
+            std::future::ready(Err(crate::api::ApiError::Unauthorized))
+        }
     }
 }
 

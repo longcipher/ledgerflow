@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[package.metadata.cargo-shear]
+ignored = ["mutants"]
+
 [dependencies]
 ciborium.workspace = true
 ed25519-dalek = { workspace = true, features = ["rand_core", "serde"] }

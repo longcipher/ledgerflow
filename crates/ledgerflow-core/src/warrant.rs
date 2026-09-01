@@ -491,7 +491,7 @@ pub struct Warrant {
     /// Unix seconds when the warrant expires.
     pub expires_at: u64,
     /// Delegation depth of this warrant (0 = root).
-    pub depth: u32,
+    pub depth: u8,
     /// Maximum delegation depth allowed for descendants.
     pub max_depth: u8,
     /// SHA-256 of the parent's payload bytes (None for root warrants).
@@ -612,7 +612,7 @@ struct WarrantPayloadRef<'a> {
     issuer: &'a SignerRef,
     issued_at: u64,
     expires_at: u64,
-    depth: u32,
+    depth: u8,
     max_depth: u8,
     parent_hash: Option<&'a Vec<u8>>,
     merchant: &'a crate::constraint::MerchantConstraint,
@@ -661,6 +661,34 @@ pub(crate) fn hex_encode(bytes: &[u8]) -> String {
 #[must_use]
 pub fn hex_encode_bytes(bytes: &[u8]) -> String {
     hex_encode(bytes)
+}
+
+/// Decodes a hex string (with optional `0x`/`0X` prefix and surrounding
+/// whitespace) into exactly `N` bytes. Returns `None` on length or
+/// content mismatch. Centralized to avoid hand-rolled decoders
+/// diverging across crates (M-04).
+#[must_use]
+pub fn hex_decode_fixed<const N: usize>(hex: &str) -> Option<[u8; N]> {
+    let hex = hex.trim().trim_start_matches("0x").trim_start_matches("0X");
+    if hex.len() != N * 2 {
+        return None;
+    }
+    let mut out = [0_u8; N];
+    for (i, chunk) in hex.as_bytes().chunks(2).enumerate() {
+        let text = std::str::from_utf8(chunk).ok()?;
+        out[i] = u8::from_str_radix(text, 16).ok()?;
+    }
+    Some(out)
+}
+
+/// Decodes a hex string of arbitrary length into bytes.
+#[must_use]
+pub fn hex_decode_vec(hex: &str) -> Option<Vec<u8>> {
+    let hex = hex.trim().trim_start_matches("0x").trim_start_matches("0X");
+    if !hex.len().is_multiple_of(2) {
+        return None;
+    }
+    (0..hex.len()).step_by(2).map(|i| u8::from_str_radix(&hex[i..i + 2], 16).ok()).collect()
 }
 
 #[cfg(test)]

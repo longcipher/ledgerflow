@@ -57,16 +57,7 @@ async fn main() -> Result<()> {
     axum::serve(listener, app).await.wrap_err("server error")
 }
 
-/// Decodes a 32-byte hex string into bytes.
+/// Decodes a 32-byte hex string into bytes (delegates to core).
 fn hex_decode(hex: &str) -> Option<[u8; 32]> {
-    let hex = hex.trim();
-    if hex.len() != 64 {
-        return None;
-    }
-    let mut out = [0_u8; 32];
-    for (i, chunk) in hex.as_bytes().chunks(2).enumerate() {
-        let text = std::str::from_utf8(chunk).ok()?;
-        out[i] = u8::from_str_radix(text, 16).ok()?;
-    }
-    Some(out)
+    ledgerflow_core::hex_decode_fixed(hex)
 }

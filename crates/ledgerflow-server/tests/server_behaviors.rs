@@ -162,7 +162,13 @@ fn api_health_endpoint_responds() {
 #[test]
 fn api_revocation_endpoint_works_end_to_end() {
     let state = ledgerflow_server::NewAppState::demo().expect("demo state");
-    let app = ledgerflow_server::api::router().with_state(state);
+    let extractor = state.saas.clone();
+    let app = ledgerflow_server::api::router().with_state(state).layer(
+        axum::middleware::from_fn_with_state(
+            extractor,
+            ledgerflow_server::saas::saas_auth_middleware,
+        ),
+    );
     let result = tokio::runtime::Runtime::new().expect("runtime").block_on(async {
         use tower::ServiceExt as _;
         let request = axum::http::Request::builder()

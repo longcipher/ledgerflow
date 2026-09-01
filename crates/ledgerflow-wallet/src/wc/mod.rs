@@ -21,7 +21,9 @@ mod uri;
 
 use std::sync::{Arc, OnceLock};
 
+pub(crate) use dapp::WcDappClient;
 use ledgerflow_core::{SignatureEnvelope, SignerRef, SigningAlgorithm};
+pub(crate) use uri::PairingUri;
 
 use crate::{
     error::WalletError,
@@ -29,9 +31,6 @@ use crate::{
         SignPaymentRequest, SignRequest, SignResult, SignedPayment, WalletDescriptor, WalletSigner,
     },
 };
-
-pub(crate) use dapp::WcDappClient;
-pub(crate) use uri::PairingUri;
 
 /// Configuration for a [`WcV2Signer`].
 #[derive(Clone, Debug)]
@@ -63,12 +62,12 @@ impl Default for WcV2Config {
 /// # EVM semantics
 ///
 /// WC v2 wallets expose EVM accounts, not raw public keys. Consequently:
-/// - [`WalletSigner::keys`] returns the account address as the signer
-///   identifier (`public_key` = 20-byte address, `key_id` = hex address).
-/// - [`WalletSigner::sign`] maps to `personal_sign` (EIP-191); the returned
-///   signature is a 65-byte secp256k1 `(r ‖ s ‖ v)` value.
-/// - [`WalletSigner::sign_payment`] builds a native EIP-1559 transfer and maps
-///   to `eth_signTransaction` (signs without broadcasting).
+/// - [`WalletSigner::keys`] returns the account address as the signer identifier (`public_key` =
+///   20-byte address, `key_id` = hex address).
+/// - [`WalletSigner::sign`] maps to `personal_sign` (EIP-191); the returned signature is a 65-byte
+///   secp256k1 `(r ‖ s ‖ v)` value.
+/// - [`WalletSigner::sign_payment`] builds a native EIP-1559 transfer and maps to
+///   `eth_signTransaction` (signs without broadcasting).
 pub struct WcV2Signer {
     client: Arc<WcDappClient>,
     descriptor: WalletDescriptor,
@@ -116,7 +115,9 @@ impl WcV2Signer {
         let runtime = wc_runtime().ok();
         if let Some(runtime) = runtime {
             let client = Arc::clone(&self.client);
-            runtime.block_on(async move { client.close().await; });
+            runtime.block_on(async move {
+                client.close().await;
+            });
         }
     }
 
@@ -126,9 +127,9 @@ impl WcV2Signer {
         let result = runtime.block_on(
             self.client.request(jsonrpc::method::ETH_REQUEST_ACCOUNTS, serde_json::json!([])),
         )?;
-        let accounts = result
-            .as_array()
-            .ok_or_else(|| WalletError::InvalidPayload("eth_requestAccounts: expected array".to_string()))?;
+        let accounts = result.as_array().ok_or_else(|| {
+            WalletError::InvalidPayload("eth_requestAccounts: expected array".to_string())
+        })?;
         let account = accounts
             .first()
             .and_then(|a| a.as_str())
@@ -147,12 +148,11 @@ impl WalletSigner for WcV2Signer {
         let account = self.account()?;
         let message_hex = format!("0x{}", hex::encode(&request.message));
         let params = serde_json::json!([message_hex, account]);
-        let result = runtime.block_on(
-            self.client.request(jsonrpc::method::PERSONAL_SIGN, params),
-        )?;
-        let sig_hex = result
-            .as_str()
-            .ok_or_else(|| WalletError::InvalidPayload("personal_sign: expected string".to_string()))?;
+        let result =
+            runtime.block_on(self.client.request(jsonrpc::method::PERSONAL_SIGN, params))?;
+        let sig_hex = result.as_str().ok_or_else(|| {
+            WalletError::InvalidPayload("personal_sign: expected string".to_string())
+        })?;
         let sig_bytes = decode_hex(sig_hex)?;
         // Recover the actual compressed public key from the signature so the
         // returned signer reference supports strict verification
@@ -194,12 +194,11 @@ impl WalletSigner for WcV2Signer {
         let account = self.account()?;
         let tx = build_eip1559_tx(request, &account)?;
         let params = serde_json::json!([tx]);
-        let result = runtime.block_on(
-            self.client.request(jsonrpc::method::ETH_SIGN_TRANSACTION, params),
-        )?;
-        let raw = result
-            .as_str()
-            .ok_or_else(|| WalletError::InvalidPayload("eth_signTransaction: expected string".to_string()))?;
+        let result =
+            runtime.block_on(self.client.request(jsonrpc::method::ETH_SIGN_TRANSACTION, params))?;
+        let raw = result.as_str().ok_or_else(|| {
+            WalletError::InvalidPayload("eth_signTransaction: expected string".to_string())
+        })?;
         Ok(SignedPayment {
             signer: SignerRef {
                 alg: SigningAlgorithm::Secp256k1,
@@ -221,22 +220,19 @@ fn build_eip1559_tx(
     request: &SignPaymentRequest,
     from: &str,
 ) -> Result<serde_json::Value, WalletError> {
-    let chain_id = request
-        .chain_id
-        .strip_prefix("eip155:")
-        .ok_or_else(|| {
-            WalletError::Rejected(format!(
-                "unsupported chain id '{}': only eip155 chains are supported",
-                request.chain_id
-            ))
-        })?;
-    let chain_id_u64: u64 = chain_id.parse().map_err(|_| {
-        WalletError::Rejected(format!("invalid eip155 chain id: {chain_id}"))
+    let chain_id = request.chain_id.strip_prefix("eip155:").ok_or_else(|| {
+        WalletError::Rejected(format!(
+            "unsupported chain id '{}': only eip155 chains are supported",
+            request.chain_id
+        ))
     })?;
+    let chain_id_u64: u64 = chain_id
+        .parse()
+        .map_err(|_| WalletError::Rejected(format!("invalid eip155 chain id: {chain_id}")))?;
     let nonce = request.nonce.as_deref().unwrap_or("0");
 
     // CAIP-19 asset id: `<chain>/<namespace>:<reference>`, e.g.
-// `eip155:8453/erc20:0x...` for ERC-20 or `eip155:8453/slip44:60` for native.
+    // `eip155:8453/erc20:0x...` for ERC-20 or `eip155:8453/slip44:60` for native.
     let (to, value, data, gas) = match request.asset.split_once('/') {
         Some((_, asset_ref)) if asset_ref.starts_with("erc20:") => {
             let token = &asset_ref["erc20:".len()..];
@@ -317,9 +313,7 @@ fn wc_runtime() -> Result<&'static tokio::runtime::Runtime, WalletError> {
         .build()
         .map_err(|e| WalletError::Transport(format!("failed to build WC runtime: {e}")))?;
     let _ = WC_RUNTIME.set(runtime);
-    WC_RUNTIME
-        .get()
-        .ok_or_else(|| WalletError::Transport("WC runtime unavailable".to_string()))
+    WC_RUNTIME.get().ok_or_else(|| WalletError::Transport("WC runtime unavailable".to_string()))
 }
 
 #[cfg(test)]
@@ -343,8 +337,8 @@ mod tests {
             payee: "0x1111111111111111111111111111111111111111".to_string(),
             nonce: Some("5".to_string()),
         };
-        let tx = build_eip1559_tx(&req, "0x2222222222222222222222222222222222222222")
-            .expect("build");
+        let tx =
+            build_eip1559_tx(&req, "0x2222222222222222222222222222222222222222").expect("build");
         assert_eq!(tx["type"], "0x2");
         assert_eq!(tx["chainId"], "0x2105");
         assert_eq!(tx["nonce"], "5");
@@ -373,8 +367,8 @@ mod tests {
             payee: "0x1111111111111111111111111111111111111111".to_string(),
             nonce: Some("3".to_string()),
         };
-        let tx = build_eip1559_tx(&req, "0x2222222222222222222222222222222222222222")
-            .expect("build");
+        let tx =
+            build_eip1559_tx(&req, "0x2222222222222222222222222222222222222222").expect("build");
         // to = token contract, value = 0, data = transfer(address,uint256)
         assert_eq!(tx["to"], "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913");
         assert_eq!(tx["value"], "0x0");
@@ -387,11 +381,9 @@ mod tests {
 
     #[test]
     fn erc20_calldata_encodes_selector_address_amount() {
-        let calldata = erc20_transfer_calldata(
-            "0x1111111111111111111111111111111111111111",
-            1_000_000,
-        )
-        .expect("calldata");
+        let calldata =
+            erc20_transfer_calldata("0x1111111111111111111111111111111111111111", 1_000_000)
+                .expect("calldata");
         assert_eq!(calldata.len(), 4 + 32 + 32);
         assert_eq!(&calldata[..4], &[0xa9, 0x05, 0x9c, 0xbb]);
         // address is left-padded to 32 bytes

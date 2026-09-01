@@ -4,14 +4,13 @@
 //! official `@walletconnect/utils` reference implementation:
 //!
 //! - **Key agreement**: X25519 ECDH → 32-byte shared secret.
-//! - **KDF**: HKDF-SHA256 with `ikm = shared_secret`, a 32-zero-byte salt,
-//!   empty `info`, and a 32-byte output (`deriveSymKey`).
-//! - **Cipher**: ChaCha20-Poly1305 (IETF construction, 12-byte nonce), empty
-//!   AAD.
+//! - **KDF**: HKDF-SHA256 with `ikm = shared_secret`, a 32-zero-byte salt, empty `info`, and a
+//!   32-byte output (`deriveSymKey`).
+//! - **Cipher**: ChaCha20-Poly1305 (IETF construction, 12-byte nonce), empty AAD.
 //! - **Envelopes** (serialized then base64-encoded by the relay layer):
 //!   - Type 0: `[type(1) ‖ iv(12) ‖ ciphertext]` — anonymous encrypted envelope.
-//!   - Type 1: `[type(1) ‖ senderPubKey(32) ‖ iv(12) ‖ ciphertext]` — carries
-//!     the sender's X25519 public key so the receiver can derive the session key.
+//!   - Type 1: `[type(1) ‖ senderPubKey(32) ‖ iv(12) ‖ ciphertext]` — carries the sender's X25519
+//!     public key so the receiver can derive the session key.
 //!   - Type 2: `[type(1) ‖ plaintext]` — unencrypted.
 
 use chacha20poly1305::{
@@ -154,7 +153,11 @@ impl WcCipher {
     }
 
     /// ChaCha20-Poly1305 AEAD open with **empty AAD**.
-    fn open(key: &WcSymKey, nonce: &[u8; 12], ciphertext_with_tag: &[u8]) -> Result<Vec<u8>, WalletError> {
+    fn open(
+        key: &WcSymKey,
+        nonce: &[u8; 12],
+        ciphertext_with_tag: &[u8],
+    ) -> Result<Vec<u8>, WalletError> {
         let cipher = ChaCha20Poly1305::new_from_slice(key.as_bytes())
             .map_err(|e| WalletError::Transport(format!("invalid key: {e}")))?;
         let n = Nonce::try_from(nonce.as_slice())
@@ -199,7 +202,10 @@ impl WcCipher {
     }
 
     /// Decrypts a type-1 envelope (returns the sender's public key + plaintext).
-    pub(crate) fn open_type1(key: &WcSymKey, envelope: &[u8]) -> Result<([u8; 32], Vec<u8>), WalletError> {
+    pub(crate) fn open_type1(
+        key: &WcSymKey,
+        envelope: &[u8],
+    ) -> Result<([u8; 32], Vec<u8>), WalletError> {
         let env = deserialize_envelope(envelope)?;
         if env.r#type != ENVELOPE_TYPE_1 {
             return Err(WalletError::Transport(format!(
@@ -207,9 +213,9 @@ impl WcCipher {
                 env.r#type
             )));
         }
-        let sender = env
-            .sender_public_key
-            .ok_or_else(|| WalletError::Transport("type-1 envelope missing sender key".to_string()))?;
+        let sender = env.sender_public_key.ok_or_else(|| {
+            WalletError::Transport("type-1 envelope missing sender key".to_string())
+        })?;
         let plaintext = Self::open(key, &env.iv, &env.sealed)?;
         Ok((sender, plaintext))
     }
@@ -240,7 +246,9 @@ pub(crate) fn serialize_envelope(
 ) -> Vec<u8> {
     let mut out = Vec::with_capacity(1 + 12 + sealed.len());
     out.push(r#type);
-    if r#type == ENVELOPE_TYPE_1 && let Some(key) = sender {
+    if r#type == ENVELOPE_TYPE_1 &&
+        let Some(key) = sender
+    {
         out.extend_from_slice(key);
     }
     if r#type != ENVELOPE_TYPE_2 {

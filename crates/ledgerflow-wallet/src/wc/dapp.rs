@@ -3,20 +3,20 @@
 //! Connects to a relay, binds to a session topic, sends JSON-RPC requests,
 //! and awaits responses. Follows the official WalletConnect 2.0 flow:
 //!
-//! 1. The pairing `symKey` from the URI encrypts pairing-phase messages with a
-//!    **type-0 envelope**.
-//! 2. `wc_sessionPropose` is sent as a **type-1 envelope** carrying the dApp's
-//!    X25519 public key.
-//! 3. On approval, the dApp derives the session key via
-//!    `deriveSymKey(dapp_priv, responder_pub)` (X25519 + HKDF) and binds it.
+//! 1. The pairing `symKey` from the URI encrypts pairing-phase messages with a **type-0 envelope**.
+//! 2. `wc_sessionPropose` is sent as a **type-1 envelope** carrying the dApp's X25519 public key.
+//! 3. On approval, the dApp derives the session key via `deriveSymKey(dapp_priv, responder_pub)`
+//!    (X25519 + HKDF) and binds it.
+
+#[cfg(test)]
+use std::sync::Arc;
 
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use serde_json::Value;
 use tokio::sync::Mutex;
 
 #[cfg(test)]
-use std::sync::Arc;
-
+use super::mock_relay::MockRelay;
 use super::{
     crypto::{self, WcCipher, WcKeyPair, WcSymKey},
     jsonrpc::{JsonRpcRequest, JsonRpcResponse, method, relay_method},
@@ -24,9 +24,6 @@ use super::{
     uri::PairingUri,
 };
 use crate::error::WalletError;
-
-#[cfg(test)]
-use super::mock_relay::MockRelay;
 
 /// Receive timeout for a single relay read during request/response loops.
 const RELAY_RECV_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
@@ -85,8 +82,8 @@ impl WcDappClient {
         relay_url: Option<&str>,
     ) -> Result<(), WalletError> {
         let project_id = uri.project_id.clone();
-        let base_url = relay_url
-            .map_or_else(|| "wss://relay.walletconnect.com".to_string(), str::to_string);
+        let base_url =
+            relay_url.map_or_else(|| "wss://relay.walletconnect.com".to_string(), str::to_string);
         let relay_url = super::relay::apply_project_id(&base_url, project_id.as_deref());
         let relay_cfg = RelayConfig { url: relay_url, reconnect_max_ms: 60_000 };
         let mut relay = RelayClient::connect(&relay_cfg).await?;
@@ -216,9 +213,8 @@ impl WcDappClient {
             "params": propose,
             "id": id
         });
-        let req_bytes = serde_json::to_vec(&req).map_err(|e| {
-            WalletError::Transport(format!("propose serialization failed: {e}"))
-        })?;
+        let req_bytes = serde_json::to_vec(&req)
+            .map_err(|e| WalletError::Transport(format!("propose serialization failed: {e}")))?;
 
         // Type-1 envelope: [type(1) ‖ senderPubKey(32) ‖ iv(12) ‖ ciphertext].
         let proposer_bytes = hex::decode(&proposer_pubkey)
@@ -227,20 +223,19 @@ impl WcDappClient {
         proposer_arr.copy_from_slice(&proposer_bytes);
         let envelope = WcCipher::seal_type1(&pairing_key, &proposer_arr, &req_bytes)?;
 
-        relay
-            .publish_irn(&relay_id(id), &topic, &BASE64.encode(&envelope), 300, 1108)
-            .await?;
+        relay.publish_irn(&relay_id(id), &topic, &BASE64.encode(&envelope), 300, 1108).await?;
 
         // Store the proposer keypair for session-key derivation.
         *self.keypair.lock().await = Some(kp);
 
         loop {
             let raw = relay.recv_timeout(RELAY_RECV_TIMEOUT).await?;
-            let envelope_val: Value = serde_json::from_str(&raw).map_err(|e| {
-                WalletError::Transport(format!("relay envelope parse failed: {e}"))
-            })?;
+            let envelope_val: Value = serde_json::from_str(&raw)
+                .map_err(|e| WalletError::Transport(format!("relay envelope parse failed: {e}")))?;
 
-            if envelope_val.get("method").and_then(|m| m.as_str()) != Some(relay_method::IRN_SUBSCRIPTION) {
+            if envelope_val.get("method").and_then(|m| m.as_str()) !=
+                Some(relay_method::IRN_SUBSCRIPTION)
+            {
                 continue;
             }
             let data = match envelope_val.pointer("/params/data") {
@@ -289,9 +284,8 @@ impl WcDappClient {
                 .ok_or_else(|| {
                     WalletError::Transport("approve missing responderPublicKey".to_string())
                 })?;
-            let responder_bytes = hex::decode(responder_pub_hex).map_err(|e| {
-                WalletError::Transport(format!("bad responder publicKey hex: {e}"))
-            })?;
+            let responder_bytes = hex::decode(responder_pub_hex)
+                .map_err(|e| WalletError::Transport(format!("bad responder publicKey hex: {e}")))?;
             if responder_bytes.len() != 32 {
                 return Err(WalletError::Transport(
                     "responder publicKey must be 32 bytes".to_string(),
@@ -300,12 +294,10 @@ impl WcDappClient {
             let mut responder_pub = [0u8; 32];
             responder_pub.copy_from_slice(&responder_bytes);
 
-            let kp = self
-                .keypair
-                .lock()
-                .await
-                .clone()
-                .ok_or_else(|| WalletError::Transport("proposer keypair missing".to_string()))?;
+            let kp =
+                self.keypair.lock().await.clone().ok_or_else(|| {
+                    WalletError::Transport("proposer keypair missing".to_string())
+                })?;
             let shared = kp.shared_secret(&x25519_dalek::PublicKey::from(responder_pub));
             let session_key = crypto::derive_sym_key(&shared)?;
             *self.sym_key.lock().await = Some(session_key);
@@ -336,11 +328,7 @@ impl WcDappClient {
     /// Mock-relay propose path: publish `wc_sessionPropose` and await the
     /// approval response from the in-memory relay.
     #[cfg(test)]
-    async fn propose_mock(
-        &self,
-        dapp_name: &str,
-        dapp_url: &str,
-    ) -> Result<String, WalletError> {
+    async fn propose_mock(&self, dapp_name: &str, dapp_url: &str) -> Result<String, WalletError> {
         let relay = self
             .mock_relay
             .clone()
@@ -387,9 +375,8 @@ impl WcDappClient {
             "params": propose,
             "id": id
         });
-        let req_bytes = serde_json::to_vec(&req).map_err(|e| {
-            WalletError::Transport(format!("propose serialization failed: {e}"))
-        })?;
+        let req_bytes = serde_json::to_vec(&req)
+            .map_err(|e| WalletError::Transport(format!("propose serialization failed: {e}")))?;
         let proposer_bytes = hex::decode(&proposer_pubkey)
             .map_err(|e| WalletError::Transport(format!("bad proposer pubkey hex: {e}")))?;
         let mut proposer_arr = [0u8; 32];
@@ -435,9 +422,8 @@ impl WcDappClient {
                 .ok_or_else(|| {
                     WalletError::Transport("approve missing responderPublicKey".to_string())
                 })?;
-            let responder_bytes = hex::decode(responder_pub_hex).map_err(|e| {
-                WalletError::Transport(format!("bad responder publicKey hex: {e}"))
-            })?;
+            let responder_bytes = hex::decode(responder_pub_hex)
+                .map_err(|e| WalletError::Transport(format!("bad responder publicKey hex: {e}")))?;
             if responder_bytes.len() != 32 {
                 return Err(WalletError::Transport(
                     "responder publicKey must be 32 bytes".to_string(),
@@ -446,12 +432,10 @@ impl WcDappClient {
             let mut responder_pub = [0u8; 32];
             responder_pub.copy_from_slice(&responder_bytes);
 
-            let kp = self
-                .keypair
-                .lock()
-                .await
-                .clone()
-                .ok_or_else(|| WalletError::Transport("proposer keypair missing".to_string()))?;
+            let kp =
+                self.keypair.lock().await.clone().ok_or_else(|| {
+                    WalletError::Transport("proposer keypair missing".to_string())
+                })?;
             let shared = kp.shared_secret(&x25519_dalek::PublicKey::from(responder_pub));
             let session_key = crypto::derive_sym_key(&shared)?;
             *self.sym_key.lock().await = Some(session_key);
@@ -505,9 +489,8 @@ impl WcDappClient {
 
         let id = self.next_id().await;
         let req = JsonRpcRequest::new(method, params, id);
-        let req_bytes = serde_json::to_vec(&req).map_err(|e| {
-            WalletError::Transport(format!("request serialization failed: {e}"))
-        })?;
+        let req_bytes = serde_json::to_vec(&req)
+            .map_err(|e| WalletError::Transport(format!("request serialization failed: {e}")))?;
         let envelope = WcCipher::seal_type0(&sym_key, &req_bytes)?;
 
         let mut sub = relay.subscribe(&topic).await;
@@ -523,9 +506,8 @@ impl WcDappClient {
                 Some(&crypto::ENVELOPE_TYPE_1) => WcCipher::open_type1(&sym_key, &payload)?.1,
                 _ => continue,
             };
-            let resp: JsonRpcResponse = serde_json::from_slice(&plaintext).map_err(|e| {
-                WalletError::Transport(format!("response parse failed: {e}"))
-            })?;
+            let resp: JsonRpcResponse = serde_json::from_slice(&plaintext)
+                .map_err(|e| WalletError::Transport(format!("response parse failed: {e}")))?;
             if resp.id != id {
                 continue;
             }
@@ -562,22 +544,20 @@ impl WcDappClient {
 
         let id = self.next_id().await;
         let req = JsonRpcRequest::new(method, params, id);
-        let req_bytes = serde_json::to_vec(&req).map_err(|e| {
-            WalletError::Transport(format!("request serialization failed: {e}"))
-        })?;
+        let req_bytes = serde_json::to_vec(&req)
+            .map_err(|e| WalletError::Transport(format!("request serialization failed: {e}")))?;
 
         let envelope = WcCipher::seal_type0(&sym_key, &req_bytes)?;
-        relay
-            .publish_irn(&relay_id(id), &topic, &BASE64.encode(&envelope), 300, 1108)
-            .await?;
+        relay.publish_irn(&relay_id(id), &topic, &BASE64.encode(&envelope), 300, 1108).await?;
 
         loop {
             let raw = relay.recv_timeout(RELAY_RECV_TIMEOUT).await?;
-            let envelope_val: Value = serde_json::from_str(&raw).map_err(|e| {
-                WalletError::Transport(format!("relay envelope parse failed: {e}"))
-            })?;
+            let envelope_val: Value = serde_json::from_str(&raw)
+                .map_err(|e| WalletError::Transport(format!("relay envelope parse failed: {e}")))?;
 
-            if envelope_val.get("method").and_then(|m| m.as_str()) != Some(relay_method::IRN_SUBSCRIPTION) {
+            if envelope_val.get("method").and_then(|m| m.as_str()) !=
+                Some(relay_method::IRN_SUBSCRIPTION)
+            {
                 continue;
             }
             let data = match envelope_val.pointer("/params/data") {
@@ -607,9 +587,8 @@ impl WcDappClient {
                 continue;
             }
 
-            let resp: JsonRpcResponse = serde_json::from_slice(&plaintext).map_err(|e| {
-                WalletError::Transport(format!("response parse failed: {e}"))
-            })?;
+            let resp: JsonRpcResponse = serde_json::from_slice(&plaintext)
+                .map_err(|e| WalletError::Transport(format!("response parse failed: {e}")))?;
             if resp.id != id {
                 continue;
             }

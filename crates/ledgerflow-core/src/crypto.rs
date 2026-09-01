@@ -139,10 +139,7 @@ fn recover_compressed(prehash: &[u8; 32], signature: &[u8]) -> Option<[u8; 33]> 
 /// Returns `None` for malformed signatures (wrong length, high-`s`, invalid
 /// recovery id) or when recovery fails.
 #[must_use]
-pub fn recover_public_key_from_personal_sign(
-    message: &[u8],
-    signature: &[u8],
-) -> Option<[u8; 33]> {
+pub fn recover_public_key_from_personal_sign(message: &[u8], signature: &[u8]) -> Option<[u8; 33]> {
     let digest = eip191_message_hash(message);
     recover_compressed(&digest, signature)
 }
@@ -427,13 +424,15 @@ mod tests {
         let keys = Secp256k1KeyPair::from_bytes(&[0x5A; 32]).expect("valid key");
         let signer = keys.signer_ref(SigningAlgorithm::EthPersonalSign);
         let envelope = keys.sign_eth_personal(b"recover me");
-        let recovered = recover_public_key_from_personal_sign(b"recover me", &envelope.value)
-            .expect("recover");
+        let recovered =
+            recover_public_key_from_personal_sign(b"recover me", &envelope.value).expect("recover");
         assert_eq!(recovered.len(), 33);
         assert_eq!(recovered.as_slice(), signer.public_key.as_slice());
         // Wrong message must not recover the same key.
         let wrong = recover_public_key_from_personal_sign(b"other", &envelope.value);
-        assert!(wrong.is_none() || wrong.as_ref().is_some_and(|k| k.as_slice() != signer.public_key));
+        assert!(
+            wrong.is_none() || wrong.as_ref().is_some_and(|k| k.as_slice() != signer.public_key)
+        );
         // Malformed signatures are rejected.
         assert!(recover_public_key_from_personal_sign(b"recover me", &[0u8; 64]).is_none());
         assert!(recover_public_key_from_personal_sign(b"recover me", &[]).is_none());
@@ -445,8 +444,7 @@ mod tests {
         let signer = keys.signer_ref(SigningAlgorithm::EthTypedData);
         let digest = keccak256(b"domainSeparator||structHash");
         let envelope = keys.sign_eth_typed_data_digest(&digest);
-        let recovered =
-            recover_public_key_from_prehash(&digest, &envelope.value).expect("recover");
+        let recovered = recover_public_key_from_prehash(&digest, &envelope.value).expect("recover");
         assert_eq!(recovered.as_slice(), signer.public_key.as_slice());
     }
 

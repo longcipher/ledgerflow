@@ -52,9 +52,9 @@ impl PairingUri {
         let mut project_id = None;
         if let Some(q) = query {
             for pair in q.split('&') {
-                let (k, v) = pair
-                    .split_once('=')
-                    .ok_or_else(|| WalletError::InvalidPayload(format!("bad query pair: {pair}")))?;
+                let (k, v) = pair.split_once('=').ok_or_else(|| {
+                    WalletError::InvalidPayload(format!("bad query pair: {pair}"))
+                })?;
                 match k {
                     "relay-protocol" => relay_protocol = Some(v.to_string()),
                     "relay-data" => relay_data = Some(v.to_string()),
@@ -132,10 +132,9 @@ mod tests {
 
     #[test]
     fn parses_full_uri() {
-        let uri = PairingUri::parse(
-            "wc:abc123@2?relay-protocol=irn&symKey=deadbeef&projectId=proj1",
-        )
-        .expect("parse");
+        let uri =
+            PairingUri::parse("wc:abc123@2?relay-protocol=irn&symKey=deadbeef&projectId=proj1")
+                .expect("parse");
         assert_eq!(uri.topic, "abc123");
         assert_eq!(uri.version, 2);
         assert_eq!(uri.relay_protocol.as_deref(), Some("irn"));

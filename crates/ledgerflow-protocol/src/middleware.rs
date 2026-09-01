@@ -142,7 +142,40 @@ where
                 &accepted_hash,
             )
         {
-            return Ok(MerchantVerificationOutcome { authorization, settlement_reused: true });
+            // ponytail: re-validate cached entry (revocation/freshness/TTL) instead of blind reuse
+            let proof_freshness_ms = if challenge.proof_freshness_ms == 0 {
+                DEFAULT_PROOF_FRESHNESS_MS
+            } else {
+                challenge.proof_freshness_ms
+            };
+            let freshness_ok = ledgerflow_core::pop::verify_freshness(
+                &extension.proof,
+                now_ms,
+                proof_freshness_ms,
+                challenge.clock_skew_ms,
+            )
+            .is_ok();
+            let revocation_ok = {
+                use ledgerflow_core::RevocationDecision;
+                // holder == leaf_warrant.holder in VerifiedAuthorization, single check suffices
+                matches!(
+                    self.revocation.check_warrant(&authorization.leaf_warrant.id),
+                    RevocationDecision::Ok
+                ) && matches!(
+                    self.revocation.check_holder(&authorization.leaf_warrant.holder),
+                    RevocationDecision::Ok
+                )
+            };
+            let chain_valid = {
+                let now_secs = now_ms / 1000;
+                authorization.leaf_warrant.expires_at >= now_secs &&
+                    authorization.root_warrant.expires_at >= now_secs
+            };
+            if freshness_ok && revocation_ok && chain_valid {
+                return Ok(MerchantVerificationOutcome { authorization, settlement_reused: true });
+            }
+            // stale/revoked/expired -> evict and fall through to full verification
+            self.replay_store.remove_cached_payment(payment_identifier);
         }
 
         self.claim_replay(challenge, extension, &request_hash, &accepted_hash, now_ms)?;
@@ -233,21 +266,58 @@ where
     /// Resolves the presented warrant chain.
     ///
     /// v1 rule: the chain is transmitted inline. If the extension carries an
-    /// empty chain (digest-only mode), the merchant cache is consulted; a
-    /// digest-only submission must have been cached by a prior inline one.
+    /// empty chain (digest-only mode, design §7.1), the merchant cache is
+    /// consulted via `warrant_digests`; a digest-only submission must have been
+    /// cached by a prior inline one. This keeps the `WarrantRepository::load`
+    /// seam live and implements header-slim support without breaking the inline
+    /// path.
     fn resolve_chain(
         &mut self,
         extension: &LedgerFlowAuthorizationExtension,
     ) -> Result<WarrantChain, MerchantVerificationError> {
-        if extension.warrant_chain.is_empty() {
-            return Err(MerchantVerificationError::EmptyChain);
+        if !extension.warrant_chain.is_empty() {
+            let mut chain = WarrantChain::default();
+            for warrant in &extension.warrant_chain {
+                self.warrant_repository.store(warrant.clone());
+                chain.push(warrant.clone());
+            }
+            return Ok(chain);
         }
-        let mut chain = WarrantChain::default();
-        for warrant in &extension.warrant_chain {
-            self.warrant_repository.store(warrant.clone());
-            chain.push(warrant.clone());
+        // Digest-reference path (header-slim): load each digest from repo.
+        if !extension.warrant_digests.is_empty() {
+            let mut chain = WarrantChain::default();
+            for digest in &extension.warrant_digests {
+                let warrant = self.warrant_repository.load(digest).ok_or_else(|| {
+                    MerchantVerificationError::UnknownWarrantDigest { digest: digest.clone() }
+                })?;
+                chain.push(warrant);
+            }
+            if chain.is_empty() {
+                return Err(MerchantVerificationError::EmptyChain);
+            }
+            return Ok(chain);
         }
-        Ok(chain)
+        Err(MerchantVerificationError::EmptyChain)
+    }
+
+    /// Expands a header-slim [`crate::mpp::SlimAuthorization`] (leaf-only, design §7.2)
+    /// into a full [`LedgerFlowAuthorizationExtension`] by loading parent warrants
+    /// from the repository. Keeps the `WarrantRepository::load` seam exercised for
+    /// MPP flows where the full chain travels in the body and the header carries
+    /// only the leaf.
+    pub fn expand_slim(
+        &mut self,
+        slim: crate::mpp::SlimAuthorization,
+        parent_digests: &[String],
+    ) -> Result<LedgerFlowAuthorizationExtension, MerchantVerificationError> {
+        let mut parents = Vec::with_capacity(parent_digests.len());
+        for digest in parent_digests {
+            let warrant = self.warrant_repository.load(digest).ok_or_else(|| {
+                MerchantVerificationError::UnknownWarrantDigest { digest: digest.clone() }
+            })?;
+            parents.push(warrant);
+        }
+        Ok(slim.into_extension(parents))
     }
 }
 
@@ -365,6 +435,7 @@ mod tests {
             signer: holder_keys().signer_ref(),
             payment_subject: ctx.payment_subject,
             approvals: Vec::new(),
+            warrant_digests: Vec::new(),
         }
     }
 

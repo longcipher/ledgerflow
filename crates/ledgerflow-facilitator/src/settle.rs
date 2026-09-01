@@ -68,7 +68,10 @@ where
 
     /// Settles a verified authorization after atomic re-verification.
     pub fn settle(&self, request: &SettleRequest<'_>) -> SettlementOutcome {
-        // 1. Atomic re-verify: revocation + TTL + PoP freshness + amount cap.
+        // 1. Atomic re-verify before routing to avoid leaking rail mapping for revoked/expired
+        //    credentials (design §8.1). The re-verify is as close to the rail call as possible
+        //    given routing needs the authorization; the residual window between this check and the
+        //    rail's transaction is a deployment concern (lease / in-transaction check).
         if let Err(error) = self.reverify(request) {
             return SettlementOutcome::failed(error.to_string());
         }
@@ -85,21 +88,7 @@ where
             }
         };
 
-        // 3. Final revocation re-check immediately before settlement.
-        //
-        // Design §8.1 requires the settlement action and the final revocation
-        // check to be as close to atomic as the store allows. `reverify` above
-        // already checked revocation; we re-check once more right before
-        // touching the rail to shrink the verify→settle TOCTOU window. The
-        // residual window (a revocation landing between this check and the
-        // rail call) is documented as a deployment concern: production should
-        // hold a settlement lease or perform the check inside the rail's
-        // transaction when the rail supports it.
-        if let Err(error) = self.reverify(request) {
-            return SettlementOutcome::failed(error.to_string());
-        }
-
-        // 4. Settle.
+        // 3. Settle.
         match adapter.settle(request.authorization) {
             Ok(receipt) => {
                 if let Some(reporter) = &self.reputation {

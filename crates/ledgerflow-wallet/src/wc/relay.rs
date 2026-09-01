@@ -107,9 +107,9 @@ impl RelayClient {
             match self.ws.next().await {
                 Some(frame) => match frame.opcode() {
                     OpCode::Text => {
-                        let text = frame
-                            .as_str()
-                            .map_err(|e| WalletError::Transport(format!("invalid text frame: {e}")))?;
+                        let text = frame.as_str().map_err(|e| {
+                            WalletError::Transport(format!("invalid text frame: {e}"))
+                        })?;
                         return Ok(text.to_owned());
                     }
                     OpCode::Binary => {
@@ -133,15 +133,10 @@ impl RelayClient {
 
     /// Like [`recv`](Self::recv) but bounds the wait with `timeout`.
     #[allow(dead_code)] // reserved for reconnect / heartbeat support
-    pub(crate) async fn recv_timeout(
-        &mut self,
-        timeout: Duration,
-    ) -> Result<String, WalletError> {
+    pub(crate) async fn recv_timeout(&mut self, timeout: Duration) -> Result<String, WalletError> {
         match tokio::time::timeout(timeout, self.recv()).await {
             Ok(res) => res,
-            Err(_) => Err(WalletError::Unreachable(format!(
-                "no relay message within {timeout:?}"
-            ))),
+            Err(_) => Err(WalletError::Unreachable(format!("no relay message within {timeout:?}"))),
         }
     }
 
@@ -160,9 +155,6 @@ impl RelayClient {
 
     /// Gracefully closes the underlying WebSocket.
     pub(crate) async fn close(&mut self) {
-        let _ = self
-            .ws
-            .send(Frame::close(hpx_yawc::close::CloseCode::Normal, b"shutdown"))
-            .await;
+        let _ = self.ws.send(Frame::close(hpx_yawc::close::CloseCode::Normal, b"shutdown")).await;
     }
 }
