@@ -11,9 +11,11 @@ flume.workspace = true
 hpx = { workspace = true, features = ["json"] }
 ledgerflow-core = { path = "../ledgerflow-core" }
 ledgerflow-facilitator = { path = "../ledgerflow-facilitator" }
+parking_lot.workspace = true
 rand = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+subtle.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt", "time", "macros"] }
 tracing.workspace = true

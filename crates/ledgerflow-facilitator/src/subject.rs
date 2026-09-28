@@ -75,7 +75,7 @@ mod tests {
         );
         let warrant = ledgerflow_core::Warrant {
             version: 1,
-            id: vec![0xAB; 16],
+            id: [0xAB; 16],
             holder: holder.clone(),
             issuer: holder.clone(),
             issued_at: 1,

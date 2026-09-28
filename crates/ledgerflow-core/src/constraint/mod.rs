@@ -9,8 +9,18 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     error::{AuthorizationError, Result},
-    warrant::{AssetRef, PaymentSubjectRef, SignerRef},
+    warrant::{PaymentRail, PaymentSubjectRef, SignerRef},
 };
+
+mod merchant;
+mod payment;
+mod resource;
+mod tool;
+
+pub use merchant::MerchantConstraint;
+pub use payment::PaymentConstraint;
+pub use resource::ResourceConstraint;
+pub use tool::ToolConstraint;
 
 /// Authorization request context used to evaluate constraints.
 ///
@@ -34,7 +44,7 @@ pub struct AuthorizationContext {
     pub asset_network: Option<String>,
     pub scheme: String,
     pub payee_id: String,
-    pub rail: crate::warrant::PaymentRail,
+    pub rail: PaymentRail,
     pub challenge_id: String,
     /// Digest of the canonical request.
     pub request_hash: String,
@@ -64,184 +74,6 @@ pub enum Constraint {
     Resource(ResourceConstraint),
     Tool(ToolConstraint),
     Payment(PaymentConstraint),
-}
-
-/// Merchant allowlist constraint (exact ids and/or host suffixes).
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-pub struct MerchantConstraint {
-    pub merchant_ids: Vec<String>,
-    pub host_suffixes: Vec<String>,
-}
-
-impl MerchantConstraint {
-    #[must_use]
-    pub const fn new() -> Self {
-        Self { merchant_ids: Vec::new(), host_suffixes: Vec::new() }
-    }
-
-    #[must_use]
-    pub fn with_ids(ids: impl IntoIterator<Item = String>) -> Self {
-        Self { merchant_ids: ids.into_iter().collect(), host_suffixes: Vec::new() }
-    }
-
-    #[must_use]
-    pub fn with_host_suffixes(suffixes: impl IntoIterator<Item = String>) -> Self {
-        Self { merchant_ids: Vec::new(), host_suffixes: suffixes.into_iter().collect() }
-    }
-
-    /// Returns `true` when this constraint is satisfied by the context.
-    pub fn allows(&self, merchant_id: &str, merchant_host: &str) -> bool {
-        let id_ok =
-            self.merchant_ids.is_empty() || self.merchant_ids.iter().any(|id| id == merchant_id);
-        let host_ok = self.host_suffixes.is_empty() ||
-            self.host_suffixes.iter().any(|suffix| merchant_host.ends_with(suffix));
-        id_ok && host_ok
-    }
-}
-
-/// Resource (HTTP method / path prefix) constraint.
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-pub struct ResourceConstraint {
-    pub http_methods: Vec<String>,
-    pub path_prefixes: Vec<String>,
-}
-
-impl ResourceConstraint {
-    #[must_use]
-    pub const fn new() -> Self {
-        Self { http_methods: Vec::new(), path_prefixes: Vec::new() }
-    }
-
-    #[must_use]
-    pub fn with_methods(methods: impl IntoIterator<Item = String>) -> Self {
-        Self { http_methods: methods.into_iter().collect(), path_prefixes: Vec::new() }
-    }
-
-    #[must_use]
-    pub fn with_path_prefixes(paths: impl IntoIterator<Item = String>) -> Self {
-        Self { http_methods: Vec::new(), path_prefixes: paths.into_iter().collect() }
-    }
-
-    /// Returns `true` when this constraint is satisfied by the context.
-    pub fn allows(&self, method: &str, path_and_query: &str) -> bool {
-        let method_ok = self.http_methods.is_empty() ||
-            self.http_methods.iter().any(|m| m.eq_ignore_ascii_case(method));
-        let path_ok = self.path_prefixes.is_empty() ||
-            self.path_prefixes.iter().any(|prefix| path_and_query.starts_with(prefix));
-        method_ok && path_ok
-    }
-}
-
-/// Optional AI-native tool constraint.
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-pub struct ToolConstraint {
-    pub tool_names: Vec<String>,
-    pub model_providers: Vec<String>,
-    pub action_labels: Vec<String>,
-}
-
-impl ToolConstraint {
-    #[must_use]
-    pub const fn new() -> Self {
-        Self { tool_names: Vec::new(), model_providers: Vec::new(), action_labels: Vec::new() }
-    }
-
-    /// Returns `true` when this constraint is satisfied by the context.
-    pub fn allows(&self, tool_name: &str, model_provider: &str, action_label: &str) -> bool {
-        let tool_ok = self.tool_names.is_empty() || self.tool_names.iter().any(|t| t == tool_name);
-        let provider_ok = self.model_providers.is_empty() ||
-            self.model_providers.iter().any(|p| p == model_provider);
-        let action_ok =
-            self.action_labels.is_empty() || self.action_labels.iter().any(|a| a == action_label);
-        tool_ok && provider_ok && action_ok
-    }
-}
-
-/// Payment constraint: allowed asset(s) and a **stateless** per-charge cap.
-///
-/// Amounts are expressed in the asset's base units (smallest on-chain unit).
-/// Period limits and cumulative budgets are deliberately **not** part of v1:
-/// they are stateful predicates handled by the accounting Facilitator (P2+).
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct PaymentConstraint {
-    pub allowed_assets: Vec<AssetRef>,
-    /// Maximum authorized amount per charge, in base units.
-    pub max_per_charge: u128,
-    pub allowed_rails: Vec<crate::warrant::PaymentRail>,
-    pub allowed_schemes: Vec<String>,
-    pub payee_ids: Vec<String>,
-}
-
-impl PaymentConstraint {
-    /// Creates an "any asset, any rail, any scheme" payment constraint with a
-    /// per-charge cap. Callers MUST set at least one allowed asset before use.
-    #[must_use]
-    pub const fn new(max_per_charge: u128) -> Self {
-        Self {
-            allowed_assets: Vec::new(),
-            max_per_charge,
-            allowed_rails: Vec::new(),
-            allowed_schemes: Vec::new(),
-            payee_ids: Vec::new(),
-        }
-    }
-
-    #[must_use]
-    pub fn with_asset(mut self, asset: AssetRef) -> Self {
-        self.allowed_assets.push(asset);
-        self
-    }
-
-    #[must_use]
-    pub fn with_rails(
-        mut self,
-        rails: impl IntoIterator<Item = crate::warrant::PaymentRail>,
-    ) -> Self {
-        self.allowed_rails.extend(rails);
-        self
-    }
-
-    #[must_use]
-    pub fn with_schemes(mut self, schemes: impl IntoIterator<Item = String>) -> Self {
-        self.allowed_schemes.extend(schemes);
-        self
-    }
-
-    #[must_use]
-    pub fn with_payees(mut self, payees: impl IntoIterator<Item = String>) -> Self {
-        self.payee_ids.extend(payees);
-        self
-    }
-
-    /// Returns `true` when this constraint is satisfied by the context.
-    pub fn allows(
-        &self,
-        amount: u128,
-        asset: &str,
-        asset_network: Option<&str>,
-        rail: &crate::warrant::PaymentRail,
-        scheme: &str,
-        payee_id: &str,
-    ) -> bool {
-        if amount > self.max_per_charge {
-            return false;
-        }
-        if !self.allowed_assets.is_empty() &&
-            !self.allowed_assets.iter().any(|a| a.matches(asset, asset_network))
-        {
-            return false;
-        }
-        if !self.allowed_rails.is_empty() && !self.allowed_rails.iter().any(|r| r == rail) {
-            return false;
-        }
-        if !self.allowed_schemes.is_empty() && !self.allowed_schemes.iter().any(|s| s == scheme) {
-            return false;
-        }
-        if !self.payee_ids.is_empty() && !self.payee_ids.iter().any(|p| p == payee_id) {
-            return false;
-        }
-        true
-    }
 }
 
 /// Validates that `child` is a valid static attenuation of `parent`.

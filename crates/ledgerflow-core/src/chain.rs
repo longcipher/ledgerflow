@@ -226,7 +226,7 @@ pub fn verify_link(parent: &Warrant, child: &Warrant) -> Result<()> {
         return Err(AuthorizationError::TtlMonotonicityViolation);
     }
     // I5: cryptographic linkage (domain-separated parent payload hash).
-    let expected_parent_hash = sha256_prefixed(parent.payload_bytes());
+    let expected_parent_hash = sha256_prefixed(parent.payload_bytes()?);
     let Some(actual) = &child.parent_hash else {
         return Err(AuthorizationError::MissingParentHash);
     };
@@ -621,7 +621,7 @@ mod tests {
         let verified =
             verify_chain(&WarrantChain::single(warrant), &trusted(), &proof, &ctx).expect("valid");
         assert_eq!(verified.chain_len, 1);
-        assert_eq!(verified.leaf.id, proof.tuple.warrant_id);
+        assert_eq!(verified.leaf.id.as_slice(), proof.tuple.warrant_id.as_slice());
         assert_eq!(verified.root.id, verified.leaf.id);
     }
 

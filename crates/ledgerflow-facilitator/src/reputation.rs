@@ -280,20 +280,24 @@ mod tests {
     fn warrant(with_agent_ref: bool) -> Warrant {
         let issuer = SigningKeyPair::from_bytes(&[0x81; 32]);
         let holder = SigningKeyPair::from_bytes(&[0x82; 32]);
-        let mut warrant = ledgerflow_core::WarrantBuilder::new(1_000)
+        let builder = ledgerflow_core::WarrantBuilder::new(1_000)
             .issuer(issuer.signer_ref())
             .holder(holder.signer_ref())
             .merchant(MerchantConstraint::with_ids(vec!["merchant-a".to_string()]))
             .resource(ResourceConstraint::default())
-            .payment(PaymentConstraint::new(1_000))
-            .sign_with(&issuer, [0_u8; 8]);
+            .payment(PaymentConstraint::new(1_000));
+        // Extensions are part of the signed payload and must be set before
+        // signing; post-sign mutation would invalidate the signature.
         if with_agent_ref {
-            warrant.extensions.insert(
-                ledgerflow_core::agent_identity::AGENT_ID_EXTENSION_KEY.to_string(),
-                AGENT_REF.as_bytes().to_vec(),
-            );
+            builder
+                .extension(
+                    ledgerflow_core::agent_identity::AGENT_ID_EXTENSION_KEY.to_string(),
+                    AGENT_REF.as_bytes().to_vec(),
+                )
+                .sign_with(&issuer, [0_u8; 8])
+        } else {
+            builder.sign_with(&issuer, [0_u8; 8])
         }
-        warrant
     }
 
     fn authorization(with_agent_ref: bool) -> VerifiedAuthorization {

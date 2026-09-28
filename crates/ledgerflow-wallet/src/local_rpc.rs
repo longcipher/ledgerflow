@@ -43,8 +43,9 @@ pub struct JsonRpcResponse {
 }
 
 /// Transport seam for JSON-RPC calls (enables mock testing without HTTP).
+#[async_trait::async_trait]
 pub trait RpcTransport: Send + Sync {
-    fn call(
+    async fn call(
         &self,
         method: &str,
         params: serde_json::Value,
@@ -79,8 +80,9 @@ impl MockJsonRpcTransport {
     }
 }
 
+#[async_trait::async_trait]
 impl RpcTransport for MockJsonRpcTransport {
-    fn call(
+    async fn call(
         &self,
         method: &str,
         params: serde_json::Value,
@@ -131,7 +133,7 @@ where
         Self { transport, descriptor }
     }
 
-    fn call(
+    async fn call(
         &self,
         method: &str,
         params: serde_json::Value,
@@ -142,11 +144,12 @@ where
             method: method.to_string(),
             params,
         };
-        let response = self.transport.call(method, request.params)?;
+        let response = self.transport.call(method, request.params).await?;
         Ok(response)
     }
 }
 
+#[async_trait::async_trait]
 impl<T> WalletSigner for LocalRpcSigner<T>
 where
     T: RpcTransport,
@@ -155,7 +158,7 @@ where
         self.descriptor.clone()
     }
 
-    fn sign(&self, request: &SignRequest) -> Result<SignResult, WalletError> {
+    async fn sign(&self, request: &SignRequest) -> Result<SignResult, WalletError> {
         let params = serde_json::json!({
             "domain": match request.domain {
                 SignDomain::Warrant => "warrant",
@@ -170,12 +173,12 @@ where
                 "key_id": key.key_id,
             })),
         });
-        let value = self.call("ledgerflow_sign", params)?;
+        let value = self.call("ledgerflow_sign", params).await?;
         parse_sign_result(&value)
     }
 
-    fn keys(&self) -> Result<Vec<SignerRef>, WalletError> {
-        let value = self.call("ledgerflow_keys", serde_json::Value::Null)?;
+    async fn keys(&self) -> Result<Vec<SignerRef>, WalletError> {
+        let value = self.call("ledgerflow_keys", serde_json::Value::Null).await?;
         let keys = value
             .as_array()
             .ok_or_else(|| WalletError::InvalidPayload("expected array".to_string()))?;
@@ -199,7 +202,10 @@ where
             .collect()
     }
 
-    fn sign_payment(&self, request: &SignPaymentRequest) -> Result<SignedPayment, WalletError> {
+    async fn sign_payment(
+        &self,
+        request: &SignPaymentRequest,
+    ) -> Result<SignedPayment, WalletError> {
         let params = serde_json::json!({
             "chain_id": request.chain_id,
             "asset": request.asset,
@@ -207,7 +213,7 @@ where
             "payee": request.payee,
             "nonce": request.nonce,
         });
-        let value = self.call("ledgerflow_sign_payment", params)?;
+        let value = self.call("ledgerflow_sign_payment", params).await?;
         Ok(SignedPayment {
             signer: SignerRef::new(SigningAlgorithm::Ed25519, Vec::new()),
             raw_transaction: value
@@ -295,45 +301,14 @@ impl HttpJsonRpcTransport {
     }
 }
 
-/// Process-wide current-thread tokio runtime bridging the synchronous
-/// [`RpcTransport`] seam to hpx's async HTTP client.
-///
-/// Built lazily via [`OnceLock`] and reused for the lifetime of the process.
-/// Using `new_current_thread` keeps the overhead minimal: hpx's connection
-/// pool and the JSON-RPC request finish within the same task, so no
-/// multi-threaded scheduler is required.
 #[cfg(feature = "http")]
-static WALLET_HTTP_RUNTIME: std::sync::OnceLock<tokio::runtime::Runtime> =
-    std::sync::OnceLock::new();
-
-/// Returns the process-wide blocking runtime, creating it on first use.
-///
-/// A fast-path `get()` avoids re-acquiring the initialization lock on the
-/// common path; on a rare concurrent init race one extra runtime may be
-/// built and discarded, which is harmless.
-#[cfg(feature = "http")]
-fn blocking_runtime() -> Result<&'static tokio::runtime::Runtime, WalletError> {
-    if let Some(runtime) = WALLET_HTTP_RUNTIME.get() {
-        return Ok(runtime);
-    }
-    let runtime =
-        tokio::runtime::Builder::new_current_thread().enable_all().build().map_err(|error| {
-            WalletError::Transport(format!("failed to build HTTP blocking runtime: {error}"))
-        })?;
-    let _ = WALLET_HTTP_RUNTIME.set(runtime);
-    WALLET_HTTP_RUNTIME
-        .get()
-        .ok_or_else(|| WalletError::Transport("HTTP blocking runtime unavailable".to_string()))
-}
-
-#[cfg(feature = "http")]
+#[async_trait::async_trait]
 impl RpcTransport for HttpJsonRpcTransport {
-    fn call(
+    async fn call(
         &self,
         method: &str,
         params: serde_json::Value,
     ) -> Result<serde_json::Value, WalletError> {
-        let runtime = blocking_runtime()?;
         let body = serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -343,59 +318,56 @@ impl RpcTransport for HttpJsonRpcTransport {
         let url = self.config.url.clone();
         let timeout = std::time::Duration::from_millis(self.config.timeout_ms);
 
-        runtime.block_on(async move {
-            let client = hpx::Client::new();
-            let fut = async {
-                let resp = client
-                    .post(&url)
-                    .header("content-type", "application/json")
-                    .body(body.to_string())
-                    .send()
-                    .await
-                    .map_err(|error| {
-                        WalletError::Unreachable(format!(
-                            "wallet JSON-RPC request to {url} failed: {error}"
-                        ))
-                    })?;
-
-                if !resp.status().is_success() {
-                    let status = resp.status();
-                    let text =
-                        resp.text().await.unwrap_or_else(|_| "<unreadable body>".to_string());
-                    return Err(WalletError::Transport(format!(
-                        "wallet JSON-RPC server returned HTTP {status}: {text}"
-                    )));
-                }
-
-                let value: serde_json::Value = resp.json().await.map_err(|error| {
-                    WalletError::InvalidPayload(format!("invalid JSON-RPC response body: {error}"))
-                })?;
-                let response: JsonRpcResponse = serde_json::from_value(value).map_err(|error| {
-                    WalletError::InvalidPayload(format!(
-                        "response is not a valid JSON-RPC 2.0 object: {error}"
+        let client = hpx::Client::new();
+        let fut = async {
+            let resp = client
+                .post(&url)
+                .header("content-type", "application/json")
+                .body(body.to_string())
+                .send()
+                .await
+                .map_err(|error| {
+                    WalletError::Unreachable(format!(
+                        "wallet JSON-RPC request to {url} failed: {error}"
                     ))
                 })?;
 
-                if let Some(error) = response.error {
-                    return Err(WalletError::Rejected(format!(
-                        "wallet JSON-RPC error {}: {}",
-                        error.code, error.message
-                    )));
-                }
+            if !resp.status().is_success() {
+                let status = resp.status();
+                let text = resp.text().await.unwrap_or_else(|_| "<unreadable body>".to_string());
+                return Err(WalletError::Transport(format!(
+                    "wallet JSON-RPC server returned HTTP {status}: {text}"
+                )));
+            }
 
-                response.result.ok_or_else(|| {
-                    WalletError::InvalidPayload(
-                        "JSON-RPC response has neither result nor error".to_string(),
-                    )
-                })
-            };
-            tokio::time::timeout(timeout, fut).await.map_err(|_| {
-                WalletError::Unreachable(format!(
-                    "wallet JSON-RPC request to {url} timed out after {} ms",
-                    timeout.as_millis()
+            let value: serde_json::Value = resp.json().await.map_err(|error| {
+                WalletError::InvalidPayload(format!("invalid JSON-RPC response body: {error}"))
+            })?;
+            let response: JsonRpcResponse = serde_json::from_value(value).map_err(|error| {
+                WalletError::InvalidPayload(format!(
+                    "response is not a valid JSON-RPC 2.0 object: {error}"
                 ))
-            })?
-        })
+            })?;
+
+            if let Some(error) = response.error {
+                return Err(WalletError::Rejected(format!(
+                    "wallet JSON-RPC error {}: {}",
+                    error.code, error.message
+                )));
+            }
+
+            response.result.ok_or_else(|| {
+                WalletError::InvalidPayload(
+                    "JSON-RPC response has neither result nor error".to_string(),
+                )
+            })
+        };
+        tokio::time::timeout(timeout, fut).await.map_err(|_| {
+            WalletError::Unreachable(format!(
+                "wallet JSON-RPC request to {url} timed out after {} ms",
+                timeout.as_millis()
+            ))
+        })?
     }
 }
 

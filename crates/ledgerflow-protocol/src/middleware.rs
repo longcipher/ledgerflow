@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 use ledgerflow_core::{
     AuthorizationContext, AuthorizationInput, DEFAULT_PROOF_FRESHNESS_MS, PaymentRail,
     RevocationCheck, ToolArguments, TrustedIssuers, VerifiedAuthorization, Warrant, WarrantChain,
-    sha256_prefixed,
+    WarrantExt, sha256_prefixed,
 };
 use thiserror::Error;
 
@@ -142,7 +142,7 @@ where
                 &accepted_hash,
             )
         {
-            // ponytail: re-validate cached entry (revocation/freshness/TTL) instead of blind reuse
+            // Re-validate cached entry (revocation/freshness/TTL/PoP signature/constraints)
             let proof_freshness_ms = if challenge.proof_freshness_ms == 0 {
                 DEFAULT_PROOF_FRESHNESS_MS
             } else {
@@ -157,7 +157,6 @@ where
             .is_ok();
             let revocation_ok = {
                 use ledgerflow_core::RevocationDecision;
-                // holder == leaf_warrant.holder in VerifiedAuthorization, single check suffices
                 matches!(
                     self.revocation.check_warrant(&authorization.leaf_warrant.id),
                     RevocationDecision::Ok
@@ -171,10 +170,44 @@ where
                 authorization.leaf_warrant.expires_at >= now_secs &&
                     authorization.root_warrant.expires_at >= now_secs
             };
-            if freshness_ok && revocation_ok && chain_valid {
+            let pop_signature_ok =
+                extension.proof.verify_signature(&authorization.leaf_warrant.holder);
+            // Build a minimal context for constraint re-validation during cache hits.
+            let context = AuthorizationContext {
+                merchant_id: challenge.merchant_id.clone(),
+                merchant_host: request.authority.clone(),
+                tool_name: String::new(),
+                model_provider: String::new(),
+                action_label: String::new(),
+                http_method: request.method.clone(),
+                path_and_query: request.path_and_query.clone(),
+                selected_amount: payload.accepted.amount,
+                asset: payload.accepted.asset.clone(),
+                asset_network: payload.accepted.network.clone(),
+                scheme: payload.accepted.scheme.clone(),
+                payee_id: payload.accepted.payee_id.clone(),
+                rail: match extension.payment_subject.kind {
+                    ledgerflow_core::PaymentSubjectKind::ExchangeAccount |
+                    ledgerflow_core::PaymentSubjectKind::FacilitatorAccount => {
+                        PaymentRail::Exchange
+                    }
+                    _ => PaymentRail::Onchain,
+                },
+                challenge_id: challenge.challenge_id.clone(),
+                request_hash: request_hash.clone(),
+                accepted_hash: accepted_hash.clone(),
+                now_ms,
+                freshness_window_ms: proof_freshness_ms,
+                clock_skew_ms: challenge.clock_skew_ms,
+                payment_subject: extension.payment_subject.clone(),
+                presenter: extension.signer.clone(),
+                human_present: challenge.human_present,
+            };
+            let constraints_ok = authorization.leaf_warrant.verify_constraints(&context).is_ok();
+            if freshness_ok && revocation_ok && chain_valid && pop_signature_ok && constraints_ok {
                 return Ok(MerchantVerificationOutcome { authorization, settlement_reused: true });
             }
-            // stale/revoked/expired -> evict and fall through to full verification
+            // stale/revoked/expired/invalid -> evict and fall through to full verification
             self.replay_store.remove_cached_payment(payment_identifier);
         }
 

@@ -3,6 +3,8 @@
 use std::collections::BTreeMap;
 
 use ledgerflow_core::VerifiedAuthorization;
+use lru::LruCache;
+use parking_lot::Mutex;
 
 /// Uniquely identifies a proof submission for replay detection.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -68,23 +70,39 @@ const MAX_PAYMENT_RESULTS: usize = 1024;
 const CLEANUP_INTERVAL: u64 = 128;
 
 /// In-memory replay/idempotency store used by tests and local flows.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct InMemoryReplayStore {
-    nonce_claims: BTreeMap<(String, String), NonceClaim>,
-    payment_results: BTreeMap<String, CachedPayment>,
+    inner: std::sync::Arc<InMemoryReplayStoreInner>,
+}
+
+#[derive(Debug)]
+struct InMemoryReplayStoreInner {
+    nonce_claims: Mutex<BTreeMap<(String, String), NonceClaim>>,
+    payment_results: Mutex<LruCache<String, CachedPayment>>,
     ttl_ms: u64,
-    ops_since_cleanup: u64,
+    ops_since_cleanup: Mutex<u64>,
+}
+
+impl Clone for InMemoryReplayStore {
+    fn clone(&self) -> Self {
+        Self { inner: std::sync::Arc::clone(&self.inner) }
+    }
 }
 
 impl InMemoryReplayStore {
     /// Create a new store with the specified TTL in milliseconds.
     #[must_use]
-    pub const fn with_ttl(ttl_ms: u64) -> Self {
+    pub fn with_ttl(ttl_ms: u64) -> Self {
         Self {
-            nonce_claims: BTreeMap::new(),
-            payment_results: BTreeMap::new(),
-            ttl_ms,
-            ops_since_cleanup: 0,
+            inner: std::sync::Arc::new(InMemoryReplayStoreInner {
+                nonce_claims: Mutex::new(BTreeMap::new()),
+                payment_results: Mutex::new(LruCache::new(
+                    std::num::NonZeroUsize::new(MAX_PAYMENT_RESULTS)
+                        .unwrap_or_else(|| unreachable!("MAX_PAYMENT_RESULTS is non-zero")),
+                )),
+                ttl_ms,
+                ops_since_cleanup: Mutex::new(0),
+            }),
         }
     }
 }
@@ -101,31 +119,34 @@ impl ReplayStore for InMemoryReplayStore {
         fingerprint: ReplayFingerprint,
         now_ms: u64,
     ) -> std::result::Result<(), ReplayConflict> {
-        // ponytail: per-key expiry check + periodic sweep instead of O(n) retain every call
         let key = fingerprint.key();
-        if let Some(existing) = self.nonce_claims.get(&key) {
-            if now_ms.saturating_sub(existing.created_at_ms) < self.ttl_ms {
+        let mut claims = self.inner.nonce_claims.lock();
+        if let Some(existing) = claims.get(&key) {
+            if now_ms.saturating_sub(existing.created_at_ms) < self.inner.ttl_ms {
                 return Err(ReplayConflict { existing: existing.fingerprint.clone() });
             }
             // expired entry for this key -> evict lazily
-            self.nonce_claims.remove(&key);
+            claims.remove(&key);
         }
 
-        self.ops_since_cleanup = self.ops_since_cleanup.wrapping_add(1);
-        if self.ops_since_cleanup.is_multiple_of(CLEANUP_INTERVAL) {
+        let mut ops = self.inner.ops_since_cleanup.lock();
+        *ops = ops.wrapping_add(1);
+        if ops.is_multiple_of(CLEANUP_INTERVAL) {
             // periodic full sweep to bound memory; still O(n) but amortized 1/128
-            let expired: Vec<(String, String)> = self
-                .nonce_claims
+            let expired: Vec<(String, String)> = claims
                 .iter()
-                .filter(|(_, claim)| now_ms.saturating_sub(claim.created_at_ms) >= self.ttl_ms)
+                .filter(|(_, claim)| {
+                    now_ms.saturating_sub(claim.created_at_ms) >= self.inner.ttl_ms
+                })
                 .map(|(k, _)| k.clone())
                 .collect();
             for k in expired {
-                self.nonce_claims.remove(&k);
+                claims.remove(&k);
             }
         }
+        drop(ops);
 
-        self.nonce_claims.insert(key, NonceClaim { fingerprint, created_at_ms: now_ms });
+        claims.insert(key, NonceClaim { fingerprint, created_at_ms: now_ms });
         Ok(())
     }
 
@@ -135,7 +156,8 @@ impl ReplayStore for InMemoryReplayStore {
         request_hash: &str,
         accepted_hash: &str,
     ) -> Option<VerifiedAuthorization> {
-        self.payment_results.get(payment_identifier).and_then(|cached| {
+        let mut cache = self.inner.payment_results.lock();
+        cache.get(payment_identifier).and_then(|cached| {
             (cached.request_hash == request_hash && cached.accepted_hash == accepted_hash)
                 .then(|| cached.authorization.clone())
         })
@@ -148,23 +170,14 @@ impl ReplayStore for InMemoryReplayStore {
         request_hash: String,
         accepted_hash: String,
     ) {
-        self.payment_results.insert(
-            payment_identifier,
-            CachedPayment { authorization, request_hash, accepted_hash },
-        );
-        // ponytail: bounded 1024, evict lexicographically smallest key when over (BTreeMap order,
-        // not true LRU)
-        while self.payment_results.len() > MAX_PAYMENT_RESULTS {
-            if let Some(first_key) = self.payment_results.keys().next().cloned() {
-                self.payment_results.remove(&first_key);
-            } else {
-                break;
-            }
-        }
+        let mut cache = self.inner.payment_results.lock();
+        cache.put(payment_identifier, CachedPayment { authorization, request_hash, accepted_hash });
+        // LruCache automatically evicts least-recently-used entries when over capacity.
     }
 
     fn remove_cached_payment(&mut self, payment_identifier: &str) {
-        self.payment_results.remove(payment_identifier);
+        let mut cache = self.inner.payment_results.lock();
+        cache.pop(payment_identifier);
     }
 }
 
@@ -251,7 +264,7 @@ mod tests {
         let holder = SignerRef::new(SigningAlgorithm::Ed25519, vec![1; 32]);
         let warrant = ledgerflow_core::Warrant {
             version: 1,
-            id: vec![0xAB; 16],
+            id: [0xAB; 16],
             holder: holder.clone(),
             issuer: holder.clone(),
             issued_at: 1,

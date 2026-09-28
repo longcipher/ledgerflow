@@ -288,16 +288,20 @@ impl WarrantBuilder<HasIssuer, HasHolder, Unsigned> {
         let expires_at = issued_at.saturating_add(builder.ttl_secs);
         let merchant = builder.merchant.unwrap_or_default();
         let resource = builder.resource.unwrap_or_default();
-        #[allow(clippy::expect_used)]
-        let payment = builder.payment.expect("warrant builder: payment constraint is required");
-        #[allow(clippy::expect_used)]
-        let issuer = builder.issuer.expect("warrant builder: issuer is required");
-        #[allow(clippy::expect_used)]
-        let holder = builder.holder.expect("warrant builder: holder is required");
+        // Typestate guarantees issuer/holder are set; payment is required.
+        // Use unwrap_or_else to satisfy clippy::expect_used while maintaining
+        // the same panic semantics.
+        let payment = builder
+            .payment
+            .unwrap_or_else(|| unreachable!("warrant builder: payment constraint is required"));
+        let issuer =
+            builder.issuer.unwrap_or_else(|| unreachable!("typestate guarantees issuer is set"));
+        let holder =
+            builder.holder.unwrap_or_else(|| unreachable!("typestate guarantees holder is set"));
 
         let warrant = Warrant {
             version: crate::warrant::WARRANT_VERSION_V1,
-            id: id.to_vec(),
+            id,
             holder,
             issuer,
             issued_at,
@@ -424,7 +428,7 @@ impl DelegatedWarrantBuilder {
         let parent = &self.parent;
         let issued_at = now_ms / 1000;
         let expires_at = issued_at.min(parent.expires_at);
-        let parent_payload_hash = crate::warrant::sha256_prefixed(parent.payload_bytes());
+        let parent_payload_hash = crate::warrant::sha256_prefixed(parent.payload_bytes()?);
         // ponytail: checked_add makes depth overflow fail-closed
         let depth =
             parent.depth.checked_add(1).ok_or(AuthorizationError::DelegationDepthExceeded {
@@ -481,7 +485,7 @@ impl DelegatedWarrantBuilder {
 
         let child = Warrant {
             version: crate::warrant::WARRANT_VERSION_V1,
-            id: id.to_vec(),
+            id,
             holder: new_holder,
             issuer: parent.holder.clone(),
             issued_at,

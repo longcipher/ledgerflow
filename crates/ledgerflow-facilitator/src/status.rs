@@ -1,6 +1,8 @@
 //! Settlement status registry (idempotent `/status` queries).
 
-use std::{collections::BTreeMap, sync::Mutex};
+use std::collections::BTreeMap;
+
+use parking_lot::Mutex;
 
 use crate::{outcome::SettlementStatus, rails::SettlementReceipt};
 
@@ -41,6 +43,8 @@ impl SettlementRegistry {
     }
 
     /// Records a settlement outcome (idempotent by transaction id).
+    ///
+    /// The in-memory registry cannot fail, so this returns `()` directly.
     pub fn record(
         &self,
         warrant_digest: &str,
@@ -48,10 +52,12 @@ impl SettlementRegistry {
         status: SettlementStatus,
     ) {
         let transaction_id = receipt.transaction_id.clone();
-        if let Ok(mut map) = self.inner.by_transaction.lock() {
+        {
+            let mut map = self.inner.by_transaction.lock();
             map.insert(transaction_id.clone(), RegistryEntry { receipt, status });
         }
-        if let Ok(mut map) = self.inner.by_warrant.lock() {
+        {
+            let mut map = self.inner.by_warrant.lock();
             let ids = map.entry(warrant_digest.to_string()).or_default();
             if !ids.contains(&transaction_id) {
                 ids.push(transaction_id);
@@ -61,22 +67,14 @@ impl SettlementRegistry {
 
     /// Queries a single settlement by transaction id.
     pub fn query(&self, transaction_id: &str) -> Option<RegistryEntry> {
-        self.inner.by_transaction.lock().ok().and_then(|map| map.get(transaction_id).cloned())
+        self.inner.by_transaction.lock().get(transaction_id).cloned()
     }
 
     /// Queries all settlements for a warrant digest.
     pub fn query_by_warrant(&self, warrant_digest: &str) -> Vec<RegistryEntry> {
-        let transaction_ids = self
-            .inner
-            .by_warrant
-            .lock()
-            .ok()
-            .and_then(|map| map.get(warrant_digest).cloned())
-            .unwrap_or_default();
-        let map = self.inner.by_transaction.lock().ok();
-        transaction_ids
-            .into_iter()
-            .filter_map(|id| map.as_ref().and_then(|m| m.get(&id).cloned()))
-            .collect()
+        let transaction_ids =
+            self.inner.by_warrant.lock().get(warrant_digest).cloned().unwrap_or_default();
+        let map = self.inner.by_transaction.lock();
+        transaction_ids.into_iter().filter_map(|id| map.get(&id).cloned()).collect()
     }
 }

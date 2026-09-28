@@ -151,34 +151,7 @@ pub fn verify_approvals(
         return Err(AuthorizationError::ApprovalsDigestMismatch);
     }
 
-    let now_secs = now_ms / 1000;
-    let mut valid: Vec<Vec<u8>> = Vec::new();
-    for approval in approvals {
-        if approval.request_hash != request_hash {
-            return Err(AuthorizationError::ApprovalRequestMismatch);
-        }
-        if approval.expires_at < now_secs {
-            return Err(AuthorizationError::ApprovalExpired);
-        }
-        if !required_approvers.contains(&approval.approver) {
-            return Err(AuthorizationError::ApproverNotAllowed);
-        }
-        if !approval.verify_signature() {
-            return Err(AuthorizationError::InvalidApprovalSignature);
-        }
-        if !valid.iter().any(|key| key == &approval.approver.public_key) {
-            valid.push(approval.approver.public_key.clone());
-        }
-    }
-
-    let valid_count = valid.len() as u32;
-    let threshold =
-        if min_approvals == 0 { required_approvers.len() as u32 } else { min_approvals };
-    if valid_count < threshold {
-        return Err(AuthorizationError::InsufficientApprovals { got: valid_count, need: threshold });
-    }
-
-    Ok(ApprovalVerification { valid_count, threshold })
+    verify_approvals_inner(approvals, required_approvers, min_approvals, request_hash, now_ms)
 }
 
 /// Verifies the m-of-n threshold only (used when gates did not fire).
@@ -191,6 +164,18 @@ pub fn verify_approval_threshold(
 ) -> Result<ApprovalVerification> {
     // Digest check is skipped here; callers that also possess the PoP tuple
     // should use [`verify_approvals`].
+    verify_approvals_inner(approvals, required_approvers, min_approvals, request_hash, now_ms)
+}
+
+/// Shared inner verification logic for both [`verify_approvals`] and
+/// [`verify_approval_threshold`].
+fn verify_approvals_inner(
+    approvals: &[SignedApproval],
+    required_approvers: &[SignerRef],
+    min_approvals: u32,
+    request_hash: &str,
+    now_ms: u64,
+) -> Result<ApprovalVerification> {
     let now_secs = now_ms / 1000;
     let mut valid: Vec<Vec<u8>> = Vec::new();
     for approval in approvals {

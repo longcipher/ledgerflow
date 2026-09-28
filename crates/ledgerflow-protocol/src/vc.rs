@@ -145,7 +145,11 @@ pub fn to_credential(warrant: &Warrant) -> WarrantCredential {
                 "actionLabels": tool.action_labels,
             })
         }),
-        warrant_cbor: engine.encode(warrant.full_cbor_bytes()),
+        warrant_cbor: engine.encode(warrant.full_cbor_bytes().unwrap_or_else(|_| {
+            unreachable!(
+                "warrant CBOR encoding failed (unrecoverable: payload too large or corrupted)"
+            )
+        })),
     };
     let issuer_did = signer_did(&warrant.issuer);
     WarrantCredential {
@@ -540,7 +544,7 @@ mod tests {
         let holder = signer.clone();
         let warrant = Warrant {
             version: 1,
-            id: vec![0_u8; 16],
+            id: [0_u8; 16],
             holder,
             issuer: signer,
             issued_at: 0,

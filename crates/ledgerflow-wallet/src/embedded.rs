@@ -45,12 +45,13 @@ impl EmbeddedSigner {
     }
 }
 
+#[async_trait::async_trait]
 impl WalletSigner for EmbeddedSigner {
     fn descriptor(&self) -> WalletDescriptor {
         self.descriptor.clone()
     }
 
-    fn sign(&self, request: &SignRequest) -> Result<SignResult, WalletError> {
+    async fn sign(&self, request: &SignRequest) -> Result<SignResult, WalletError> {
         // Verify the requested key matches (when a key was specified).
         if let Some(expected) = &request.key {
             let actual = self.keypair.signer_ref();
@@ -62,11 +63,14 @@ impl WalletSigner for EmbeddedSigner {
         Ok(SignResult { signer: self.keypair.signer_ref(), signature })
     }
 
-    fn keys(&self) -> Result<Vec<SignerRef>, WalletError> {
+    async fn keys(&self) -> Result<Vec<SignerRef>, WalletError> {
         Ok(vec![self.keypair.signer_ref()])
     }
 
-    fn sign_payment(&self, request: &SignPaymentRequest) -> Result<SignedPayment, WalletError> {
+    async fn sign_payment(
+        &self,
+        request: &SignPaymentRequest,
+    ) -> Result<SignedPayment, WalletError> {
         // Demo-grade transaction: deterministic canonical string + signature.
         let canonical = format!(
             "signed:{}:{}:{}:{}:{}",

@@ -104,6 +104,16 @@ pub enum AuthorizationError {
     IdentityResolutionFailed { reference: String, detail: String },
     #[error("warrant issuer key is not bound to the anchored agent identity `{reference}`")]
     IssuerNotBoundToIdentity { reference: String },
+    #[error("warrant builder: payment constraint is required")]
+    MissingPaymentConstraint,
+    #[error("warrant builder: issuer is required")]
+    MissingIssuer,
+    #[error("warrant builder: holder is required")]
+    MissingHolder,
+    #[error("invalid hex encoding: {0}")]
+    InvalidHex(String),
+    #[error("wire format error: {0}")]
+    Wire(#[from] WireError),
 }
 
 /// Errors returned while encoding or decoding LedgerFlow wire payloads.

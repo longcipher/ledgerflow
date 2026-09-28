@@ -17,6 +17,8 @@ use std::{
     time::Duration,
 };
 
+use parking_lot::Mutex;
+
 /// Webhook event kinds emitted by the server.
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
 pub enum WebhookEvent {
@@ -61,8 +63,15 @@ impl WebhookEvent {
 #[derive(Clone, Debug)]
 pub struct WebhookSender {
     // ponytail: bounded 1024, oldest dropped when full
-    sink: Arc<std::sync::Mutex<VecDeque<WebhookEvent>>>,
+    sink: Arc<Mutex<VecDeque<WebhookEvent>>>,
     delivery: Option<Arc<DeliveryWorker>>,
+}
+
+/// Errors that can occur when emitting a webhook event.
+#[derive(Debug, thiserror::Error)]
+pub enum WebhookError {
+    #[error("webhook sink lock poisoned; event dropped")]
+    LockPoisoned,
 }
 
 #[derive(Clone, Debug)]
@@ -99,7 +108,7 @@ impl WebhookSender {
     /// Creates a disabled sender (no delivery; events are buffered for tests).
     #[must_use]
     pub fn disabled() -> Self {
-        Self { sink: Arc::new(std::sync::Mutex::new(VecDeque::new())), delivery: None }
+        Self { sink: Arc::new(Mutex::new(VecDeque::new())), delivery: None }
     }
 
     /// Creates a sender that buffers events and delivers them to `delivery_url`
@@ -111,15 +120,16 @@ impl WebhookSender {
 
     /// Emits an event: buffers it and, if a delivery URL is configured,
     /// enqueues it for best-effort background delivery.
-    pub fn emit(&self, event: WebhookEvent) {
-        if let Ok(mut sink) = self.sink.lock() {
+    ///
+    /// Returns an error when the sink lock is poisoned so callers can
+    /// decide whether to retry, drop, or escalate.
+    pub fn emit(&self, event: WebhookEvent) -> Result<(), WebhookError> {
+        {
+            let mut sink = self.sink.lock();
             if sink.len() >= 1024 {
                 sink.pop_front();
             }
             sink.push_back(event.clone());
-        } else {
-            tracing::warn!("webhook sink lock poisoned; dropping event");
-            return;
         }
         if let Some(delivery) = &self.delivery {
             let payload = serde_json::json!({
@@ -129,23 +139,18 @@ impl WebhookSender {
             });
             delivery.enqueue(DeliveryJob { payload });
         }
+        Ok(())
     }
 
     /// Returns the buffered events (for tests and audit).
     pub fn buffered(&self) -> Vec<WebhookEvent> {
-        match self.sink.lock() {
-            Ok(sink) => sink.iter().cloned().collect(),
-            Err(poisoned) => {
-                tracing::warn!("webhook sink lock poisoned on buffered()");
-                poisoned.into_inner().iter().cloned().collect()
-            }
-        }
+        self.sink.lock().iter().cloned().collect()
     }
 
     #[must_use]
     fn with_delivery_config(delivery_url: String, config: DeliveryConfig) -> Self {
         Self {
-            sink: Arc::new(std::sync::Mutex::new(VecDeque::new())),
+            sink: Arc::new(Mutex::new(VecDeque::new())),
             delivery: Some(Arc::new(DeliveryWorker::spawn(delivery_url, config))),
         }
     }
@@ -259,23 +264,31 @@ mod tests {
     fn webhook_sender_buffers_events() {
         let sender = WebhookSender::disabled();
         assert!(sender.buffered().is_empty(), "new sender must have no buffered events");
-        sender.emit(WebhookEvent::WarrantIssued {
-            tenant_id: "t1".to_string(),
-            warrant_id: "w1".to_string(),
-        });
-        sender.emit(WebhookEvent::WarrantRevoked {
-            tenant_id: "t1".to_string(),
-            warrant_id: "w1".to_string(),
-        });
-        sender.emit(WebhookEvent::PaymentSettled {
-            tenant_id: "t1".to_string(),
-            transaction_id: "tx-1".to_string(),
-            amount: 100,
-        });
-        sender.emit(WebhookEvent::ApprovalRequested {
-            tenant_id: "t1".to_string(),
-            request_hash: "sha256:req".to_string(),
-        });
+        sender
+            .emit(WebhookEvent::WarrantIssued {
+                tenant_id: "t1".to_string(),
+                warrant_id: "w1".to_string(),
+            })
+            .expect("emit");
+        sender
+            .emit(WebhookEvent::WarrantRevoked {
+                tenant_id: "t1".to_string(),
+                warrant_id: "w1".to_string(),
+            })
+            .expect("emit");
+        sender
+            .emit(WebhookEvent::PaymentSettled {
+                tenant_id: "t1".to_string(),
+                transaction_id: "tx-1".to_string(),
+                amount: 100,
+            })
+            .expect("emit");
+        sender
+            .emit(WebhookEvent::ApprovalRequested {
+                tenant_id: "t1".to_string(),
+                request_hash: "sha256:req".to_string(),
+            })
+            .expect("emit");
         let events = sender.buffered();
         assert_eq!(events.len(), 4);
         assert_eq!(
@@ -298,10 +311,12 @@ mod tests {
     fn webhook_sender_clone_shares_buffer() {
         let sender = WebhookSender::disabled();
         let clone = sender.clone();
-        sender.emit(WebhookEvent::WarrantRevoked {
-            tenant_id: "t1".to_string(),
-            warrant_id: "w2".to_string(),
-        });
+        sender
+            .emit(WebhookEvent::WarrantRevoked {
+                tenant_id: "t1".to_string(),
+                warrant_id: "w2".to_string(),
+            })
+            .expect("emit");
         assert_eq!(clone.buffered().len(), 1);
     }
 
@@ -358,10 +373,12 @@ mod tests {
         );
 
         for index in 0..16 {
-            sender.emit(WebhookEvent::WarrantIssued {
-                tenant_id: "t1".to_string(),
-                warrant_id: format!("w{index}"),
-            });
+            sender
+                .emit(WebhookEvent::WarrantIssued {
+                    tenant_id: "t1".to_string(),
+                    warrant_id: format!("w{index}"),
+                })
+                .expect("emit");
         }
 
         std::thread::sleep(Duration::from_millis(50));

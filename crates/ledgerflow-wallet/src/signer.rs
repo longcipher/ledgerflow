@@ -83,22 +83,22 @@ pub struct SignedPayment {
 
 /// Wallet capability interface.
 ///
-/// Implementations MUST be `Send + Sync`. The interface is **synchronous** by
-/// design (design §9.1): the underlying operations are local signing or
-/// short-lived transport calls, and a synchronous trait keeps embedded /
-/// in-process signers simple and avoids blocking an async runtime. HTTP-backed
-/// signers (e.g. [`crate::LocalRpcSigner`]) perform their transport call
-/// synchronously; callers that must not block an async executor should run
-/// them on a blocking thread (e.g. `tokio::task::spawn_blocking`).
+/// Implementations MUST be `Send + Sync`. The interface is **async** to
+/// support both in-process signers and HTTP-backed signers (e.g. local
+/// wallet daemons) without blocking the async runtime.
+#[async_trait::async_trait]
 pub trait WalletSigner: Send + Sync {
     fn descriptor(&self) -> WalletDescriptor;
 
     /// Signs an arbitrary message.
-    fn sign(&self, request: &SignRequest) -> Result<SignResult, WalletError>;
+    async fn sign(&self, request: &SignRequest) -> Result<SignResult, WalletError>;
 
     /// Lists the keys available in this wallet.
-    fn keys(&self) -> Result<Vec<SignerRef>, WalletError>;
+    async fn keys(&self) -> Result<Vec<SignerRef>, WalletError>;
 
     /// Signs an onchain payment transaction.
-    fn sign_payment(&self, request: &SignPaymentRequest) -> Result<SignedPayment, WalletError>;
+    async fn sign_payment(
+        &self,
+        request: &SignPaymentRequest,
+    ) -> Result<SignedPayment, WalletError>;
 }

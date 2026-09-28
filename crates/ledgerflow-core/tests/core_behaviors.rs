@@ -444,7 +444,7 @@ fn approval_gate_requires_m_of_n_signatures() {
         &approver,
     );
     let tuple = PopTuple {
-        warrant_id: warrant.id.clone(),
+        warrant_id: warrant.id.to_vec(),
         challenge_id: ctx.challenge_id.clone(),
         method: ctx.http_method.clone(),
         uri: format!("{}{}", ctx.merchant_host, ctx.path_and_query),

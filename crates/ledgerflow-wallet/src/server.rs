@@ -40,20 +40,20 @@ pub const SUPPORTED_METHODS: [&str; 3] =
 ///
 /// Only [`SUPPORTED_METHODS`] are recognised; anything else yields
 /// [`WalletError::InvalidPayload`].
-pub fn handle_jsonrpc(
+pub async fn handle_jsonrpc(
     wallet: &dyn WalletSigner,
     method: &str,
     params: &serde_json::Value,
 ) -> Result<serde_json::Value, WalletError> {
     match method {
-        "ledgerflow_sign" => handle_sign(wallet, params),
-        "ledgerflow_keys" => handle_keys(wallet),
-        "ledgerflow_sign_payment" => handle_sign_payment(wallet, params),
+        "ledgerflow_sign" => handle_sign(wallet, params).await,
+        "ledgerflow_keys" => handle_keys(wallet).await,
+        "ledgerflow_sign_payment" => handle_sign_payment(wallet, params).await,
         other => Err(WalletError::InvalidPayload(format!("unknown wallet RPC method: {other}"))),
     }
 }
 
-fn handle_sign(
+async fn handle_sign(
     wallet: &dyn WalletSigner,
     params: &serde_json::Value,
 ) -> Result<serde_json::Value, WalletError> {
@@ -84,7 +84,7 @@ fn handle_sign(
         Some(value) => Some(parse_signer_ref(value, "ledgerflow_sign: key")?),
     };
 
-    let result = wallet.sign(&SignRequest { domain, message, key })?;
+    let result = wallet.sign(&SignRequest { domain, message, key }).await?;
     Ok(serde_json::json!({
         "signer": {
             "alg": result.signer.alg.to_string(),
@@ -97,8 +97,8 @@ fn handle_sign(
     }))
 }
 
-fn handle_keys(wallet: &dyn WalletSigner) -> Result<serde_json::Value, WalletError> {
-    let keys = wallet.keys()?;
+async fn handle_keys(wallet: &dyn WalletSigner) -> Result<serde_json::Value, WalletError> {
+    let keys = wallet.keys().await?;
     let array: Vec<serde_json::Value> = keys
         .iter()
         .map(|key| {
@@ -112,7 +112,7 @@ fn handle_keys(wallet: &dyn WalletSigner) -> Result<serde_json::Value, WalletErr
     Ok(serde_json::Value::Array(array))
 }
 
-fn handle_sign_payment(
+async fn handle_sign_payment(
     wallet: &dyn WalletSigner,
     params: &serde_json::Value,
 ) -> Result<serde_json::Value, WalletError> {
@@ -132,7 +132,7 @@ fn handle_sign_payment(
     let nonce = obj.get("nonce").and_then(serde_json::Value::as_str).map(str::to_string);
 
     let result =
-        wallet.sign_payment(&SignPaymentRequest { chain_id, asset, amount, payee, nonce })?;
+        wallet.sign_payment(&SignPaymentRequest { chain_id, asset, amount, payee, nonce }).await?;
     Ok(serde_json::json!({
         "raw_transaction": result.raw_transaction,
         "tx_hash": result.tx_hash,
@@ -203,12 +203,12 @@ impl EmbeddedWalletServer {
 
     /// Handles a single method call, returning the `result` value or a
     /// JSON-RPC error.
-    pub fn handle(
+    pub async fn handle(
         &self,
         method: &str,
         params: serde_json::Value,
     ) -> Result<serde_json::Value, JsonRpcError> {
-        handle_jsonrpc(self.inner.as_ref(), method, &params).map_err(|error| {
+        handle_jsonrpc(self.inner.as_ref(), method, &params).await.map_err(|error| {
             let (code, message) = to_jsonrpc_error(&error);
             JsonRpcError { code, message }
         })
@@ -216,12 +216,11 @@ impl EmbeddedWalletServer {
 
     /// Processes a full JSON-RPC request into a JSON-RPC response, addressing
     /// unknown methods and parse errors in the JSON-RPC 2.0 way.
-    #[must_use]
-    pub fn process_request(&self, request: &JsonRpcRequest) -> JsonRpcResponse {
+    pub async fn process_request(&self, request: &JsonRpcRequest) -> JsonRpcResponse {
         // Unknown methods get the standard method-not-found code rather than
         // leaking the raw payload error through `handle`.
         let (result, error) = if SUPPORTED_METHODS.contains(&request.method.as_str()) {
-            match self.handle(&request.method, request.params.clone()) {
+            match self.handle(&request.method, request.params.clone()).await {
                 Ok(result) => (Some(result), None),
                 Err(error) => (None, Some(error)),
             }
@@ -250,15 +249,15 @@ mod tests {
         signer().keypair().signer_ref()
     }
 
-    #[test]
-    fn handle_sign_returns_roundtrippable_signer_and_signature() {
+    #[tokio::test]
+    async fn handle_sign_returns_roundtrippable_signer_and_signature() {
         let server = server();
         let params = serde_json::json!({
             "domain": "proof",
             "message": crate::local_rpc::base64_encode(b"hello"),
             "key": null,
         });
-        let result = server.handle("ledgerflow_sign", params).expect("sign");
+        let result = server.handle("ledgerflow_sign", params).await.expect("sign");
         assert_eq!(result["signer"]["alg"], "ed25519");
         let public_key = crate::local_rpc::base64_decode(
             result["signer"]["public_key"].as_str().expect("public_key"),
@@ -271,8 +270,8 @@ mod tests {
         assert_eq!(signature.len(), 64);
     }
 
-    #[test]
-    fn handle_sign_accepts_explicit_key_and_lowercase_alg() {
+    #[tokio::test]
+    async fn handle_sign_accepts_explicit_key_and_lowercase_alg() {
         let server = server();
         let params = serde_json::json!({
             "domain": "warrant",
@@ -283,29 +282,29 @@ mod tests {
                 "key_id": key().key_id,
             },
         });
-        let result = server.handle("ledgerflow_sign", params).expect("sign");
+        let result = server.handle("ledgerflow_sign", params).await.expect("sign");
         assert_eq!(
             result["signer"]["public_key"],
             serde_json::Value::String(crate::local_rpc::base64_encode(&key().public_key))
         );
     }
 
-    #[test]
-    fn handle_sign_rejects_mismatched_key() {
+    #[tokio::test]
+    async fn handle_sign_rejects_mismatched_key() {
         let server = server();
         let params = serde_json::json!({
             "domain": "approval",
             "message": crate::local_rpc::base64_encode(b"m"),
             "key": { "alg": "Ed25519", "public_key": crate::local_rpc::base64_encode(&[9_u8; 32]), "key_id": null },
         });
-        let error = server.handle("ledgerflow_sign", params).expect_err("mismatch");
+        let error = server.handle("ledgerflow_sign", params).await.expect_err("mismatch");
         assert_eq!(error.code, -32_000);
     }
 
-    #[test]
-    fn handle_keys_returns_lowercase_alg_and_base64_public_key() {
+    #[tokio::test]
+    async fn handle_keys_returns_lowercase_alg_and_base64_public_key() {
         let server = server();
-        let result = server.handle("ledgerflow_keys", serde_json::Value::Null).expect("keys");
+        let result = server.handle("ledgerflow_keys", serde_json::Value::Null).await.expect("keys");
         let array = result.as_array().expect("array");
         assert_eq!(array.len(), 1);
         assert_eq!(array[0]["alg"], "ed25519");
@@ -315,8 +314,8 @@ mod tests {
         assert_eq!(public_key, key().public_key);
     }
 
-    #[test]
-    fn handle_sign_payment_returns_raw_transaction() {
+    #[tokio::test]
+    async fn handle_sign_payment_returns_raw_transaction() {
         let server = server();
         let params = serde_json::json!({
             "chain_id": "eip155:8453",
@@ -325,7 +324,7 @@ mod tests {
             "payee": "0xpayee",
             "nonce": "1",
         });
-        let result = server.handle("ledgerflow_sign_payment", params).expect("sign_payment");
+        let result = server.handle("ledgerflow_sign_payment", params).await.expect("sign_payment");
         assert!(
             result["raw_transaction"]
                 .as_str()
@@ -335,8 +334,8 @@ mod tests {
         assert!(result["tx_hash"].is_null());
     }
 
-    #[test]
-    fn unknown_method_returns_method_not_found() {
+    #[tokio::test]
+    async fn unknown_method_returns_method_not_found() {
         let server = server();
         let request = JsonRpcRequest {
             jsonrpc: "2.0".to_string(),
@@ -344,15 +343,15 @@ mod tests {
             method: "nope".to_string(),
             params: serde_json::Value::Null,
         };
-        let response = server.process_request(&request);
+        let response = server.process_request(&request).await;
         let error = response.error.expect("error");
         assert_eq!(error.code, -32_601);
         assert_eq!(response.id, 7);
         assert!(response.result.is_none());
     }
 
-    #[test]
-    fn process_request_wraps_result() {
+    #[tokio::test]
+    async fn process_request_wraps_result() {
         let server = server();
         let request = JsonRpcRequest {
             jsonrpc: "2.0".to_string(),
@@ -360,7 +359,7 @@ mod tests {
             method: "ledgerflow_keys".to_string(),
             params: serde_json::Value::Null,
         };
-        let response = server.process_request(&request);
+        let response = server.process_request(&request).await;
         assert!(response.error.is_none());
         assert_eq!(response.id, 3);
         assert!(response.result.is_some());
@@ -400,38 +399,38 @@ impl LoopbackJsonRpcServer {
     /// # Errors
     ///
     /// Returns a [`WalletError`] if the listener cannot be bound.
-    pub fn start(wallet: Arc<dyn WalletSigner>) -> Result<Self, WalletError> {
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").map_err(|error| {
+    pub async fn start(wallet: Arc<dyn WalletSigner>) -> Result<Self, WalletError> {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.map_err(|error| {
             WalletError::Transport(format!("failed to bind loopback JSON-RPC listener: {error}"))
         })?;
         let addr = listener.local_addr().map_err(|error| {
             WalletError::Transport(format!("failed to read listener address: {error}"))
         })?;
-        listener.set_nonblocking(true).map_err(|error| {
-            WalletError::Transport(format!("failed to configure listener: {error}"))
-        })?;
 
         let server = Arc::new(EmbeddedWalletServer::new(wallet));
         let shutdown = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let shutdown_flag = Arc::clone(&shutdown);
-        let server_for_thread = Arc::clone(&server);
+        let server_for_tasks = Arc::clone(&server);
 
-        let handle = std::thread::spawn(move || {
-            // Non-blocking accept poll: lets the thread observe the shutdown
-            // flag and exit promptly instead of blocking forever on accept().
-            while !shutdown_flag.load(std::sync::atomic::Ordering::Relaxed) {
-                match listener.accept() {
-                    Ok((stream, _)) => {
-                        let server = Arc::clone(&server_for_thread);
-                        let shutdown_flag = Arc::clone(&shutdown_flag);
-                        std::thread::spawn(move || {
-                            handle_connection(stream, server, shutdown_flag);
-                        });
+        let handle = tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    accept_result = listener.accept() => {
+                        match accept_result {
+                            Ok((stream, _)) => {
+                                let server = Arc::clone(&server_for_tasks);
+                                tokio::spawn(async move {
+                                    handle_connection(stream, server).await;
+                                });
+                            }
+                            Err(_) => break,
+                        }
                     }
-                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                        std::thread::sleep(std::time::Duration::from_millis(5));
+                    _ = tokio::time::sleep(std::time::Duration::from_millis(50)) => {
+                        if shutdown_flag.load(std::sync::atomic::Ordering::Relaxed) {
+                            break;
+                        }
                     }
-                    Err(_) => break,
                 }
             }
         });
@@ -445,11 +444,11 @@ impl LoopbackJsonRpcServer {
         format!("http://{}/", self.addr)
     }
 
-    /// Stops the loopback listener (joining its thread).
+    /// Stops the loopback listener (aborting the background task).
     pub fn stop(&mut self) {
         self.shutdown.store(true, std::sync::atomic::Ordering::Relaxed);
         if let Some(handle) = self.handle.take() {
-            let _ = handle.join();
+            handle.abort();
         }
     }
 }
@@ -457,57 +456,59 @@ impl LoopbackJsonRpcServer {
 #[cfg(feature = "http")]
 impl Drop for LoopbackJsonRpcServer {
     fn drop(&mut self) {
-        self.stop();
+        self.shutdown.store(true, std::sync::atomic::Ordering::Relaxed);
+        if let Some(handle) = self.handle.take() {
+            handle.abort();
+        }
     }
 }
 
 /// Handles a single HTTP/1.1 request over a connection and responds with a
 /// JSON-RPC response body.
 #[cfg(feature = "http")]
-fn handle_connection(
-    stream: std::net::TcpStream,
-    server: Arc<EmbeddedWalletServer>,
-    shutdown_flag: Arc<std::sync::atomic::AtomicBool>,
-) {
-    let Ok(writer) = stream.try_clone() else { return };
-    let mut reader = std::io::BufReader::new(stream);
+async fn handle_connection(mut stream: tokio::net::TcpStream, server: Arc<EmbeddedWalletServer>) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    // Read the request line (path is not routed; any path is accepted).
-    let mut request_line = String::new();
-    if std::io::BufRead::read_line(&mut reader, &mut request_line).is_err() {
-        return;
-    }
-    let _ = request_line;
+    let mut buf = Vec::new();
+    let mut temp_buf = [0u8; 4096];
+    let content_length;
+
     // Read headers until blank line, capturing Content-Length.
-    let mut content_length = 0usize;
     loop {
-        let mut line = String::new();
-        if matches!(std::io::BufRead::read_line(&mut reader, &mut line), Ok(0)) {
-            break;
+        match stream.read(&mut temp_buf).await {
+            Ok(0) => return,
+            Ok(n) => {
+                buf.extend_from_slice(&temp_buf[..n]);
+                if let Some(pos) = find_subslice(&buf, b"\r\n\r\n") {
+                    let headers = String::from_utf8_lossy(&buf[..pos]).to_lowercase();
+                    content_length = headers
+                        .lines()
+                        .find_map(|line| line.strip_prefix("content-length:"))
+                        .and_then(|v| v.trim().parse::<usize>().ok())
+                        .unwrap_or(0);
+                    break;
+                }
+                if buf.len() > 64 * 1024 {
+                    return;
+                }
+            }
+            Err(_) => return,
         }
-        let trimmed = line.trim_end();
-        if trimmed.is_empty() {
-            break;
-        }
-        if let Some(value) = trimmed
-            .strip_prefix("Content-Length:")
-            .or_else(|| trimmed.strip_prefix("content-length:"))
-        {
-            content_length = value.trim().parse().unwrap_or(0);
-        }
-    }
-
-    if shutdown_flag.load(std::sync::atomic::Ordering::Relaxed) {
-        return;
     }
 
     // Read the request body.
-    let mut body = vec![0u8; content_length];
-    if std::io::Read::read_exact(&mut reader, &mut body).is_err() {
-        return;
+    let body_start = find_subslice(&buf, b"\r\n\r\n").map_or(0, |p| p + 4);
+    while buf.len() < body_start + content_length {
+        match stream.read(&mut temp_buf).await {
+            Ok(0) => break,
+            Ok(n) => buf.extend_from_slice(&temp_buf[..n]),
+            Err(_) => return,
+        }
     }
 
-    let response = serde_json::from_slice::<JsonRpcRequest>(&body).map_or_else(
+    let body = &buf[body_start..(body_start + content_length).min(buf.len())];
+
+    let response = serde_json::from_slice::<JsonRpcRequest>(body).map_or_else(
         |error| JsonRpcResponse {
             jsonrpc: "2.0".to_string(),
             id: 0,
@@ -521,13 +522,16 @@ fn handle_connection(
     );
 
     let body_json = serde_json::to_string(&response).unwrap_or_else(|_| "{}".to_string());
-    let _ = request_line; // method/path validated implicitly by parsing above
     let headers = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
         body_json.len()
     );
-    let mut response_stream = std::io::BufWriter::new(writer);
-    let _ = std::io::Write::write_all(&mut response_stream, headers.as_bytes());
-    let _ = std::io::Write::write_all(&mut response_stream, body_json.as_bytes());
-    let _ = std::io::Write::flush(&mut response_stream);
+    let _ = stream.write_all(headers.as_bytes()).await;
+    let _ = stream.write_all(body_json.as_bytes()).await;
+    let _ = stream.flush().await;
+}
+
+#[cfg(feature = "http")]
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack.windows(needle.len()).position(|w| w == needle)
 }

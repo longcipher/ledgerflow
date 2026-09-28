@@ -138,18 +138,17 @@ impl WcV2Signer {
     }
 }
 
+#[async_trait::async_trait]
 impl WalletSigner for WcV2Signer {
     fn descriptor(&self) -> WalletDescriptor {
         self.descriptor.clone()
     }
 
-    fn sign(&self, request: &SignRequest) -> Result<SignResult, WalletError> {
-        let runtime = wc_runtime()?;
+    async fn sign(&self, request: &SignRequest) -> Result<SignResult, WalletError> {
         let account = self.account()?;
         let message_hex = format!("0x{}", hex::encode(&request.message));
         let params = serde_json::json!([message_hex, account]);
-        let result =
-            runtime.block_on(self.client.request(jsonrpc::method::PERSONAL_SIGN, params))?;
+        let result = self.client.request(jsonrpc::method::PERSONAL_SIGN, params).await?;
         let sig_hex = result.as_str().ok_or_else(|| {
             WalletError::InvalidPayload("personal_sign: expected string".to_string())
         })?;
@@ -180,7 +179,7 @@ impl WalletSigner for WcV2Signer {
         })
     }
 
-    fn keys(&self) -> Result<Vec<SignerRef>, WalletError> {
+    async fn keys(&self) -> Result<Vec<SignerRef>, WalletError> {
         let account = self.account()?;
         Ok(vec![SignerRef {
             alg: SigningAlgorithm::Secp256k1,
@@ -189,13 +188,14 @@ impl WalletSigner for WcV2Signer {
         }])
     }
 
-    fn sign_payment(&self, request: &SignPaymentRequest) -> Result<SignedPayment, WalletError> {
-        let runtime = wc_runtime()?;
+    async fn sign_payment(
+        &self,
+        request: &SignPaymentRequest,
+    ) -> Result<SignedPayment, WalletError> {
         let account = self.account()?;
         let tx = build_eip1559_tx(request, &account)?;
         let params = serde_json::json!([tx]);
-        let result =
-            runtime.block_on(self.client.request(jsonrpc::method::ETH_SIGN_TRANSACTION, params))?;
+        let result = self.client.request(jsonrpc::method::ETH_SIGN_TRANSACTION, params).await?;
         let raw = result.as_str().ok_or_else(|| {
             WalletError::InvalidPayload("eth_signTransaction: expected string".to_string())
         })?;

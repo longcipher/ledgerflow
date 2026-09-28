@@ -8,7 +8,7 @@ ignored = []
 
 [dependencies]
 hmac = "0.13.0"
-hpx.workspace = true
+hpx = { workspace = true, features = ["rustls-tls"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sha2.workspace = true

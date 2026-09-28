@@ -5,17 +5,19 @@
 //! pay for specific merchants/resources within stateless limits, for a bounded
 //! lifetime, with an optional delegation chain.
 
-use std::{
-    collections::BTreeMap,
-    fmt::{self, Display, Write as _},
-};
+use std::{collections::BTreeMap, fmt::Write as _};
 
 use ciborium::{de::from_reader, ser::into_writer};
-use ed25519_dalek::{Signature, Signer as _, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::error::{WireError, WireResult};
+
+mod signing;
+mod subjects;
+
+pub use signing::{SignatureEnvelope, SignerRef, SigningAlgorithm, SigningKeyPair};
+pub use subjects::{AssetRef, PaymentRail, PaymentSubjectKind, PaymentSubjectRef, WarrantMetadata};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -184,304 +186,22 @@ pub const fn generate_warrant_id(now_ms: u64, random: [u8; 8]) -> [u8; 16] {
 }
 
 // ---------------------------------------------------------------------------
-// Signing
-// ---------------------------------------------------------------------------
-
-/// Supported signer algorithms for warrants and proofs.
-///
-/// The EVM-family variants enable native wallet integration and EIP-8004
-/// interop:
-///
-/// - [`SigningAlgorithm::Secp256k1`]: strict (low-s) ECDSA over `SHA-256(message)`.
-///   `SignerRef::public_key` is the 33-byte compressed SEC1 encoding.
-/// - [`SigningAlgorithm::EthPersonalSign`]: EIP-191 `personal_sign` semantics. The verification
-///   preimage is `keccak256("\x19Ethereum Signed Message:\n" + len(message) + message)`.
-///   `SignerRef::public_key` is either the 33-byte compressed pubkey or a 20-byte Ethereum address
-///   claim.
-/// - [`SigningAlgorithm::EthTypedData`]: EIP-712 semantics. The `message` passed to verification
-///   MUST already be the 32-byte typed-data digest (`keccak256(domainSeparator || structHash)`).
-///   Key conventions match [`SigningAlgorithm::EthPersonalSign`].
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-#[non_exhaustive]
-pub enum SigningAlgorithm {
-    Ed25519,
-    Secp256k1,
-    EthPersonalSign,
-    EthTypedData,
-}
-
-impl SigningAlgorithm {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Ed25519 => "ed25519",
-            Self::Secp256k1 => "secp256k1",
-            Self::EthPersonalSign => "eth_personal_sign",
-            Self::EthTypedData => "eth_typed_data",
-        }
-    }
-
-    /// Returns `true` for the secp256k1/EVM family of algorithms.
-    #[must_use]
-    pub const fn is_secp256k1_family(self) -> bool {
-        matches!(self, Self::Secp256k1 | Self::EthPersonalSign | Self::EthTypedData)
-    }
-}
-
-impl Display for SigningAlgorithm {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self.as_str())
-    }
-}
-
-/// Public signer identity used for warrant issuance and proof verification.
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-pub struct SignerRef {
-    pub alg: SigningAlgorithm,
-    #[serde(with = "serde_bytes")]
-    pub public_key: Vec<u8>,
-    pub key_id: Option<String>,
-}
-
-impl SignerRef {
-    #[must_use]
-    pub const fn new(alg: SigningAlgorithm, public_key: Vec<u8>) -> Self {
-        Self { alg, public_key, key_id: None }
-    }
-
-    #[must_use]
-    pub fn with_key_id(mut self, key_id: String) -> Self {
-        self.key_id = Some(key_id);
-        self
-    }
-}
-
-/// Ed25519 signing key pair for warrant issuance, proof creation, and approvals.
-#[derive(Clone)]
-pub struct SigningKeyPair {
-    signing_key: ed25519_dalek::SigningKey,
-}
-
-impl fmt::Debug for SigningKeyPair {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("SigningKeyPair")
-            .field("public_key_hex", &hex_encode(&self.signing_key.verifying_key().to_bytes()))
-            .finish()
-    }
-}
-
-impl SigningKeyPair {
-    /// Creates a key pair from raw Ed25519 secret key bytes.
-    #[must_use]
-    pub fn from_bytes(secret_key: &[u8; 32]) -> Self {
-        Self { signing_key: ed25519_dalek::SigningKey::from_bytes(secret_key) }
-    }
-
-    /// Returns the public key bytes.
-    #[must_use]
-    pub fn public_key_bytes(&self) -> [u8; 32] {
-        self.signing_key.verifying_key().to_bytes()
-    }
-
-    /// Creates a `SignerRef` from this key pair.
-    #[must_use]
-    pub fn signer_ref(&self) -> SignerRef {
-        SignerRef::new(SigningAlgorithm::Ed25519, self.public_key_bytes().to_vec())
-    }
-
-    /// Signs a message, producing a [`SignatureEnvelope`].
-    #[must_use]
-    pub fn sign(&self, message: &[u8]) -> SignatureEnvelope {
-        let signature = self.signing_key.sign(message);
-        SignatureEnvelope { alg: SigningAlgorithm::Ed25519, value: signature.to_bytes().to_vec() }
-    }
-}
-
-/// Signature container for warrants, proofs, and approvals.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SignatureEnvelope {
-    pub alg: SigningAlgorithm,
-    pub value: Vec<u8>,
-}
-
-impl SignatureEnvelope {
-    /// Verifies this signature against a signer and message using **strict**
-    /// verification semantics for the envelope's algorithm.
-    ///
-    /// - Ed25519: `verify_strict` (rejects non-canonical signatures).
-    /// - Secp256k1: low-s ECDSA over `SHA-256(message)`.
-    /// - EthPersonalSign / EthTypedData: EIP-191 recovery with low-s enforcement; see
-    ///   [`SigningAlgorithm`] for key conventions.
-    pub fn verify_strict(&self, signer: &SignerRef, message: &[u8]) -> bool {
-        if self.alg != signer.alg {
-            return false;
-        }
-        match self.alg {
-            SigningAlgorithm::Ed25519 => self.verify_ed25519_strict(signer, message),
-            SigningAlgorithm::Secp256k1 |
-            SigningAlgorithm::EthPersonalSign |
-            SigningAlgorithm::EthTypedData => {
-                crate::crypto::verify_secp256k1_family(self.alg, signer, message, &self.value)
-            }
-        }
-    }
-
-    /// The original strict Ed25519 verification path.
-    fn verify_ed25519_strict(&self, signer: &SignerRef, message: &[u8]) -> bool {
-        let Ok(pk_array) = <&[u8; 32]>::try_from(signer.public_key.as_slice()) else {
-            return false;
-        };
-        let Ok(sig_array) = <&[u8; 64]>::try_from(self.value.as_slice()) else {
-            return false;
-        };
-        let Ok(verifying_key) = VerifyingKey::from_bytes(pk_array) else {
-            return false;
-        };
-        let signature = Signature::from_bytes(sig_array);
-        verifying_key.verify_strict(message, &signature).is_ok()
-    }
-}
-
-impl Serialize for SignatureEnvelope {
-    fn serialize<S: serde::Serializer>(
-        &self,
-        serializer: S,
-    ) -> std::result::Result<S::Ok, S::Error> {
-        use serde::ser::SerializeStruct;
-        let mut state = serializer.serialize_struct("SignatureEnvelope", 2)?;
-        state.serialize_field("alg", &self.alg)?;
-        state.serialize_field("value", &serde_bytes::ByteBuf::from(self.value.clone()))?;
-        state.end()
-    }
-}
-
-impl<'de> Deserialize<'de> for SignatureEnvelope {
-    fn deserialize<D: serde::Deserializer<'de>>(
-        deserializer: D,
-    ) -> std::result::Result<Self, D::Error> {
-        #[derive(Deserialize)]
-        struct Inner {
-            alg: SigningAlgorithm,
-            value: serde_bytes::ByteBuf,
-        }
-        let inner = Inner::deserialize(deserializer)?;
-        Ok(Self { alg: inner.alg, value: inner.value.into_vec() })
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Subjects and assets
-// ---------------------------------------------------------------------------
-
-/// Opaque settlement subject that only the Facilitator interprets.
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-pub struct PaymentSubjectRef {
-    pub kind: PaymentSubjectKind,
-    pub value: String,
-}
-
-impl PaymentSubjectRef {
-    #[must_use]
-    pub fn new(kind: PaymentSubjectKind, value: impl Into<String>) -> Self {
-        Self { kind, value: value.into() }
-    }
-}
-
-/// Supported payment subject kinds.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-#[non_exhaustive]
-pub enum PaymentSubjectKind {
-    Caip10,
-    FacilitatorAccount,
-    ExchangeAccount,
-    Opaque,
-}
-
-impl Display for PaymentSubjectKind {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let value = match self {
-            Self::Caip10 => "caip10",
-            Self::FacilitatorAccount => "facilitator_account",
-            Self::ExchangeAccount => "exchange_account",
-            Self::Opaque => "opaque",
-        };
-        formatter.write_str(value)
-    }
-}
-
-/// A payment asset allowed by the warrant (CAIP-19 when available).
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-pub struct AssetRef {
-    /// Asset identifier. Prefer CAIP-19 (`eip155:8453/slip44:60:0x8335...`).
-    pub asset: String,
-    /// Optional network hint (kept for compatibility with legacy fixtures).
-    pub network: Option<String>,
-}
-
-impl AssetRef {
-    #[must_use]
-    pub fn new(asset: impl Into<String>, network: Option<String>) -> Self {
-        Self { asset: asset.into(), network }
-    }
-
-    /// Returns `true` when `candidate` matches this asset.
-    #[must_use]
-    pub fn matches(&self, candidate: &str, candidate_network: Option<&str>) -> bool {
-        if self.asset != candidate {
-            return false;
-        }
-        match (&self.network, candidate_network) {
-            (Some(expected), Some(given)) => expected == given,
-            _ => true,
-        }
-    }
-}
-
-/// High-level settlement rails allowed by a warrant.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-#[non_exhaustive]
-pub enum PaymentRail {
-    Onchain,
-    Exchange,
-    Custodial,
-    TraditionalGateway,
-}
-
-impl Display for PaymentRail {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let value = match self {
-            Self::Onchain => "onchain",
-            Self::Exchange => "exchange",
-            Self::Custodial => "custodial",
-            Self::TraditionalGateway => "traditional_gateway",
-        };
-        formatter.write_str(value)
-    }
-}
-
-/// Additional metadata carried in a warrant (application-specific).
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-pub struct WarrantMetadata {
-    pub entries: BTreeMap<String, String>,
-}
-
-// ---------------------------------------------------------------------------
 // Warrant
 // ---------------------------------------------------------------------------
 
 /// Signed capability token granting a holder scoped payment authority.
 ///
-/// The signature covers `WARRANT_SIGN_DOMAIN || version || payload_bytes`
+/// The signature covers `WARRANT_SIGN_DOMAIN || payload_bytes`
 /// where `payload_bytes` is the CBOR encoding of the warrant without its
-/// signature field. `parent_hash` links a delegated warrant to its parent
+/// signature field (`version` is the first field inside the payload map).
+/// `parent_hash` links a delegated warrant to its parent
 /// payload for chain verification (invariant I5).
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Warrant {
     /// Payload schema version (`WARRANT_VERSION_V1`).
     pub version: u8,
     /// 16-byte UUIDv7 identifier.
-    #[serde(with = "serde_bytes")]
-    pub id: Vec<u8>,
+    pub id: [u8; 16],
     /// Authorized holder of this warrant (the agent).
     pub holder: SignerRef,
     /// Issuer who signed this warrant.
@@ -530,41 +250,38 @@ impl Warrant {
     /// Returns the SHA-256 digest of the **signed** warrant (payload + signature).
     #[must_use]
     pub fn digest(&self) -> String {
-        sha256_prefixed(self.full_cbor_bytes())
+        sha256_prefixed(self.full_cbor_bytes().unwrap_or_default())
     }
 
     /// Returns the SHA-256 digest of the **unsigned payload** only.
     #[must_use]
     pub fn payload_digest(&self) -> String {
-        sha256_prefixed(self.payload_bytes())
+        sha256_prefixed(self.payload_bytes().unwrap_or_default())
     }
 
     /// CBOR-encodes the payload (all fields except `signature`).
-    #[must_use]
-    pub fn payload_bytes(&self) -> Vec<u8> {
+    pub fn payload_bytes(&self) -> WireResult<Vec<u8>> {
         let payload = WarrantPayloadRef::from(self);
         let mut bytes = Vec::new();
-        #[allow(clippy::expect_used)]
-        into_writer(&payload, &mut bytes).expect("warrant payload serialization is infallible");
-        bytes
+        into_writer(&payload, &mut bytes)
+            .map_err(|error| WireError::Serialization(error.to_string()))?;
+        Ok(bytes)
     }
 
     /// CBOR-encodes the full warrant (payload + signature).
-    #[must_use]
-    pub fn full_cbor_bytes(&self) -> Vec<u8> {
+    pub fn full_cbor_bytes(&self) -> WireResult<Vec<u8>> {
         let mut bytes = Vec::new();
-        #[allow(clippy::expect_used)]
-        into_writer(self, &mut bytes).expect("warrant serialization is infallible");
-        bytes
+        into_writer(self, &mut bytes)
+            .map_err(|error| WireError::Serialization(error.to_string()))?;
+        Ok(bytes)
     }
 
     /// Domain-separated signing message.
     #[must_use]
     pub fn signing_message(&self) -> Vec<u8> {
-        let mut message = Vec::with_capacity(WARRANT_SIGN_DOMAIN.len() + 1 + 256);
+        let mut message = Vec::with_capacity(WARRANT_SIGN_DOMAIN.len() + 256);
         message.extend_from_slice(WARRANT_SIGN_DOMAIN);
-        message.push(self.version);
-        message.extend_from_slice(&self.payload_bytes());
+        message.extend_from_slice(&self.payload_bytes().unwrap_or_default());
         message
     }
 
@@ -689,6 +406,31 @@ pub fn hex_decode_vec(hex: &str) -> Option<Vec<u8>> {
         return None;
     }
     (0..hex.len()).step_by(2).map(|i| u8::from_str_radix(&hex[i..i + 2], 16).ok()).collect()
+}
+
+/// Decodes a hex string with detailed error reporting.
+pub fn hex_decode_fixed_or_error<const N: usize>(hex: &str) -> Result<[u8; N], HexError> {
+    let hex = hex.trim().trim_start_matches("0x").trim_start_matches("0X");
+    if hex.len() != N * 2 {
+        return Err(HexError::InvalidLength { expected: N * 2, actual: hex.len() });
+    }
+    let mut out = [0_u8; N];
+    for (i, chunk) in hex.as_bytes().chunks(2).enumerate() {
+        let text = std::str::from_utf8(chunk).map_err(|_| HexError::InvalidUtf8)?;
+        out[i] = u8::from_str_radix(text, 16).map_err(|_| HexError::InvalidHex)?;
+    }
+    Ok(out)
+}
+
+/// Detailed hex decoding errors.
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum HexError {
+    #[error("invalid hex length: expected {expected}, got {actual}")]
+    InvalidLength { expected: usize, actual: usize },
+    #[error("invalid UTF-8 in hex string")]
+    InvalidUtf8,
+    #[error("invalid hex character")]
+    InvalidHex,
 }
 
 #[cfg(test)]
@@ -866,7 +608,7 @@ mod tests {
     #[test]
     fn id_hex_is_lowercase_full_hex() {
         let mut warrant = sample_warrant();
-        warrant.id = vec![0xDE; 16];
+        warrant.id = [0xDE; 16];
         let hex_id = warrant.id_hex();
         assert_eq!(hex_id.len(), 32);
         assert!(hex_id.starts_with("dede"));
@@ -878,14 +620,15 @@ mod tests {
         let warrant = sample_warrant();
         let message = warrant.signing_message();
         assert!(message.starts_with(WARRANT_SIGN_DOMAIN));
-        // One version byte between the domain and the CBOR payload.
-        assert_eq!(message[WARRANT_SIGN_DOMAIN.len()], WARRANT_VERSION_V1);
-        assert!(message.len() > WARRANT_SIGN_DOMAIN.len() + 1);
-        assert_eq!(&message[WARRANT_SIGN_DOMAIN.len() + 1..], &warrant.payload_bytes()[..]);
-        // Payload bytes are non-empty and decode back to an equal warrant.
-        let payload = warrant.payload_bytes();
+        // The payload_bytes() already includes `version` as the first field in the CBOR map,
+        // so signing_message() is simply domain || payload_bytes().
+        let payload = warrant.payload_bytes().expect("payload bytes");
         assert!(!payload.is_empty());
-        let full = warrant.full_cbor_bytes();
+        assert_eq!(&message[WARRANT_SIGN_DOMAIN.len()..], &payload[..]);
+        // The first byte of payload is the CBOR map header (0xB1 = 17 fields).
+        assert_eq!(message[WARRANT_SIGN_DOMAIN.len()], 0xB1);
+        // Full roundtrip: payload bytes are a prefix of the full warrant.
+        let full = warrant.full_cbor_bytes().expect("full cbor bytes");
         assert!(!full.is_empty());
         assert_ne!(full, payload);
         let decoded = Warrant::decode_cbor(&full).expect("roundtrip");

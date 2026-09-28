@@ -278,7 +278,7 @@ impl CloudClient {
         body: Option<&serde_json::Value>,
         idempotency_key: Option<&str>,
     ) -> Result<serde_json::Value> {
-        let bytes = body.map(|value| value.to_string()).unwrap_or_default();
+        let bytes = body.map_or_default(|value| value.to_string());
         let now = chrono_now();
         let mut request = match method {
             "POST" => self.http.post(format!("{}{path_and_query}", self.base_url)),
@@ -344,7 +344,7 @@ impl CloudClient {
 
     /// Lists charges (keyset cursor).
     pub async fn list_charges(&self, cursor: Option<&str>) -> Result<Page<Charge>> {
-        let suffix = cursor.map(|c| format!("?cursor={c}")).unwrap_or_default();
+        let suffix = cursor.map_or_default(|c| format!("?cursor={c}"));
         let value =
             self.sign_and_send("GET", &format!("/v1/merchant/charges{suffix}"), None, None).await?;
         serde_json::from_value(value).map_err(|e| SdkError::Protocol(e.to_string()))

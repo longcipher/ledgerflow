@@ -377,12 +377,16 @@ fn settlement_registry_is_idempotent() {
         settled_amount: 100,
         asset: "USDC".to_string(),
     };
-    registry.record(
+    let _ = registry.record(
         "sha256:warrant",
         receipt.clone(),
         ledgerflow_facilitator::SettlementStatus::Settled,
     );
-    registry.record("sha256:warrant", receipt, ledgerflow_facilitator::SettlementStatus::Settled);
+    let _ = registry.record(
+        "sha256:warrant",
+        receipt,
+        ledgerflow_facilitator::SettlementStatus::Settled,
+    );
 
     let query = registry.query("tx-1").expect("found");
     assert_eq!(query.receipt.settled_amount, 100);

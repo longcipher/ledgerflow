@@ -83,8 +83,7 @@ impl SaasAuthExtractor {
                 let roles = headers
                     .get(HEADER_ROLES)
                     .and_then(|v| v.to_str().ok())
-                    .map(|v| v.split(',').map(str::to_string).collect())
-                    .unwrap_or_default();
+                    .map_or_else(Vec::new, |v| v.split(',').map(str::to_string).collect());
                 let principal =
                     headers.get(HEADER_PRINCIPAL).and_then(|v| v.to_str().ok()).map(str::to_string);
                 Ok(SaaSContext { tenant_id: tenant_id.to_string(), user_id, roles, principal })
@@ -93,18 +92,11 @@ impl SaasAuthExtractor {
     }
 }
 
-/// Constant-time string equality (length-independent).
+/// Constant-time string equality using `subtle` crate (length-independent,
+/// resistant to timing side-channel attacks).
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    let max = a.len().max(b.len());
-    let mut diff = (a.len() ^ b.len()) as u8;
-    // Ensure any length mismatch is captured even when low byte is zero (e.g., 256).
-    diff |= u8::from(a.len() != b.len());
-    for i in 0..max {
-        let av = if i < a.len() { a[i] } else { 0 };
-        let bv = if i < b.len() { b[i] } else { 0 };
-        diff |= av ^ bv;
-    }
-    diff == 0
+    use subtle::ConstantTimeEq;
+    a.ct_eq(b).into()
 }
 
 /// Middleware function for axum that extracts the SaaS context and stores it

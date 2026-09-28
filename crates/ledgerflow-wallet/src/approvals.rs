@@ -21,7 +21,7 @@ pub const DEFAULT_APPROVAL_TTL_SECS: u64 = 300;
 /// The wallet signs the domain-separated approval preimage; the resulting
 /// [`SignedApproval`] can then be verified with
 /// [`SignedApproval::verify_signature`].
-pub fn request_approval(
+pub async fn request_approval(
     signer: &dyn WalletSigner,
     approver: SignerRef,
     request_hash: &str,
@@ -29,11 +29,13 @@ pub fn request_approval(
 ) -> Result<SignedApproval, WalletError> {
     let expires_at = now_ms / 1000 + DEFAULT_APPROVAL_TTL_SECS;
     let preimage = approval_preimage(request_hash, &approver, expires_at);
-    let result = signer.sign(&SignRequest {
-        domain: SignDomain::Approval,
-        message: preimage,
-        key: Some(approver.clone()),
-    })?;
+    let result = signer
+        .sign(&SignRequest {
+            domain: SignDomain::Approval,
+            message: preimage,
+            key: Some(approver.clone()),
+        })
+        .await?;
     Ok(SignedApproval {
         request_hash: request_hash.to_string(),
         approver,
@@ -61,24 +63,26 @@ mod tests {
     use super::*;
     use crate::embedded::EmbeddedSigner;
 
-    #[test]
-    fn request_approval_computes_expiry_from_now() {
+    #[tokio::test]
+    async fn request_approval_computes_expiry_from_now() {
         let key = SigningKeyPair::from_bytes(&[0x99; 32]);
         let wallet = EmbeddedSigner::new(key.clone());
-        let approval =
-            request_approval(&wallet, key.signer_ref(), "sha256:req", 10_000).expect("approval");
+        let approval = request_approval(&wallet, key.signer_ref(), "sha256:req", 10_000)
+            .await
+            .expect("approval");
         // now_ms/1000 + TTL = 10 + 300 = 310.
         assert_eq!(approval.expires_at, 10 + DEFAULT_APPROVAL_TTL_SECS);
         assert_eq!(approval.request_hash, "sha256:req");
         assert!(approval.verify_signature());
     }
 
-    #[test]
-    fn request_approval_verifies_with_core() {
+    #[tokio::test]
+    async fn request_approval_verifies_with_core() {
         let key = SigningKeyPair::from_bytes(&[0x98; 32]);
         let wallet = EmbeddedSigner::new(key.clone());
-        let approval =
-            request_approval(&wallet, key.signer_ref(), "sha256:req", 5_000).expect("approval");
+        let approval = request_approval(&wallet, key.signer_ref(), "sha256:req", 5_000)
+            .await
+            .expect("approval");
         assert!(
             ledgerflow_core::SignedApproval {
                 request_hash: approval.request_hash.clone(),
@@ -90,12 +94,13 @@ mod tests {
         );
     }
 
-    #[test]
-    fn request_approval_rejects_wrong_key() {
+    #[tokio::test]
+    async fn request_approval_rejects_wrong_key() {
         let key = SigningKeyPair::from_bytes(&[0x97; 32]);
         let other = SigningKeyPair::from_bytes(&[0x96; 32]);
         let wallet = EmbeddedSigner::new(key);
         let error = request_approval(&wallet, other.signer_ref(), "sha256:req", 5_000)
+            .await
             .expect_err("key mismatch");
         assert!(matches!(error, crate::error::WalletError::NoMatchingKey));
     }

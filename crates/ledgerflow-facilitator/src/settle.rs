@@ -6,7 +6,7 @@
 
 use ledgerflow_core::{
     AuthorizationContext, AuthorizationError, PopProof, RevocationCheck, VerifiedAuthorization,
-    WarrantChain, verify_freshness,
+    WarrantChain, WarrantExt, verify_freshness,
 };
 
 use crate::{
@@ -123,6 +123,17 @@ where
                 limit: leaf.payment.max_per_charge,
             });
         }
+        // Re-verify PoP signature.
+        if !request.proof.verify_signature(&leaf.holder) {
+            return Err(AuthorizationError::InvalidProofSignature);
+        }
+        // Re-verify chain signatures and constraints.
+        for warrant in &request.chain.warrants {
+            if !warrant.verify_signature() {
+                return Err(AuthorizationError::InvalidWarrantSignature);
+            }
+            warrant.verify_constraints(request.context)?;
+        }
         Ok(())
     }
 
@@ -224,20 +235,25 @@ mod tests {
     fn warrant(with_agent_ref: bool) -> Warrant {
         let issuer = SigningKeyPair::from_bytes(&[0x91; 32]);
         let holder = SigningKeyPair::from_bytes(&[0x92; 32]);
-        let mut warrant = ledgerflow_core::WarrantBuilder::new(1_000)
+        let builder = ledgerflow_core::WarrantBuilder::new(1_000)
             .issuer(issuer.signer_ref())
             .holder(holder.signer_ref())
             .merchant(MerchantConstraint::with_ids(vec!["merchant-a".to_string()]))
             .resource(ResourceConstraint::default())
-            .payment(PaymentConstraint::new(1_000))
-            .sign_with(&issuer, [0_u8; 8]);
+            .payment(PaymentConstraint::new(1_000));
+        // Extensions are part of the signed payload, so they must be set
+        // before signing. Mutating `warrant.extensions` after `sign_with`
+        // would invalidate the signature and fail `verify_signature`.
         if with_agent_ref {
-            warrant.extensions.insert(
-                ledgerflow_core::agent_identity::AGENT_ID_EXTENSION_KEY.to_string(),
-                b"eip155:1:0x8004a169fb4a3325136eb29fa0ceb6d2e539a432/22".to_vec(),
-            );
+            builder
+                .extension(
+                    ledgerflow_core::agent_identity::AGENT_ID_EXTENSION_KEY.to_string(),
+                    b"eip155:1:0x8004a169fb4a3325136eb29fa0ceb6d2e539a432/22".to_vec(),
+                )
+                .sign_with(&issuer, [0_u8; 8])
+        } else {
+            builder.sign_with(&issuer, [0_u8; 8])
         }
-        warrant
     }
 
     fn authorization(with_agent_ref: bool) -> VerifiedAuthorization {
@@ -285,8 +301,8 @@ mod tests {
 
         let authorization = authorization(true);
         let leaf = authorization.leaf_warrant.clone();
-        let chain = WarrantChain::single(leaf);
-        let proof = sample_proof();
+        let chain = WarrantChain::single(leaf.clone());
+        let proof = sample_proof(&leaf);
         let context = sample_context();
         let outcome = service.settle(&request(&authorization, &chain, &proof, &context));
         assert_eq!(outcome.status, crate::outcome::SettlementStatus::Settled);
@@ -305,21 +321,21 @@ mod tests {
 
         let authorization = authorization(true);
         let leaf = authorization.leaf_warrant.clone();
-        let chain = WarrantChain::single(leaf);
-        let proof = sample_proof();
+        let chain = WarrantChain::single(leaf.clone());
+        let proof = sample_proof(&leaf);
         let context = sample_context();
         let outcome = service.settle(&request(&authorization, &chain, &proof, &context));
         assert_eq!(outcome.status, crate::outcome::SettlementStatus::Failed);
         assert!(sink.0.lock().expect("lock").is_empty());
     }
 
-    // Minimal PoP/context fixtures; settle re-verification only checks
-    // freshness bounds and the amount cap.
-    fn sample_proof() -> PopProof {
+    // Minimal PoP/context fixtures; settle re-verification checks
+    // freshness bounds, amount cap, PoP signature, and constraints.
+    fn sample_proof(leaf: &Warrant) -> PopProof {
         use ledgerflow_core::{PopTuple, ProofBuilder};
         let holder = SigningKeyPair::from_bytes(&[0x92; 32]);
         let tuple = PopTuple {
-            warrant_id: vec![0_u8; 16],
+            warrant_id: leaf.id.to_vec(),
             challenge_id: "challenge-1".to_string(),
             method: "POST".to_string(),
             uri: "merchant-a.example/pay".to_string(),
