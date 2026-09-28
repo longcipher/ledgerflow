@@ -13,6 +13,7 @@
 #![allow(missing_debug_implementations)]
 
 pub mod api;
+pub mod audit_chain;
 pub mod config;
 pub mod saas;
 pub mod state;

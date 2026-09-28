@@ -21,7 +21,7 @@ fn wallet() -> Arc<dyn WalletSigner> {
 #[tokio::test]
 async fn http_transport_signs_through_loopback_server() {
     let wallet = wallet();
-    let server = LoopbackJsonRpcServer::start(Arc::clone(&wallet)).expect("start server");
+    let server = LoopbackJsonRpcServer::start(Arc::clone(&wallet)).await.expect("start server");
     let signer = LocalRpcSigner::new_http(LocalRpcConfig { url: server.url(), timeout_ms: 5_000 });
 
     let request = SignRequest {
@@ -31,25 +31,25 @@ async fn http_transport_signs_through_loopback_server() {
     };
     let result = signer.sign(&request).await.expect("sign");
     assert_eq!(result.signature.value.len(), 64);
-    let expected_pk = wallet.keys().expect("keys")[0].public_key.clone();
+    let expected_pk = wallet.keys().await.expect("keys")[0].public_key.clone();
     assert_eq!(result.signer.public_key, expected_pk);
 }
 
 #[tokio::test]
 async fn http_transport_lists_keys_through_loopback_server() {
     let wallet = wallet();
-    let server = LoopbackJsonRpcServer::start(Arc::clone(&wallet)).expect("start server");
+    let server = LoopbackJsonRpcServer::start(Arc::clone(&wallet)).await.expect("start server");
     let signer = LocalRpcSigner::new_http(LocalRpcConfig { url: server.url(), timeout_ms: 5_000 });
 
     let keys = signer.keys().await.expect("keys");
     assert_eq!(keys.len(), 1);
-    assert_eq!(keys[0].public_key, wallet.keys().expect("keys")[0].public_key);
+    assert_eq!(keys[0].public_key, wallet.keys().await.expect("keys")[0].public_key);
 }
 
 #[tokio::test]
 async fn http_transport_signs_payment_through_loopback_server() {
     let wallet = wallet();
-    let server = LoopbackJsonRpcServer::start(Arc::clone(&wallet)).expect("start server");
+    let server = LoopbackJsonRpcServer::start(Arc::clone(&wallet)).await.expect("start server");
     let signer = LocalRpcSigner::new_http(LocalRpcConfig { url: server.url(), timeout_ms: 5_000 });
 
     let request = SignPaymentRequest {

@@ -381,7 +381,7 @@ mod tests {
 pub struct LoopbackJsonRpcServer {
     /// Bound loopback address (e.g. `127.0.0.1:PORT`).
     pub addr: std::net::SocketAddr,
-    handle: Option<std::thread::JoinHandle<()>>,
+    handle: Option<tokio::task::JoinHandle<()>>,
     shutdown: Arc<std::sync::atomic::AtomicBool>,
 }
 
@@ -426,7 +426,7 @@ impl LoopbackJsonRpcServer {
                             Err(_) => break,
                         }
                     }
-                    _ = tokio::time::sleep(std::time::Duration::from_millis(50)) => {
+                    () = tokio::time::sleep(std::time::Duration::from_millis(50)) => {
                         if shutdown_flag.load(std::sync::atomic::Ordering::Relaxed) {
                             break;
                         }
@@ -508,8 +508,9 @@ async fn handle_connection(mut stream: tokio::net::TcpStream, server: Arc<Embedd
 
     let body = &buf[body_start..(body_start + content_length).min(buf.len())];
 
-    let response = serde_json::from_slice::<JsonRpcRequest>(body).map_or_else(
-        |error| JsonRpcResponse {
+    let response = match serde_json::from_slice::<JsonRpcRequest>(body) {
+        Ok(request) => server.process_request(&request).await,
+        Err(error) => JsonRpcResponse {
             jsonrpc: "2.0".to_string(),
             id: 0,
             result: None,
@@ -518,8 +519,7 @@ async fn handle_connection(mut stream: tokio::net::TcpStream, server: Arc<Embedd
                 message: format!("invalid JSON-RPC request: {error}"),
             }),
         },
-        |request| server.process_request(&request),
-    );
+    };
 
     let body_json = serde_json::to_string(&response).unwrap_or_else(|_| "{}".to_string());
     let headers = format!(

@@ -12,11 +12,13 @@
 #![allow(missing_docs)]
 #![allow(missing_debug_implementations)]
 
+pub mod budget;
 pub mod outcome;
 pub mod rails;
 pub mod reputation;
 pub mod revocation_store;
 pub mod routing;
+pub mod session;
 pub mod settle;
 pub mod srl_sync;
 pub mod status;
@@ -29,6 +31,7 @@ pub use crate::{
         RailAdapter, RailError, RailQuote, SettlementReceipt, SharedRailAdapter,
         VerificationResult, custodial::CustodialRailAdapter, evm::EvmRailAdapter,
         exchange::ExchangeRailAdapter, gateway::GatewayRailAdapter, solana::SolanaRailAdapter,
+        stripe::StripeRailAdapter, tempo::TempoRailAdapter,
     },
     reputation::{
         FeedbackSink, LoggingSink, ProofOfPayment, ReputationReporter, SettlementFeedback,

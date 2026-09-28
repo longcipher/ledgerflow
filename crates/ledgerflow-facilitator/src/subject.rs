@@ -27,7 +27,7 @@ pub trait PaymentSubjectResolver {
     ) -> Result<ResolvedSubject, SubjectResolutionError>;
 }
 
-/// Default subject resolver for the onchain, exchange, custodial, and gateway rails.
+/// Default subject resolver for the onchain, exchange, custodial, gateway, tempo, and stripe rails.
 #[derive(Clone, Debug, Default)]
 pub struct DefaultSubjectResolver;
 
@@ -44,10 +44,16 @@ impl PaymentSubjectResolver for DefaultSubjectResolver {
             PaymentSubjectKind::Caip10 if subject.value.starts_with("caip10:eip155:") => {
                 RailKind::Evm
             }
+            PaymentSubjectKind::Caip10 if subject.value.starts_with("caip10:tempo:") => {
+                RailKind::Tempo
+            }
             PaymentSubjectKind::ExchangeAccount => RailKind::Exchange,
             PaymentSubjectKind::FacilitatorAccount => RailKind::Exchange,
             PaymentSubjectKind::Opaque if subject.value.starts_with("gateway:") => {
                 RailKind::Gateway
+            }
+            PaymentSubjectKind::Opaque if subject.value.starts_with("stripe:") => {
+                RailKind::Stripe
             }
             PaymentSubjectKind::Opaque => RailKind::Custodial,
             _ => {

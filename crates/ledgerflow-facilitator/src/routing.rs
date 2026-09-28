@@ -7,6 +7,7 @@ use crate::{
     rails::{
         RailAdapter, RailError, RailQuote, custodial::CustodialRailAdapter, evm::EvmRailAdapter,
         exchange::ExchangeRailAdapter, gateway::GatewayRailAdapter, solana::SolanaRailAdapter,
+        stripe::StripeRailAdapter, tempo::TempoRailAdapter,
     },
     subject::{
         DefaultSubjectResolver, PaymentSubjectResolver, ResolvedSubject, SubjectResolutionError,
@@ -21,6 +22,8 @@ pub enum RailKind {
     Exchange,
     Custodial,
     Gateway,
+    Tempo,
+    Stripe,
 }
 
 /// Final routing decision returned by the Facilitator.
@@ -59,6 +62,8 @@ impl Default for Facilitator<DefaultSubjectResolver> {
                 Box::new(ExchangeRailAdapter),
                 Box::new(CustodialRailAdapter),
                 Box::new(GatewayRailAdapter),
+                Box::new(TempoRailAdapter),
+                Box::new(StripeRailAdapter),
             ],
         )
     }

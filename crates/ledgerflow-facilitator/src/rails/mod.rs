@@ -12,6 +12,8 @@ pub mod evm;
 pub mod exchange;
 pub mod gateway;
 pub mod solana;
+pub mod stripe;
+pub mod tempo;
 
 use std::sync::Arc;
 
@@ -105,7 +107,8 @@ mod tests {
     use crate::{
         rails::{
             custodial::CustodialRailAdapter, evm::EvmRailAdapter, exchange::ExchangeRailAdapter,
-            gateway::GatewayRailAdapter, solana::SolanaRailAdapter,
+            gateway::GatewayRailAdapter, solana::SolanaRailAdapter, stripe::StripeRailAdapter,
+            tempo::TempoRailAdapter,
         },
         routing::RailKind,
     };

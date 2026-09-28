@@ -114,6 +114,21 @@ pub enum AuthorizationError {
     InvalidHex(String),
     #[error("wire format error: {0}")]
     Wire(#[from] WireError),
+    #[error("sponsorship error: {0}")]
+    Sponsorship(#[from] SponsorshipError),
+}
+
+/// Errors returned while processing sponsorship commitments.
+#[derive(Clone, Debug, Eq, Error, PartialEq)]
+pub enum SponsorshipError {
+    #[error("sponsorship commitment has expired")]
+    Expired,
+    #[error("sponsorship signature is invalid")]
+    InvalidSignature,
+    #[error("sponsorship policy does not allow this payment")]
+    NotAllowed,
+    #[error("sponsorship paymaster is not authorized")]
+    PaymasterNotAllowed,
 }
 
 /// Errors returned while encoding or decoding LedgerFlow wire payloads.
