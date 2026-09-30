@@ -40,11 +40,7 @@ impl BudgetLimit {
     /// Creates a budget limit with no restrictions.
     #[must_use]
     pub const fn unrestricted() -> Self {
-        Self {
-            periodic_limit: None,
-            period: None,
-            cumulative_limit: None,
-        }
+        Self { periodic_limit: None, period: None, cumulative_limit: None }
     }
 
     /// Creates a daily budget limit.
@@ -60,11 +56,7 @@ impl BudgetLimit {
     /// Creates a cumulative budget limit.
     #[must_use]
     pub const fn cumulative(limit: u128) -> Self {
-        Self {
-            periodic_limit: None,
-            period: None,
-            cumulative_limit: Some(limit),
-        }
+        Self { periodic_limit: None, period: None, cumulative_limit: Some(limit) }
     }
 }
 
@@ -107,19 +99,13 @@ impl BudgetTracker {
     /// Creates a new budget tracker with no restrictions.
     #[must_use]
     pub const fn new() -> Self {
-        Self {
-            states: BTreeMap::new(),
-            default_limit: BudgetLimit::unrestricted(),
-        }
+        Self { states: BTreeMap::new(), default_limit: BudgetLimit::unrestricted() }
     }
 
     /// Creates a new budget tracker with a default limit.
     #[must_use]
     pub const fn with_default_limit(default_limit: BudgetLimit) -> Self {
-        Self {
-            states: BTreeMap::new(),
-            default_limit,
-        }
+        Self { states: BTreeMap::new(), default_limit }
     }
 
     /// Records a payment and checks against budget limits.
@@ -131,7 +117,8 @@ impl BudgetTracker {
         now_secs: u64,
     ) -> Result<(), BudgetError> {
         // Use the provided limit, or fall back to the default limit
-        let effective_limit = if limit.periodic_limit.is_none() && limit.cumulative_limit.is_none() {
+        let effective_limit = if limit.periodic_limit.is_none() && limit.cumulative_limit.is_none()
+        {
             &self.default_limit
         } else {
             limit
@@ -139,10 +126,7 @@ impl BudgetTracker {
 
         let period = current_period(now_secs, effective_limit.period);
 
-        let state = self
-            .states
-            .entry(warrant_digest.to_string())
-            .or_default();
+        let state = self.states.entry(warrant_digest.to_string()).or_default();
 
         // Reset period spending if we've moved to a new period
         if state.current_period != period {
@@ -182,14 +166,17 @@ impl BudgetTracker {
     /// Returns the total amount spent for a warrant.
     #[must_use]
     pub fn total_spent(&self, warrant_digest: &str) -> u128 {
-        self.states
-            .get(warrant_digest)
-            .map_or(0, |s| s.total_spent)
+        self.states.get(warrant_digest).map_or(0, |s| s.total_spent)
     }
 
     /// Returns the amount spent in the current period for a warrant.
     #[must_use]
-    pub fn period_spent(&self, warrant_digest: &str, now_secs: u64, period: Option<BudgetPeriod>) -> u128 {
+    pub fn period_spent(
+        &self,
+        warrant_digest: &str,
+        now_secs: u64,
+        period: Option<BudgetPeriod>,
+    ) -> u128 {
         let current_period = current_period(now_secs, period);
         self.states
             .get(warrant_digest)
@@ -204,9 +191,8 @@ impl BudgetTracker {
     #[must_use]
     pub fn remaining_budget(&self, warrant_digest: &str, limit: &BudgetLimit) -> u128 {
         let total_spent = self.total_spent(warrant_digest);
-        let cumulative_remaining = limit
-            .cumulative_limit
-            .map_or(u128::MAX, |l| l.saturating_sub(total_spent));
+        let cumulative_remaining =
+            limit.cumulative_limit.map_or(u128::MAX, |l| l.saturating_sub(total_spent));
 
         let periodic_remaining = limit.periodic_limit.map_or(u128::MAX, |l| {
             let period_spent = self.period_spent(warrant_digest, 0, limit.period);
@@ -239,12 +225,8 @@ mod tests {
         let mut tracker = BudgetTracker::new();
         let limit = BudgetLimit::unrestricted();
 
-        tracker
-            .record_payment("warrant-1", 1_000_000, &limit, 1_000_000)
-            .expect("payment 1");
-        tracker
-            .record_payment("warrant-1", 2_000_000, &limit, 1_000_001)
-            .expect("payment 2");
+        tracker.record_payment("warrant-1", 1_000_000, &limit, 1_000_000).expect("payment 1");
+        tracker.record_payment("warrant-1", 2_000_000, &limit, 1_000_001).expect("payment 2");
 
         assert_eq!(tracker.total_spent("warrant-1"), 3_000_000);
     }
@@ -255,9 +237,7 @@ mod tests {
         let limit = BudgetLimit::daily(1_000_000);
 
         // First payment within limit
-        tracker
-            .record_payment("warrant-1", 600_000, &limit, 1_000_000)
-            .expect("payment 1");
+        tracker.record_payment("warrant-1", 600_000, &limit, 1_000_000).expect("payment 1");
 
         // Second payment exceeds daily limit
         let result = tracker.record_payment("warrant-1", 500_000, &limit, 1_000_001);
@@ -274,9 +254,7 @@ mod tests {
         let mut tracker = BudgetTracker::new();
         let limit = BudgetLimit::cumulative(1_000_000);
 
-        tracker
-            .record_payment("warrant-1", 600_000, &limit, 1_000_000)
-            .expect("payment 1");
+        tracker.record_payment("warrant-1", 600_000, &limit, 1_000_000).expect("payment 1");
 
         let result = tracker.record_payment("warrant-1", 500_000, &limit, 1_000_001);
         assert!(matches!(result, Err(BudgetError::CumulativeExceeded { .. })));
@@ -289,9 +267,7 @@ mod tests {
 
         assert_eq!(tracker.remaining_budget("warrant-1", &limit), 1_000_000);
 
-        tracker
-            .record_payment("warrant-1", 300_000, &limit, 1_000_000)
-            .expect("payment");
+        tracker.record_payment("warrant-1", 300_000, &limit, 1_000_000).expect("payment");
 
         assert_eq!(tracker.remaining_budget("warrant-1", &limit), 700_000);
     }
@@ -301,12 +277,8 @@ mod tests {
         let mut tracker = BudgetTracker::new();
         let limit = BudgetLimit::daily(1_000_000);
 
-        tracker
-            .record_payment("warrant-1", 600_000, &limit, 1_000_000)
-            .expect("payment 1");
-        tracker
-            .record_payment("warrant-2", 600_000, &limit, 1_000_000)
-            .expect("payment 2");
+        tracker.record_payment("warrant-1", 600_000, &limit, 1_000_000).expect("payment 1");
+        tracker.record_payment("warrant-2", 600_000, &limit, 1_000_000).expect("payment 2");
 
         assert_eq!(tracker.total_spent("warrant-1"), 600_000);
         assert_eq!(tracker.total_spent("warrant-2"), 600_000);

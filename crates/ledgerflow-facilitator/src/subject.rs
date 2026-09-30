@@ -52,9 +52,7 @@ impl PaymentSubjectResolver for DefaultSubjectResolver {
             PaymentSubjectKind::Opaque if subject.value.starts_with("gateway:") => {
                 RailKind::Gateway
             }
-            PaymentSubjectKind::Opaque if subject.value.starts_with("stripe:") => {
-                RailKind::Stripe
-            }
+            PaymentSubjectKind::Opaque if subject.value.starts_with("stripe:") => RailKind::Stripe,
             PaymentSubjectKind::Opaque => RailKind::Custodial,
             _ => {
                 return Err(SubjectResolutionError::UnsupportedSubject {

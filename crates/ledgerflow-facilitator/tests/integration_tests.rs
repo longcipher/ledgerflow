@@ -10,8 +10,7 @@
 
 #![allow(clippy::expect_used)]
 
-use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use ledgerflow_core::{
     AssetRef, AuthorizationContext, InMemoryRevocationCheck, MerchantConstraint, PaymentConstraint,
@@ -20,10 +19,10 @@ use ledgerflow_core::{
     WarrantBuilder, WarrantChain, sha256_prefixed,
 };
 use ledgerflow_facilitator::{
-    budget::{BudgetLimit, BudgetTracker},
-    session::{SessionConfig, SessionEvent, SessionId, SessionManager, SessionState},
     DefaultSubjectResolver, EvmRailAdapter, FileRevocationStore, RailKind, SettlementService,
     VerificationService,
+    budget::{BudgetLimit, BudgetTracker},
+    session::{SessionConfig, SessionEvent, SessionId, SessionManager, SessionState},
 };
 
 // ---------------------------------------------------------------------------
@@ -44,10 +43,7 @@ fn approver_keys() -> SigningKeyPair {
 
 fn trusted() -> TrustedIssuers {
     let mut set = TrustedIssuers::new();
-    set.add(TrustedIssuer::new(
-        "issuer-1".to_string(),
-        issuer_keys().signer_ref(),
-    ));
+    set.add(TrustedIssuer::new("issuer-1".to_string(), issuer_keys().signer_ref()));
     set
 }
 
@@ -102,10 +98,7 @@ fn context(now_ms: u64) -> AuthorizationContext {
     }
 }
 
-fn proof_for(
-    warrant: &ledgerflow_core::Warrant,
-    context: &AuthorizationContext,
-) -> PopProof {
+fn proof_for(warrant: &ledgerflow_core::Warrant, context: &AuthorizationContext) -> PopProof {
     ProofBuilder::new()
         .warrant_id(warrant.id.clone())
         .challenge_id(context.challenge_id.clone())
@@ -199,9 +192,7 @@ fn budget_enforcement_blocks_overspending() {
     let limit = BudgetLimit::daily(500_000);
 
     // First payment within budget
-    tracker
-        .record_payment("warrant-1", 300_000, &limit, 1_000_000)
-        .expect("payment 1");
+    tracker.record_payment("warrant-1", 300_000, &limit, 1_000_000).expect("payment 1");
 
     // Second payment exceeds daily budget
     let result = tracker.record_payment("warrant-1", 300_000, &limit, 1_000_001);
@@ -219,10 +210,8 @@ fn session_lifecycle_works() {
 
     let session_id = SessionId::new("test-session");
     let now = 1_000_000;
-    let holder = ledgerflow_core::SignerRef::new(
-        ledgerflow_core::SigningAlgorithm::Ed25519,
-        vec![0x42; 32],
-    );
+    let holder =
+        ledgerflow_core::SignerRef::new(ledgerflow_core::SigningAlgorithm::Ed25519, vec![0x42; 32]);
     let payment_subject = ledgerflow_core::PaymentSubjectRef::new(
         ledgerflow_core::PaymentSubjectKind::Caip10,
         "caip10:eip155:8453:0xabc123",
@@ -230,14 +219,7 @@ fn session_lifecycle_works() {
 
     // Open session
     manager
-        .open_session(
-            session_id.clone(),
-            "USDC",
-            "warrant-digest-1",
-            holder,
-            payment_subject,
-            now,
-        )
+        .open_session(session_id.clone(), "USDC", "warrant-digest-1", holder, payment_subject, now)
         .expect("open session");
     assert!(manager.is_active(&session_id));
 
@@ -245,10 +227,7 @@ fn session_lifecycle_works() {
     manager
         .process_event(
             &session_id,
-            SessionEvent::PaymentReceived {
-                amount: 100_000,
-                asset: "USDC".to_string(),
-            },
+            SessionEvent::PaymentReceived { amount: 100_000, asset: "USDC".to_string() },
             now + 1_000,
         )
         .expect("payment");
@@ -278,10 +257,7 @@ fn file_revocation_store_persists_across_restart() {
     // Reload and verify
     {
         let store = FileRevocationStore::open(&path).expect("reopen");
-        assert_eq!(
-            store.check_warrant(&warrant.id),
-            RevocationDecision::RevokedWarrant
-        );
+        assert_eq!(store.check_warrant(&warrant.id), RevocationDecision::RevokedWarrant);
     }
 
     // Cleanup
@@ -300,37 +276,25 @@ fn mpp_session_revocation_takes_effect_at_next_tick() {
 
     let session_id = SessionId::new("mpp-session");
     let now = 1_000_000;
-    let holder = ledgerflow_core::SignerRef::new(
-        ledgerflow_core::SigningAlgorithm::Ed25519,
-        vec![0x42; 32],
-    );
+    let holder =
+        ledgerflow_core::SignerRef::new(ledgerflow_core::SigningAlgorithm::Ed25519, vec![0x42; 32]);
     let payment_subject = ledgerflow_core::PaymentSubjectRef::new(
         ledgerflow_core::PaymentSubjectKind::Caip10,
         "caip10:eip155:8453:0xabc123",
     );
 
     manager
-        .open_session(
-            session_id.clone(),
-            "USDC",
-            "warrant-digest-1",
-            holder,
-            payment_subject,
-            now,
-        )
+        .open_session(session_id.clone(), "USDC", "warrant-digest-1", holder, payment_subject, now)
         .expect("open session");
 
     // Simulate revocation
-    let state = manager
-        .process_event(&session_id, SessionEvent::Revoked, now + 1_000)
-        .expect("revoke");
+    let state =
+        manager.process_event(&session_id, SessionEvent::Revoked, now + 1_000).expect("revoke");
 
     // Session should be closing (not yet closed)
     assert_eq!(state, SessionState::Closing);
 
     // Next tick closes the session
-    let state = manager
-        .process_event(&session_id, SessionEvent::Tick, now + 2_000)
-        .expect("tick");
+    let state = manager.process_event(&session_id, SessionEvent::Tick, now + 2_000).expect("tick");
     assert_eq!(state, SessionState::Closed);
 }

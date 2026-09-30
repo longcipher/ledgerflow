@@ -9,8 +9,10 @@
 //! - The hash chain: `entry_hash = SHA256(prev_hash || entry_data)`
 //! - Verification: recompute the chain and compare hashes
 
-use std::collections::VecDeque;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    collections::VecDeque,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -73,19 +75,14 @@ impl AuditChain {
     /// Creates a new empty audit chain.
     #[must_use]
     pub const fn new() -> Self {
-        Self {
-            entries: VecDeque::new(),
-            next_sequence: 1,
-            last_hash: String::new(),
-        }
+        Self { entries: VecDeque::new(), next_sequence: 1, last_hash: String::new() }
     }
 
     /// Appends a new entry to the chain.
     pub fn append(&mut self, event_data: impl Into<String>) -> AuditEntry {
         let event_data = event_data.into();
-        let timestamp_ms = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_or(0, |d| d.as_millis() as u64);
+        let timestamp_ms =
+            SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
 
         let entry = AuditEntry {
             sequence: self.next_sequence,

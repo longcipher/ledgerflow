@@ -62,14 +62,7 @@ impl SponsorshipCommitment {
         let payee = payee.into();
         let preimage = sponsorship_preimage(paymaster, amount, &asset, &payee, expires_at);
         let signature = paymaster_keys.sign(&preimage);
-        Self {
-            paymaster: paymaster.clone(),
-            amount,
-            asset,
-            payee,
-            expires_at,
-            signature,
-        }
+        Self { paymaster: paymaster.clone(), amount, asset, payee, expires_at, signature }
     }
 
     /// Verifies the sponsorship signature.
@@ -196,9 +189,7 @@ mod tests {
             &keys,
         );
 
-        let policy = SponsorshipPolicy::Allowed {
-            paymaster: paymaster.clone(),
-        };
+        let policy = SponsorshipPolicy::Allowed { paymaster: paymaster.clone() };
         let result = verify_sponsorship(&commitment, &policy, 1_800_000_000);
         assert!(result.is_ok());
     }
@@ -218,9 +209,7 @@ mod tests {
         // Use a different key for the policy
         let other_keys = SigningKeyPair::from_bytes(&[0xBB; 32]);
         let other_paymaster = other_keys.signer_ref();
-        let policy = SponsorshipPolicy::Allowed {
-            paymaster: other_paymaster,
-        };
+        let policy = SponsorshipPolicy::Allowed { paymaster: other_paymaster };
         let result = verify_sponsorship(&commitment, &policy, 1_800_000_000);
         assert!(result.is_err());
     }

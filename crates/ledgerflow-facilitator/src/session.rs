@@ -16,9 +16,7 @@ use std::collections::BTreeMap;
 use ledgerflow_core::{RevocationCheck, RevocationDecision};
 use thiserror::Error;
 
-use crate::outcome::SettlementOutcome;
-use crate::rails::RailAdapter;
-use crate::subject::PaymentSubjectResolver;
+use crate::{outcome::SettlementOutcome, rails::RailAdapter, subject::PaymentSubjectResolver};
 
 /// Default session tick duration (1 second).
 pub const DEFAULT_TICK_DURATION_MS: u64 = 1_000;
@@ -180,13 +178,7 @@ where
     /// Creates a new session manager.
     #[must_use]
     pub const fn new(revocation: R, resolver: P, adapters: Vec<A>, config: SessionConfig) -> Self {
-        Self {
-            sessions: BTreeMap::new(),
-            revocation,
-            resolver,
-            adapters,
-            config,
-        }
+        Self { sessions: BTreeMap::new(), revocation, resolver, adapters, config }
     }
 
     /// Opens a new streaming session.
@@ -200,18 +192,13 @@ where
         now_ms: u64,
     ) -> Result<&Session, SessionError> {
         if self.sessions.contains_key(&id) {
-            return Err(SessionError::InvalidConfig(format!(
-                "session {id} already exists"
-            )));
+            return Err(SessionError::InvalidConfig(format!("session {id} already exists")));
         }
 
         let session = Session {
             id: id.clone(),
             state: SessionState::Active,
-            current_tick: SessionTick {
-                sequence: 0,
-                timestamp_ms: now_ms,
-            },
+            current_tick: SessionTick { sequence: 0, timestamp_ms: now_ms },
             total_settled: 0,
             asset: asset.into(),
             config: self.config.clone(),
@@ -224,9 +211,9 @@ where
         };
 
         self.sessions.insert(id.clone(), session);
-        self.sessions.get(&id).ok_or_else(|| {
-            SessionError::InvalidConfig("session was just inserted".to_string())
-        })
+        self.sessions
+            .get(&id)
+            .ok_or_else(|| SessionError::InvalidConfig("session was just inserted".to_string()))
     }
 
     /// Processes a session event.
@@ -302,9 +289,7 @@ where
     /// Checks if a session is active.
     #[must_use]
     pub fn is_active(&self, session_id: &SessionId) -> bool {
-        self.sessions
-            .get(session_id)
-            .is_some_and(|s| s.state == SessionState::Active)
+        self.sessions.get(session_id).is_some_and(|s| s.state == SessionState::Active)
     }
 
     /// Returns the current state of a session.
@@ -316,19 +301,13 @@ where
     /// Returns all active sessions.
     #[must_use]
     pub fn active_sessions(&self) -> Vec<&Session> {
-        self.sessions
-            .values()
-            .filter(|s| s.state == SessionState::Active)
-            .collect()
+        self.sessions.values().filter(|s| s.state == SessionState::Active).collect()
     }
 
     /// Checks if a warrant is revoked.
     #[must_use]
     pub fn is_revoked(&self, warrant_id: &[u8]) -> bool {
-        !matches!(
-            self.revocation.check_warrant(warrant_id),
-            RevocationDecision::Ok
-        )
+        !matches!(self.revocation.check_warrant(warrant_id), RevocationDecision::Ok)
     }
 
     /// Closes a session and returns the final settlement.
@@ -454,27 +433,20 @@ where
     /// Returns the number of active sessions.
     #[must_use]
     pub fn active_count(&self) -> usize {
-        self.sessions
-            .values()
-            .filter(|s| s.state == SessionState::Active)
-            .count()
+        self.sessions.values().filter(|s| s.state == SessionState::Active).count()
     }
 }
 
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
-    use super::*;
     use ledgerflow_core::InMemoryRevocationCheck;
-    use crate::subject::DefaultSubjectResolver;
-    use crate::rails::evm::EvmRailAdapter;
+
+    use super::*;
+    use crate::{rails::evm::EvmRailAdapter, subject::DefaultSubjectResolver};
 
     fn test_config() -> SessionConfig {
-        SessionConfig {
-            tick_duration_ms: 100,
-            timeout_ms: 1_000,
-            max_idle_ticks: 5,
-        }
+        SessionConfig { tick_duration_ms: 100, timeout_ms: 1_000, max_idle_ticks: 5 }
     }
 
     #[test]
@@ -515,10 +487,7 @@ mod tests {
         let state = manager
             .process_event(
                 &session_id,
-                SessionEvent::PaymentReceived {
-                    amount: 100,
-                    asset: "USDC".to_string(),
-                },
+                SessionEvent::PaymentReceived { amount: 100, asset: "USDC".to_string() },
                 now + 100,
             )
             .expect("process payment");
@@ -531,9 +500,7 @@ mod tests {
         assert_eq!(state, SessionState::Active);
 
         // Close session
-        let outcome = manager
-            .close_session(&session_id, now + 300)
-            .expect("close session");
+        let outcome = manager.close_session(&session_id, now + 300).expect("close session");
         assert!(outcome.is_some());
         assert!(!manager.is_active(&session_id));
     }
@@ -585,11 +552,8 @@ mod tests {
             test_config(),
         );
 
-        let result = manager.process_event(
-            &SessionId::new("nonexistent"),
-            SessionEvent::Tick,
-            1_000_000,
-        );
+        let result =
+            manager.process_event(&SessionId::new("nonexistent"), SessionEvent::Tick, 1_000_000);
         assert!(matches!(result, Err(SessionError::NotFound(_))));
     }
 }

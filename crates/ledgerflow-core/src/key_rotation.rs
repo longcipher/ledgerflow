@@ -56,8 +56,7 @@ impl KeyRotationState {
     /// Checks if the dual-signature window has expired.
     #[must_use]
     pub const fn is_window_expired(&self, now_secs: u64) -> bool {
-        self.previous.is_none() ||
-            now_secs >= self.rotation_started_at + self.window_secs
+        self.previous.is_none() || now_secs >= self.rotation_started_at + self.window_secs
     }
 
     /// Finalizes the rotation by removing the old key.
@@ -78,17 +77,13 @@ impl KeyRotationManager {
     /// Creates a new empty key rotation manager.
     #[must_use]
     pub const fn new() -> Self {
-        Self {
-            states: BTreeMap::new(),
-        }
+        Self { states: BTreeMap::new() }
     }
 
     /// Adds a trusted issuer (no rotation).
     pub fn add_issuer(&mut self, issuer: TrustedIssuer) {
         let key_id = issuer.key_id.clone();
-        self.states
-            .entry(key_id)
-            .or_insert_with(|| KeyRotationState::new(issuer));
+        self.states.entry(key_id).or_insert_with(|| KeyRotationState::new(issuer));
     }
 
     /// Starts a rotation for an issuer.
@@ -98,11 +93,10 @@ impl KeyRotationManager {
         new_key: TrustedIssuer,
         now_secs: u64,
     ) -> Result<()> {
-        let state = self.states.get_mut(key_id).ok_or_else(|| {
-            AuthorizationError::UntrustedIssuer {
-                key_id: key_id.to_string(),
-            }
-        })?;
+        let state = self
+            .states
+            .get_mut(key_id)
+            .ok_or_else(|| AuthorizationError::UntrustedIssuer { key_id: key_id.to_string() })?;
 
         state.rotate(new_key, now_secs);
         Ok(())
@@ -120,8 +114,8 @@ impl KeyRotationManager {
             }
 
             // Check previous key during window
-            if let Some(previous) = &state.previous
-                && Self::signer_matches(&previous.issuer, issuer)
+            if let Some(previous) = &state.previous &&
+                Self::signer_matches(&previous.issuer, issuer)
             {
                 return !state.is_window_expired(now_secs);
             }
@@ -219,9 +213,7 @@ mod tests {
 
         // Start rotation
         let new_issuer = test_issuer("key-1", [0x22; 32]);
-        manager
-            .start_rotation("key-1", new_issuer.clone(), 1_000_000)
-            .expect("rotation");
+        manager.start_rotation("key-1", new_issuer.clone(), 1_000_000).expect("rotation");
 
         let new_warrant = test_warrant(&new_issuer.issuer);
         assert!(manager.verify_issuer(&new_warrant, 1_000_000));
@@ -239,9 +231,7 @@ mod tests {
 
         // Start rotation
         let new_issuer = test_issuer("key-1", [0x22; 32]);
-        manager
-            .start_rotation("key-1", new_issuer.clone(), 1_000_000)
-            .expect("rotation");
+        manager.start_rotation("key-1", new_issuer.clone(), 1_000_000).expect("rotation");
 
         // After window expires, old key no longer works
         let after_window = 1_000_000 + DEFAULT_ROTATION_WINDOW_SECS + 1;
