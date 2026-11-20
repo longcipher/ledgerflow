@@ -41,7 +41,7 @@ temp file and run `cargo mutants --in-diff <diff-file>` for that file only, with
 60 mutants / 300 s. Never add a whole-repo mutation recipe: `just check-mutation-scope` fails
 `just lint` when an unbounded mutation command appears in a build or CI file.
 
-`just lint` is exactly the tool set CI installs: `typos`, `rumdl`, `cargo sort -w -g -c`, `cargo +nightly fmt --check`, `cargo +nightly clippy --all -- -D warnings`, `cargo shear`. `just mutate` is the legacy alias of the mutation recipe.
+`just lint` is exactly the tool set CI installs: `typos`, `rumdl`, `cargo sort -w -g -c`, `cargo +nightly fmt --check`, `cargo +nightly clippy --all -- -D warnings`, Cargo's native `unused_dependencies` lint. `just mutate` is the legacy alias of the mutation recipe.
 
 ## Workspace rules
 
@@ -50,8 +50,11 @@ temp file and run `cargo mutants --in-diff <diff-file>` for that file only, with
 - There is no `rust-toolchain.toml`; CI installs a nightly toolchain, so use `cargo +nightly fmt` and `cargo +nightly clippy` exactly as the Justfile does.
 - Clippy is `pedantic` plus a curated nursery set. `unwrap_used`, `expect_used`, `panic`, `todo`, `unimplemented`, `dbg_macro`, `print_stdout` and `print_stderr` are denied. `allow_attributes` is allowed, and the tree uses plain `#[allow(...)]` (never `#[expect]`), always naming the lint.
 - Every library crate opts out of `missing_docs` at crate level (`#![allow(missing_docs)]`), so public items are documented by convention, not enforced by the compiler.
-- Mutation testing is scoped to `ledgerflow-core`; `cargo shear` is told to ignore the `mutants` dev-dependency via `[package.metadata.cargo-shear]`.
+- Mutation testing is scoped to `ledgerflow-core`; the `mutants` dev-dependency needs no ignore entry, because Cargo's native `unused_dependencies` lint does not check dev-dependencies.
 - Fuzz targets live in `crates/ledgerflow-core/fuzz` and `crates/ledgerflow-protocol/fuzz` as separate cargo-fuzz workspaces: `just fuzz-check` type-checks them, `just fuzz-smoke` runs one-second passes. Never add a third fuzz workspace without a real decoder to target.
+- Workspace MSRV is Rust 1.100. Prefer newly stabilized features and APIs over older workarounds; do not add feature gates for anything already stable in 1.100.
+- `[workspace.lints.cargo]` enables Cargo's native `unused_dependencies` lint, the only unused-dependency check; do not reintroduce a third-party checker. Its level is `warn`, and `.cargo/config.toml` sets `build.warnings = "deny"`, so a finding fails the gate.
+- `.cargo/config.toml` sets resolver `incompatible-rust-versions = "fallback"` (MSRV-aligned resolution) and `registry.global-min-publish-age = "5 days"` (Rust 1.100 dependency cooldown); keep both.
 
 ## Dependency choices
 

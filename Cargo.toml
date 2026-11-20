@@ -8,6 +8,7 @@ version = "0.1.0"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/akjong/ledgerflow"
+rust-version = "1.100"
 
 [workspace.dependencies]
 async-trait = "0.1.86"
@@ -213,9 +214,15 @@ missing_docs = "warn"
 rust_2018_idioms = { level = "deny", priority = -1 }
 unreachable_pub = "warn"
 unused_must_use = "deny"
+raw_borrows_via_references = "warn"
 
 [workspace.lints.rustdoc]
 all = "warn"
+
+# Cargo's own lint system (shipped in 1.100): the only unused-dependency
+# check. It runs as part of a normal all-targets `cargo check`/`clippy`.
+[workspace.lints.cargo]
+unused_dependencies = "warn"
 
 [profile.dev]
 opt-level = 1

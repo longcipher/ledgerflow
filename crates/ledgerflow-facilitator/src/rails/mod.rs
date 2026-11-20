@@ -107,8 +107,7 @@ mod tests {
     use crate::{
         rails::{
             custodial::CustodialRailAdapter, evm::EvmRailAdapter, exchange::ExchangeRailAdapter,
-            gateway::GatewayRailAdapter, solana::SolanaRailAdapter, stripe::StripeRailAdapter,
-            tempo::TempoRailAdapter,
+            gateway::GatewayRailAdapter, solana::SolanaRailAdapter,
         },
         routing::RailKind,
     };

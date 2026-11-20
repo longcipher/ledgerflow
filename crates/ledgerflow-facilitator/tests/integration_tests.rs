@@ -37,10 +37,6 @@ fn holder_keys() -> SigningKeyPair {
     SigningKeyPair::from_bytes(&[0x22; 32])
 }
 
-fn approver_keys() -> SigningKeyPair {
-    SigningKeyPair::from_bytes(&[0x33; 32])
-}
-
 fn trusted() -> TrustedIssuers {
     let mut set = TrustedIssuers::new();
     set.add(TrustedIssuer::new("issuer-1".to_string(), issuer_keys().signer_ref()));

@@ -12,16 +12,14 @@ format:
 fix:
   rumdl check --fix .
   RUSTC_WRAPPER= cargo +nightly clippy --fix --all --allow-dirty
-  cargo shear --fix
 
-# Run all lints (the CI gate: typos, rumdl, cargo sort, rustfmt, clippy, shear)
+# Run all lints (the CI gate: typos, rumdl, cargo sort, rustfmt, clippy)
 lint:
   typos
   rumdl check .
   cargo sort -w -g -c
   cargo +nightly fmt --all -- --check
   RUSTC_WRAPPER= cargo +nightly clippy --all -- -D warnings
-  cargo shear
   just check-mutation-scope
 
 # Run tests
@@ -207,7 +205,6 @@ clean:
 
 # Install all required development tools
 setup:
-  cargo install cargo-shear
   cargo install cargo-sort
   cargo install cargo-mutants
   cargo install cargo-tarpaulin
@@ -241,10 +238,6 @@ test-nextest:
 # Run miri on unsafe code
 miri:
   cargo +nightly miri test --all-features
-
-# Check for unused dependencies
-unused-deps:
-  cargo shear --check
 
 # Update all dependencies
 update-deps:
