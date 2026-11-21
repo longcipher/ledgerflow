@@ -1,13 +1,16 @@
 //! `/settle` orchestration with **atomic re-verification**.
 //!
-//! The verify step is only a pre-check. Settlement MUST re-verify revocation,
-//! TTL, PoP freshness, and the payment cap atomically before touching any
-//! rail, closing the verify→settle TOCTOU window (design §8.1).
+//! The verify step is only a pre-check. Settlement MUST re-run the full
+//! authorization pipeline atomically before touching any rail, closing the
+//! verify→settle TOCTOU window (design §8.1).
+
+use std::{collections::BTreeMap, sync::Arc};
 
 use ledgerflow_core::{
-    AuthorizationContext, AuthorizationError, PopProof, RevocationCheck, VerifiedAuthorization,
-    WarrantChain, WarrantExt, verify_freshness,
+    AuthorizationContext, AuthorizationError, PopProof, RevocationCheck, TrustedIssuers,
+    VerifiedAuthorization, WarrantChain, bind_authorization, verify_chain_with_resolver,
 };
+use parking_lot::Mutex;
 
 use crate::{
     outcome::SettlementOutcome,
@@ -22,14 +25,43 @@ use crate::{
 pub struct SettleRequest<'a> {
     /// The verified authorization from `/verify`.
     pub authorization: &'a VerifiedAuthorization,
-    /// The presented chain (leaf re-verified for TTL/revocation).
+    /// The presented chain, re-verified in full at settle time.
     pub chain: &'a WarrantChain,
     /// The presented PoP.
     pub proof: &'a PopProof,
     /// The request context.
     pub context: &'a AuthorizationContext,
-    /// Verification timestamp (unix milliseconds).
+    /// Trusted root issuers used for the settle-time chain re-verification.
+    pub trusted: &'a TrustedIssuers,
+    /// Settlement timestamp (unix milliseconds).
     pub now_ms: u64,
+}
+
+/// Process-local nonce claims: one PoP may settle at most once while its
+/// freshness window is open. Persistent idempotency remains the rail's job.
+#[derive(Clone, Debug, Default)]
+struct SettlementReplayGuard {
+    claims: Arc<Mutex<BTreeMap<(String, String), u64>>>,
+}
+
+impl SettlementReplayGuard {
+    fn claim(
+        &self,
+        challenge_id: &str,
+        nonce: &str,
+        now_ms: u64,
+        ttl_ms: u64,
+    ) -> Result<(), AuthorizationError> {
+        let key = (challenge_id.to_string(), nonce.to_string());
+        let mut claims = self.claims.lock();
+        if let Some(created_at_ms) = claims.get(&key) &&
+            now_ms.saturating_sub(*created_at_ms) < ttl_ms
+        {
+            return Err(AuthorizationError::ReplayDetected);
+        }
+        claims.insert(key, now_ms);
+        Ok(())
+    }
 }
 
 /// Settlement service that atomically re-verifies and routes to a rail.
@@ -41,6 +73,7 @@ pub struct SettlementService<R, P, A> {
     /// Optional EIP-8004 reputation reporter invoked after successful
     /// settlement. Reporting never affects settlement outcomes.
     pub reputation: Option<ReputationReporter>,
+    replay: SettlementReplayGuard,
 }
 
 impl<R, P, A> SettlementService<R, P, A>
@@ -51,8 +84,14 @@ where
 {
     /// Creates a new settlement service without reputation reporting.
     #[must_use]
-    pub const fn new(revocation: R, resolver: P, adapters: Vec<A>) -> Self {
-        Self { revocation, resolver, adapters, reputation: None }
+    pub fn new(revocation: R, resolver: P, adapters: Vec<A>) -> Self {
+        Self {
+            revocation,
+            resolver,
+            adapters,
+            reputation: None,
+            replay: SettlementReplayGuard::default(),
+        }
     }
 
     /// Attaches an EIP-8004 reputation reporter (builder style).
@@ -101,39 +140,39 @@ where
     }
 
     fn reverify(&self, request: &SettleRequest<'_>) -> Result<(), AuthorizationError> {
-        let leaf = request.chain.leaf().ok_or(AuthorizationError::EmptyChain)?;
-        // Revocation (online, persistent).
-        self.revocation.verify(&leaf.id, &leaf.holder)?;
-        // TTL.
-        let now_secs = request.now_ms / 1000;
-        if leaf.expires_at < now_secs {
-            return Err(AuthorizationError::WarrantExpired { expires_at: leaf.expires_at });
-        }
-        // PoP freshness.
-        verify_freshness(
+        // Re-run the whole chain pipeline with the settle clock. A subset of
+        // checks lets a stale verify result authorize a different chain,
+        // context, amount or identity at the rail.
+        let mut settle_context = request.context.clone();
+        settle_context.now_ms = request.now_ms;
+        let verified = verify_chain_with_resolver(
+            request.chain,
+            request.trusted,
+            None,
             request.proof,
-            request.now_ms,
-            request.context.freshness_window_ms,
-            request.context.clock_skew_ms,
+            &settle_context,
         )?;
-        // Amount cap.
-        if request.authorization.amount > leaf.payment.max_per_charge {
-            return Err(AuthorizationError::PaymentAmountExceeded {
-                amount: request.authorization.amount,
-                limit: leaf.payment.max_per_charge,
-            });
-        }
-        // Re-verify PoP signature.
-        if !request.proof.verify_signature(&leaf.holder) {
-            return Err(AuthorizationError::InvalidProofSignature);
-        }
-        // Re-verify chain signatures and constraints.
+
+        // Revocation is an online commitment: every warrant in the chain must
+        // still be live, not just the presenting leaf.
         for warrant in &request.chain.warrants {
-            if !warrant.verify_signature() {
-                return Err(AuthorizationError::InvalidWarrantSignature);
-            }
-            warrant.verify_constraints(request.context)?;
+            self.revocation.verify(&warrant.id, &warrant.holder)?;
         }
+
+        // The object handed to the rail must be the one just verified.
+        let rebound = bind_authorization(&verified, &settle_context);
+        if &rebound != request.authorization {
+            return Err(AuthorizationError::AuthorizationBindingMismatch);
+        }
+
+        // One PoP nonce may settle at most once inside its freshness window.
+        self.replay.claim(
+            &request.proof.tuple.challenge_id,
+            &request.proof.tuple.nonce,
+            request.now_ms,
+            settle_context.freshness_window_ms.saturating_add(settle_context.clock_skew_ms),
+        )?;
+
         Ok(())
     }
 
@@ -256,7 +295,17 @@ mod tests {
         }
     }
 
+    fn trusted() -> TrustedIssuers {
+        let mut set = TrustedIssuers::new();
+        set.add(ledgerflow_core::TrustedIssuer::new(
+            "issuer".to_string(),
+            SigningKeyPair::from_bytes(&[0x91; 32]).signer_ref(),
+        ));
+        set
+    }
+
     fn authorization(with_agent_ref: bool) -> VerifiedAuthorization {
+        let leaf = warrant(with_agent_ref);
         VerifiedAuthorization {
             merchant_id: "merchant-a".to_string(),
             tool_name: "web-search".to_string(),
@@ -264,9 +313,9 @@ mod tests {
                 PaymentSubjectKind::Caip10,
                 "caip10:eip155:8453:0xabc123",
             ),
-            holder: SigningKeyPair::from_bytes(&[0x92; 32]).signer_ref(),
-            leaf_warrant: warrant(with_agent_ref),
-            root_warrant: warrant(false),
+            holder: leaf.holder.clone(),
+            leaf_warrant: leaf.clone(),
+            root_warrant: leaf.clone(),
             chain_len: 1,
             amount: 100,
             asset: "USDC".to_string(),
@@ -276,7 +325,7 @@ mod tests {
             challenge_id: "challenge-1".to_string(),
             request_hash: "sha256:req".to_string(),
             accepted_hash: "sha256:acc".to_string(),
-            warrant_digest: "sha256:w".to_string(),
+            warrant_digest: leaf.digest(),
         }
     }
 
@@ -285,8 +334,9 @@ mod tests {
         chain: &'a WarrantChain,
         proof: &'a PopProof,
         context: &'a AuthorizationContext,
+        trusted: &'a TrustedIssuers,
     ) -> SettleRequest<'a> {
-        SettleRequest { authorization, chain, proof, context, now_ms: 5_000 }
+        SettleRequest { authorization, chain, proof, context, trusted, now_ms: 5_000 }
     }
 
     #[test]
@@ -304,7 +354,8 @@ mod tests {
         let chain = WarrantChain::single(leaf.clone());
         let proof = sample_proof(&leaf);
         let context = sample_context();
-        let outcome = service.settle(&request(&authorization, &chain, &proof, &context));
+        let outcome =
+            service.settle(&request(&authorization, &chain, &proof, &context, &trusted()));
         assert_eq!(outcome.status, crate::outcome::SettlementStatus::Settled);
         assert_eq!(sink.0.lock().expect("lock").len(), 1);
     }
@@ -324,7 +375,8 @@ mod tests {
         let chain = WarrantChain::single(leaf.clone());
         let proof = sample_proof(&leaf);
         let context = sample_context();
-        let outcome = service.settle(&request(&authorization, &chain, &proof, &context));
+        let outcome =
+            service.settle(&request(&authorization, &chain, &proof, &context, &trusted()));
         assert_eq!(outcome.status, crate::outcome::SettlementStatus::Failed);
         assert!(sink.0.lock().expect("lock").is_empty());
     }

@@ -212,13 +212,13 @@ pub fn credential_from_json(json: &str) -> Result<WarrantCredential, ProtocolErr
     }
     let credential: WarrantCredential = serde_json::from_value(value)
         .map_err(|error| ProtocolError::Deserialization(error.to_string()))?;
-    if !credential.context.contains(&"https://www.w3.org/ns/credentials/v2".to_string()) ||
-        !credential.context.contains(&VC_CONTEXT_WARRANT_V1.to_string())
+    if !credential.context.iter().any(|i| i == "https://www.w3.org/ns/credentials/v2") ||
+        !credential.context.iter().any(|i| i == VC_CONTEXT_WARRANT_V1)
     {
         return Err(ProtocolError::VcInvalid("missing required @context entry".to_string()));
     }
-    if !credential.types.contains(&"VerifiableCredential".to_string()) ||
-        !credential.types.contains(&CREDENTIAL_TYPE_WARRANT.to_string())
+    if !credential.types.iter().any(|i| i == "VerifiableCredential") ||
+        !credential.types.iter().any(|i| i == CREDENTIAL_TYPE_WARRANT)
     {
         return Err(ProtocolError::VcInvalid("missing required type entry".to_string()));
     }

@@ -297,6 +297,7 @@ fn settle_succeeds_when_reverification_passes() {
         chain: &chain,
         proof: &proof,
         context: &ctx,
+        trusted: &trusted(),
         now_ms,
     };
     let result = settlement.settle(&settle_request);
@@ -335,6 +336,7 @@ fn settle_rejects_when_revoked_after_verify_then_settle() {
         chain: &chain,
         proof: &proof,
         context: &ctx,
+        trusted: &trusted(),
         now_ms,
     };
     let result = settlement.settle(&settle_request);
@@ -422,6 +424,7 @@ fn settle_rejects_when_warrant_expired_between_verify_and_settle() {
         chain: &chain,
         proof: &proof,
         context: &ctx,
+        trusted: &trusted(),
         now_ms: 66_000,
     };
     let result = settlement.settle(&settle_request);
@@ -484,6 +487,7 @@ fn settle_accepts_expiry_exactly_at_now() {
         chain: &chain,
         proof: &proof,
         context: &ctx,
+        trusted: &trusted(),
         now_ms: 65_000,
     });
     assert_eq!(result.status, ledgerflow_facilitator::SettlementStatus::Settled);
@@ -521,6 +525,7 @@ fn settle_accepts_amount_exactly_at_cap() {
         chain: &chain,
         proof: &proof,
         context: &ctx,
+        trusted: &trusted(),
         now_ms,
     });
     assert_eq!(result.status, ledgerflow_facilitator::SettlementStatus::Settled);
@@ -556,6 +561,7 @@ fn settle_routes_to_matching_rail_and_fails_when_none() {
         chain: &chain,
         proof: &proof,
         context: &ctx,
+        trusted: &trusted(),
         now_ms,
     });
     assert_eq!(ok.status, ledgerflow_facilitator::SettlementStatus::Settled);
@@ -571,6 +577,7 @@ fn settle_routes_to_matching_rail_and_fails_when_none() {
         chain: &chain,
         proof: &proof,
         context: &ctx,
+        trusted: &trusted(),
         now_ms,
     });
     assert_eq!(failed.status, ledgerflow_facilitator::SettlementStatus::Failed);
@@ -609,6 +616,7 @@ fn settle_routes_solana_subjects_to_solana_adapter() {
         chain: &chain,
         proof: &proof,
         context: &ctx,
+        trusted: &trusted(),
         now_ms,
     });
 
@@ -644,4 +652,242 @@ fn _core_path_is_reachable(
     let verified = verify_authorization(&input)?;
     let _ = verified;
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Settlement must re-run the full authorization checks, not a subset
+// ---------------------------------------------------------------------------
+
+fn delegated_chain(now_ms: u64) -> (WarrantChain, SigningKeyPair) {
+    let root = root_warrant(now_ms);
+    let child_holder = SigningKeyPair::from_bytes(&[54_u8; 32]);
+    let child = ledgerflow_core::DelegatedWarrantBuilder::from(root.clone())
+        .try_issue_to(child_holder.signer_ref(), &holder_keys(), now_ms, [1_u8; 8])
+        .expect("delegated warrant");
+    (WarrantChain { warrants: vec![root, child] }, child_holder)
+}
+
+fn proof_from(signer: &SigningKeyPair, warrant: &Warrant, ctx: &AuthorizationContext) -> PopProof {
+    ProofBuilder::new()
+        .warrant_id(warrant.id.clone())
+        .challenge_id(ctx.challenge_id.clone())
+        .method(ctx.http_method.clone())
+        .uri(format!("{}{}", ctx.merchant_host, ctx.path_and_query))
+        .request_hash(ctx.request_hash.clone())
+        .accepted_hash(ctx.accepted_hash.clone())
+        .payment_payload_digest(sha256_prefixed("x402-payload"))
+        .nonce("nonce-1".to_string())
+        .created_at_ms(ctx.now_ms)
+        .sign_with(signer)
+}
+
+fn authorization_for(
+    chain: &WarrantChain,
+    proof: &PopProof,
+    ctx: &AuthorizationContext,
+) -> ledgerflow_core::VerifiedAuthorization {
+    VerificationService::new(InMemoryRevocationCheck::new())
+        .verify(&VerifyRequest {
+            chain,
+            trusted: &trusted(),
+            proof,
+            context: ctx,
+            approvals: &[],
+            tool_arguments: &tool_arguments(),
+        })
+        .authorization
+        .expect("authorized")
+}
+
+#[test]
+fn settle_rejects_revoked_ancestor_after_verify() {
+    let now_ms = 5_000;
+    let (chain, child_holder) = delegated_chain(now_ms);
+    let mut ctx = context(now_ms, 100);
+    ctx.presenter = child_holder.signer_ref();
+    let proof = proof_from(&child_holder, chain.leaf().expect("leaf"), &ctx);
+    let authorization = authorization_for(&chain, &proof, &ctx);
+
+    let mut revocation = InMemoryRevocationCheck::new();
+    revocation.revoke_warrant(&chain.warrants[0].id);
+    let settlement =
+        SettlementService::new(revocation, DefaultSubjectResolver, vec![EvmRailAdapter]);
+    let result = settlement.settle(&ledgerflow_facilitator::SettleRequest {
+        authorization: &authorization,
+        chain: &chain,
+        proof: &proof,
+        context: &ctx,
+        trusted: &trusted(),
+        now_ms,
+    });
+    assert_eq!(result.status, ledgerflow_facilitator::SettlementStatus::Failed);
+}
+
+#[test]
+fn settle_rejects_authorization_amount_not_bound_to_verified_context() {
+    let now_ms = 5_000;
+    let chain = WarrantChain::single(root_warrant(now_ms));
+    let ctx = context(now_ms, 100);
+    let proof = proof(chain.leaf().expect("leaf"), &ctx);
+    let authorization = authorization_for(&chain, &proof, &ctx);
+
+    // 200 is still below the 1_000 cap, so a cap-only check accepts it.
+    let mut tampered = authorization.clone();
+    tampered.amount = 200;
+    let settlement = SettlementService::new(
+        InMemoryRevocationCheck::new(),
+        DefaultSubjectResolver,
+        vec![EvmRailAdapter],
+    );
+    let result = settlement.settle(&ledgerflow_facilitator::SettleRequest {
+        authorization: &tampered,
+        chain: &chain,
+        proof: &proof,
+        context: &ctx,
+        trusted: &trusted(),
+        now_ms,
+    });
+    assert_eq!(result.status, ledgerflow_facilitator::SettlementStatus::Failed);
+}
+
+#[test]
+fn settle_rejects_authorization_leaf_not_bound_to_verified_chain() {
+    let now_ms = 5_000;
+    let warrant = root_warrant(now_ms);
+    let chain = WarrantChain::single(warrant.clone());
+    let ctx = context(now_ms, 100);
+    let proof = proof(chain.leaf().expect("leaf"), &ctx);
+    let authorization = authorization_for(&chain, &proof, &ctx);
+
+    let mut other_leaf = warrant;
+    other_leaf.id = *b"other-0000000000";
+    let other_leaf = other_leaf.sign_with(&issuer_keys());
+    let mut tampered = authorization.clone();
+    tampered.leaf_warrant = other_leaf;
+    tampered.warrant_digest = "sha256:other".to_string();
+    let settlement = SettlementService::new(
+        InMemoryRevocationCheck::new(),
+        DefaultSubjectResolver,
+        vec![EvmRailAdapter],
+    );
+    let result = settlement.settle(&ledgerflow_facilitator::SettleRequest {
+        authorization: &tampered,
+        chain: &chain,
+        proof: &proof,
+        context: &ctx,
+        trusted: &trusted(),
+        now_ms,
+    });
+    assert_eq!(result.status, ledgerflow_facilitator::SettlementStatus::Failed);
+}
+
+#[test]
+fn settle_rejects_context_that_does_not_match_presented_proof() {
+    let now_ms = 5_000;
+    let chain = WarrantChain::single(root_warrant(now_ms));
+    let ctx = context(now_ms, 100);
+    let proof = proof(chain.leaf().expect("leaf"), &ctx);
+    let authorization = authorization_for(&chain, &proof, &ctx);
+
+    let mut settle_ctx = ctx.clone();
+    settle_ctx.challenge_id = "challenge-2".to_string();
+    let settlement = SettlementService::new(
+        InMemoryRevocationCheck::new(),
+        DefaultSubjectResolver,
+        vec![EvmRailAdapter],
+    );
+    let result = settlement.settle(&ledgerflow_facilitator::SettleRequest {
+        authorization: &authorization,
+        chain: &chain,
+        proof: &proof,
+        context: &settle_ctx,
+        trusted: &trusted(),
+        now_ms,
+    });
+    assert_eq!(result.status, ledgerflow_facilitator::SettlementStatus::Failed);
+}
+
+#[test]
+fn settle_rejects_replayed_proof() {
+    let now_ms = 5_000;
+    let chain = WarrantChain::single(root_warrant(now_ms));
+    let ctx = context(now_ms, 100);
+    let proof = proof(chain.leaf().expect("leaf"), &ctx);
+    let authorization = authorization_for(&chain, &proof, &ctx);
+    let settlement = SettlementService::new(
+        InMemoryRevocationCheck::new(),
+        DefaultSubjectResolver,
+        vec![EvmRailAdapter],
+    );
+    let request = ledgerflow_facilitator::SettleRequest {
+        authorization: &authorization,
+        chain: &chain,
+        proof: &proof,
+        context: &ctx,
+        trusted: &trusted(),
+        now_ms,
+    };
+
+    assert_eq!(
+        settlement.settle(&request).status,
+        ledgerflow_facilitator::SettlementStatus::Settled
+    );
+    assert_eq!(
+        settlement.settle(&request).status,
+        ledgerflow_facilitator::SettlementStatus::Failed
+    );
+}
+
+#[test]
+fn settle_rejects_untrusted_root() {
+    let now_ms = 5_000;
+    let chain = WarrantChain::single(root_warrant(now_ms));
+    let ctx = context(now_ms, 100);
+    let proof = proof(chain.leaf().expect("leaf"), &ctx);
+    let authorization = authorization_for(&chain, &proof, &ctx);
+    let untrusted = TrustedIssuers::new();
+    let settlement = SettlementService::new(
+        InMemoryRevocationCheck::new(),
+        DefaultSubjectResolver,
+        vec![EvmRailAdapter],
+    );
+    let result = settlement.settle(&ledgerflow_facilitator::SettleRequest {
+        authorization: &authorization,
+        chain: &chain,
+        proof: &proof,
+        context: &ctx,
+        trusted: &untrusted,
+        now_ms,
+    });
+    assert_eq!(result.status, ledgerflow_facilitator::SettlementStatus::Failed);
+}
+
+#[test]
+fn settle_rejects_broken_parent_hash_linkage() {
+    let now_ms = 5_000;
+    let (chain, child_holder) = delegated_chain(now_ms);
+    let mut ctx = context(now_ms, 100);
+    ctx.presenter = child_holder.signer_ref();
+    let proof = proof_from(&child_holder, chain.leaf().expect("leaf"), &ctx);
+    let authorization = authorization_for(&chain, &proof, &ctx);
+
+    let mut bad_child = chain.warrants[1].clone();
+    bad_child.parent_hash = Some(b"not-the-parent".to_vec());
+    let bad_child = bad_child.sign_with(&holder_keys());
+    let bad_chain = WarrantChain { warrants: vec![chain.warrants[0].clone(), bad_child] };
+
+    let settlement = SettlementService::new(
+        InMemoryRevocationCheck::new(),
+        DefaultSubjectResolver,
+        vec![EvmRailAdapter],
+    );
+    let result = settlement.settle(&ledgerflow_facilitator::SettleRequest {
+        authorization: &authorization,
+        chain: &bad_chain,
+        proof: &proof,
+        context: &ctx,
+        trusted: &trusted(),
+        now_ms,
+    });
+    assert_eq!(result.status, ledgerflow_facilitator::SettlementStatus::Failed);
 }

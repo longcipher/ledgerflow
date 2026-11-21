@@ -146,6 +146,7 @@ fn full_payment_flow_verifies_and_settles() {
         chain: &chain,
         proof: &proof,
         context: &ctx,
+        trusted: &trusted(),
         now_ms,
     });
 

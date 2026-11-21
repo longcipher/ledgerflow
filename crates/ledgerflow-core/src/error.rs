@@ -40,6 +40,10 @@ pub enum AuthorizationError {
     AcceptedHashMismatch,
     #[error("payment payload digest binding did not match")]
     PaymentPayloadDigestMismatch,
+    #[error("settled authorization does not match the verified chain and request context")]
+    AuthorizationBindingMismatch,
+    #[error("the proof nonce has already been used for settlement")]
+    ReplayDetected,
     #[error("request binding did not match")]
     RequestHashMismatch,
     #[error("proof signer did not match the warrant holder")]

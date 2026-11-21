@@ -519,7 +519,7 @@ impl DelegatedWarrantBuilder {
     /// Prefer [`Self::try_issue_to`] for new code; this alias exists so
     /// existing call sites can migrate from panicking `issue_to` to
     /// `Result`-based handling with a minimal diff (`.expect` at call site).
-    #[deprecated(note = "use try_issue_to")]
+    #[deprecated(since = "0.1.0", note = "use try_issue_to")]
     pub fn issue_to(
         self,
         new_holder: SignerRef,

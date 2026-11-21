@@ -82,7 +82,9 @@ pub const fn map_error(error: &AuthorizationError) -> VerifyStatus {
         AuthorizationError::WarrantExpired { .. } |
         AuthorizationError::WarrantNotYetValid { .. } |
         AuthorizationError::ProofOutsideFreshnessWindow { .. } => VerifyStatus::Expired,
-        AuthorizationError::ChallengeMismatch => VerifyStatus::Replayed,
+        AuthorizationError::ChallengeMismatch | AuthorizationError::ReplayDetected => {
+            VerifyStatus::Replayed
+        }
         _ => VerifyStatus::Unauthorized,
     }
 }

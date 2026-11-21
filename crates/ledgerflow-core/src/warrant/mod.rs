@@ -240,10 +240,14 @@ impl CborCodec for Warrant {}
 
 impl Warrant {
     /// Signs this warrant using the issuer's signing key pair.
+    ///
+    /// If the payload cannot be serialized the warrant is left unsigned, so a
+    /// later [`Self::verify_signature`] fails closed.
     #[must_use]
     pub fn sign_with(mut self, issuer_keys: &SigningKeyPair) -> Self {
-        let message = self.signing_message();
-        self.signature = issuer_keys.sign(message.as_slice());
+        if let Ok(message) = self.signing_message() {
+            self.signature = issuer_keys.sign(message.as_slice());
+        }
         self
     }
 
@@ -277,18 +281,24 @@ impl Warrant {
     }
 
     /// Domain-separated signing message.
-    #[must_use]
-    pub fn signing_message(&self) -> Vec<u8> {
-        let mut message = Vec::with_capacity(WARRANT_SIGN_DOMAIN.len() + 256);
+    ///
+    /// Serialization errors are propagated: callers must never fall back to a
+    /// domain-only buffer, which would leave every payload field unsigned.
+    pub fn signing_message(&self) -> WireResult<Vec<u8>> {
+        let payload = self.payload_bytes()?;
+        let mut message = Vec::with_capacity(WARRANT_SIGN_DOMAIN.len() + payload.len());
         message.extend_from_slice(WARRANT_SIGN_DOMAIN);
-        message.extend_from_slice(&self.payload_bytes().unwrap_or_default());
-        message
+        message.extend_from_slice(&payload);
+        Ok(message)
     }
 
     /// Verifies the envelope signature using **strict** Ed25519 verification.
     #[must_use]
     pub fn verify_signature(&self) -> bool {
-        self.signature.verify_strict(&self.issuer, &self.signing_message())
+        let Ok(message) = self.signing_message() else {
+            return false;
+        };
+        self.signature.verify_strict(&self.issuer, &message)
     }
 
     /// Encodes the warrant as CBOR bytes (delegates to [`CborCodec::encode_cbor`]).
@@ -618,7 +628,7 @@ mod tests {
     #[test]
     fn signing_message_carries_domain_version_and_payload() {
         let warrant = sample_warrant();
-        let message = warrant.signing_message();
+        let message = warrant.signing_message().expect("signing message");
         assert!(message.starts_with(WARRANT_SIGN_DOMAIN));
         // The payload_bytes() already includes `version` as the first field in the CBOR map,
         // so signing_message() is simply domain || payload_bytes().

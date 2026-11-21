@@ -248,6 +248,7 @@ mod tests {
             chain: &chain,
             proof: &proof,
             context: &context,
+            trusted: &state.trusted,
             now_ms,
         });
 

@@ -151,29 +151,35 @@ pub fn verify_authorization(input: &AuthorizationInput<'_>) -> Result<VerifiedAu
         });
     }
 
-    Ok(build_authorization(chain_verified, input))
+    Ok(bind_authorization(&chain_verified, input.context))
 }
 
-fn build_authorization(
-    verified: VerifiedChainAuthorization,
-    input: &AuthorizationInput<'_>,
+/// Binds a verified chain and request context into an authorization.
+///
+/// Settlement reuses this so the object sent to a rail can be compared with a
+/// freshly verified one; callers must never hand-build a `VerifiedAuthorization`
+/// from untrusted fields.
+#[must_use]
+pub fn bind_authorization(
+    verified: &VerifiedChainAuthorization,
+    context: &AuthorizationContext,
 ) -> VerifiedAuthorization {
     VerifiedAuthorization {
-        merchant_id: input.context.merchant_id.clone(),
-        tool_name: input.context.tool_name.clone(),
-        payment_subject: input.context.payment_subject.clone(),
+        merchant_id: context.merchant_id.clone(),
+        tool_name: context.tool_name.clone(),
+        payment_subject: context.payment_subject.clone(),
         holder: verified.leaf.holder.clone(),
         leaf_warrant: verified.leaf.clone(),
         root_warrant: verified.root.clone(),
         chain_len: verified.chain_len,
-        amount: input.context.selected_amount,
-        asset: input.context.asset.clone(),
-        scheme: input.context.scheme.clone(),
-        payee_id: input.context.payee_id.clone(),
-        rail: input.context.rail,
-        challenge_id: input.context.challenge_id.clone(),
-        request_hash: input.context.request_hash.clone(),
-        accepted_hash: input.context.accepted_hash.clone(),
+        amount: context.selected_amount,
+        asset: context.asset.clone(),
+        scheme: context.scheme.clone(),
+        payee_id: context.payee_id.clone(),
+        rail: context.rail,
+        challenge_id: context.challenge_id.clone(),
+        request_hash: context.request_hash.clone(),
+        accepted_hash: context.accepted_hash.clone(),
         warrant_digest: verified.leaf.digest(),
     }
 }

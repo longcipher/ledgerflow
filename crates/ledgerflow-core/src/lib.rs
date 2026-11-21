@@ -75,7 +75,8 @@ pub use crate::{
     trust::{TrustedIssuer, TrustedIssuers},
     typestate::{DelegatedWarrantBuilder, WarrantBuilder},
     verification::{
-        AuthorizationInput, ToolArguments, VerifiedAuthorization, WarrantExt, verify_authorization,
+        AuthorizationInput, ToolArguments, VerifiedAuthorization, WarrantExt, bind_authorization,
+        verify_authorization,
     },
     warrant::{
         AssetRef, CborCodec, DEFAULT_CHALLENGE_TTL_MS, DEFAULT_CLOCK_SKEW_MS, DEFAULT_MAX_DEPTH,
